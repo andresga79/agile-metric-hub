@@ -15,7 +15,7 @@ export function ForecastChart({ forecast }: { forecast: ForecastResponse }) {
           <div className="text-xl font-bold text-primary">{forecast.probability}%</div>
         </div>
         <div className="bg-card/60 rounded-lg border border-border p-3 text-center">
-          <div className="text-xs text-muted-foreground">{t('page.forecast.median')}</div>
+          <div className="text-xs text-muted-foreground">{t('page.forecast.p50')}</div>
           <div className="text-xl font-bold">{forecast.medianWeeks}{t('page.forecast.weeks')}</div>
         </div>
         <div className="bg-card/60 rounded-lg border border-border p-3 text-center">
@@ -53,13 +53,16 @@ export function ForecastChart({ forecast }: { forecast: ForecastResponse }) {
               formatter={(value: number) => `${value}%`}
             />
             <Bar dataKey="count" name="Simulations" fill="hsl(var(--primary))" fillOpacity={0.6} radius={[3, 3, 0, 0]} />
-            <ReferenceLine x={forecast.medianWeeks} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `${t('page.forecast.median')} ${forecast.medianWeeks}${t('page.forecast.weeks')}`, position: "top", fontSize: 10, fill: "hsl(var(--primary))" }} />
+            <ReferenceLine x={forecast.medianWeeks} stroke="hsl(var(--primary))" strokeDasharray="4 4" label={{ value: `${t('page.forecast.p50')} ${forecast.medianWeeks}${t('page.forecast.weeks')}`, position: "top", fontSize: 10, fill: "hsl(var(--primary))" }} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
         {t('page.forecast.simulations', { count: forecast.simulations })}
+      </p>
+      <p className="text-xs text-muted-foreground text-center">
+        {t('page.forecast.percentileLegend')}
       </p>
     </div>
   );

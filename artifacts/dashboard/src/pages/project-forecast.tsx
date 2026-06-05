@@ -111,6 +111,7 @@ export default function ProjectForecast() {
                 <option value={90}>{`90 ${t('page.forecast.days')}`}</option>
                 <option value={180}>{`180 ${t('page.forecast.days')}`}</option>
               </select>
+              <p className="text-xs text-muted-foreground mt-1">{t('page.forecast.historicalDesc')}</p>
             </div>
             <button
               onClick={runForecast}
