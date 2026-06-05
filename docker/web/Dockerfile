@@ -18,18 +18,6 @@ RUN if [ "$SKIP_CODEGEN" = "1" ]; then echo "Skipping api-spec codegen"; else pn
 # PORT and BASE_PATH are required by vite.config.ts validation during build
 RUN PORT=3000 BASE_PATH=/ pnpm --filter @workspace/dashboard run build
 
-# Remove crossorigin attributes from generated index.html to avoid same-origin
-# CORS fetch issues that can block CSS in some browser configurations
-RUN node - <<'NODE'
-const fs = require('fs');
-const path = '/app/artifacts/dashboard/dist/public/index.html';
-let text = fs.readFileSync(path, 'utf8');
-text = text.replace(/\s+crossorigin(=\"[^\"]*\")?/g, '');
-text = text.replace(/(<script[^>]*src=\"[^\"]*\"[^>]*><\/script>)(\s*)(<link rel=\"stylesheet\"[^>]*>)/s, '$3$2$1');
-text = text.replace(/<head>/, '<head>\n\t<style>html,body{font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;}</style>');
-fs.writeFileSync(path, text, 'utf8');
-NODE
-
 FROM nginx:alpine
 
 COPY --from=builder /app/artifacts/dashboard/dist/public /usr/share/nginx/html
