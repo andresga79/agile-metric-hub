@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/api-node/Dockerfile
+      dockerfile: docker/api/Dockerfile
     container_name: agile_metrics_api
     environment:
       PORT: "8000"
