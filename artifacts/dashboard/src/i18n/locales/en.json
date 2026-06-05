@@ -201,6 +201,11 @@
   "page.forecast.optimistic": "Optimistic",
   "page.forecast.projected": "Projected",
   "page.forecast.pessimistic": "Pessimistic",
+  "page.forecast.probability": "Probability",
+  "page.forecast.median": "Median",
+  "page.forecast.weeks": "weeks",
+  "page.forecast.simulations": "Based on {{count}} simulations",
+  "page.forecast.noData": "No forecast data",
 
   "page.analytics.loading": "Loading analytics...",
   "page.analytics.notFound": "Project not found",

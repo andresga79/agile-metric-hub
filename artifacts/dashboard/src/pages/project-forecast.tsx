@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, postProjectForecast, type ForecastResponse } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ForecastChart } from "@/components/forecast-chart";
 import { ArrowLeft, Calendar } from "lucide-react";
 
 export default function ProjectForecast() {
@@ -119,14 +120,7 @@ export default function ProjectForecast() {
               {forecastLoading ? t('page.forecast.simulating') : t('page.forecast.runForecast')}
             </button>
           </div>
-          {forecastResult && (
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p>P50: <strong className="text-foreground">{forecastResult.medianWeeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P75: <strong className="text-foreground">{forecastResult.p75Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P85: <strong className="text-foreground">{forecastResult.p85Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P95: <strong className="text-foreground">{forecastResult.p95Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-            </div>
-          )}
+          {forecastResult && <ForecastChart forecast={forecastResult} />}
         </CardContent>
       </Card>
 
