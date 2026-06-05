@@ -121,10 +121,10 @@ export default function ProjectForecast() {
           </div>
           {forecastResult && (
             <div className="text-sm text-muted-foreground space-y-1">
-              <p>P50: <strong className="text-foreground">{forecastResult.percentile50.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P75: <strong className="text-foreground">{forecastResult.percentile75.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P85: <strong className="text-foreground">{forecastResult.percentile85.toFixed(1)}</strong> {t('page.forecast.days')}</p>
-              <p>P95: <strong className="text-foreground">{forecastResult.percentile95.toFixed(1)}</strong> {t('page.forecast.days')}</p>
+              <p>P50: <strong className="text-foreground">{forecastResult.medianWeeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
+              <p>P75: <strong className="text-foreground">{forecastResult.p75Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
+              <p>P85: <strong className="text-foreground">{forecastResult.p85Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
+              <p>P95: <strong className="text-foreground">{forecastResult.p95Weeks.toFixed(1)}</strong> {t('page.forecast.days')}</p>
             </div>
           )}
         </CardContent>
