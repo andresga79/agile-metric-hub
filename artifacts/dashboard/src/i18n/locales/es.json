@@ -189,7 +189,6 @@
   "page.forecast.issues": "Issues",
   "page.forecast.storyPoints": "Story Points",
   "page.forecast.window": "Historial",
-  "page.forecast.historicalDesc": "Días de historial para calcular throughput",
   "page.forecast.days": "días",
   "page.forecast.simulating": "Simulando...",
   "page.forecast.runForecast": "Ejecutar Pronóstico",

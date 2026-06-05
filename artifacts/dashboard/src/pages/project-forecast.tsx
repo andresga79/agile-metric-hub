@@ -111,15 +111,16 @@ export default function ProjectForecast() {
                 <option value={90}>{`90 ${t('page.forecast.days')}`}</option>
                 <option value={180}>{`180 ${t('page.forecast.days')}`}</option>
               </select>
-              <p className="text-xs text-muted-foreground mt-1">{t('page.forecast.historicalDesc')}</p>
             </div>
-            <button
-              onClick={runForecast}
-              disabled={forecastLoading}
-              className="px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
-            >
-              {forecastLoading ? t('page.forecast.simulating') : t('page.forecast.runForecast')}
-            </button>
+            <div className="mt-6">
+              <button
+                onClick={runForecast}
+                disabled={forecastLoading}
+                className="px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+              >
+                {forecastLoading ? t('page.forecast.simulating') : t('page.forecast.runForecast')}
+              </button>
+            </div>
           </div>
           {forecastResult && <ForecastChart forecast={forecastResult} />}
         </CardContent>
