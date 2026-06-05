@@ -1,0 +1,791 @@
+import { logger } from "./logger";
+import {
+  withCache,
+  projectsCacheKey,
+  issuesCacheKey,
+  sprintsCacheKey,
+} from "./jira-cache";
+
+const ISSUE_TYPE_MAP: Record<string, string> = {
+  story: "Story",
+  historia: "Story",
+  bug: "Bug",
+  problema: "Bug",
+  error: "Bug",
+  defect: "Bug",
+  task: "Task",
+  tarea: "Task",
+  "tarea técnica": "Task",
+  "tarea tecnica": "Task",
+  epic: "Epic",
+  épica: "Epic",
+  epica: "Epic",
+};
+
+export function mapIssueType(typeName: string): string {
+  const key = typeName.toLowerCase().trim();
+  return ISSUE_TYPE_MAP[key] ?? "Other";
+}
+
+export interface QaRejection {
+  issueKey: string;
+  issueSummary: string;
+  issueType: string;
+  fromStatus: string;
+  toStatus: string;
+  transitionedAt: Date;
+}
+
+export interface LinkedBug {
+  bugKey: string;
+  bugSummary: string;
+  bugStatus: string;
+  bugCreated: string;
+  parentStoryKey: string;
+  parentStorySummary: string;
+  parentStoryRejected: boolean;
+}
+
+export interface JiraProject {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  projectTypeKey: string;
+  avatarUrls?: { "48x48": string };
+  lead?: { displayName: string };
+  self: string;
+}
+
+export interface JiraIssue {
+  id: string;
+  key: string;
+  fields: {
+    summary: string;
+    status: { name: string; statusCategory?: { key: string; name?: string } };
+    issuetype: { name: string };
+    priority: { name: string };
+    assignee?: { displayName: string; accountId: string; avatarUrls?: { "48x48": string } };
+    story_points?: number;
+    customfield_10016?: number;
+    customfield_10028?: number;
+    customfield_10072?: number;
+    created: string;
+    resolutiondate?: string;
+    timespent?: number;
+    updated: string;
+  };
+  changelog?: {
+    histories: {
+      created: string;
+      items: { field: string; fromString?: string | null; toString?: string | null }[];
+    }[];
+  };
+  issuelinks?: {
+    id: string;
+    type: { name: string; inward: string; outward: string };
+    inwardIssue?: {
+      key: string;
+      fields: { summary: string; issuetype: { name: string }; status: { name: string }; created: string };
+    };
+    outwardIssue?: {
+      key: string;
+      fields: { summary: string; issuetype: { name: string }; status: { name: string }; created: string };
+    };
+  }[];
+}
+
+export type ProjectBoardType = "scrum" | "kanban" | "simple";
+
+/** A Jira issue is considered completed when its status category is "done",
+ * regardless of the custom status name (works for Spanish/English workflows). */
+export function isIssueDone(issue: JiraIssue): boolean {
+  const cat = issue.fields.status.statusCategory?.key;
+  if (cat) return cat === "done";
+  // Fallback for instances that don't return statusCategory
+  return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(
+    issue.fields.status.name.trim()
+  );
+}
+
+/** A Jira issue is in progress when its status category is "indeterminate". */
+export function isIssueInProgress(issue: JiraIssue): boolean {
+  return issue.fields.status.statusCategory?.key === "indeterminate";
+}
+
+/** Story points can live in several custom fields depending on the Jira
+ * instance/project. Use whichever one carries a value. */
+export function getStoryPoints(issue: JiraIssue): number {
+  return (
+    issue.fields.customfield_10016 ??
+    issue.fields.customfield_10028 ??
+    issue.fields.customfield_10072 ??
+    0
+  );
+}
+
+let statusCategoryCache: Map<string, string> | null = null;
+
+/** Build (and cache) a map of status name -> status category key for the whole
+ * Jira instance, so changelog entries (which only carry status names) can be
+ * mapped back to their category ("new" | "indeterminate" | "done"). */
+export async function getStatusCategoryMap(): Promise<Map<string, string>> {
+  if (statusCategoryCache) return statusCategoryCache;
+  const map = new Map<string, string>();
+  try {
+    const statuses = await jiraFetch<
+      { name: string; statusCategory?: { key: string } }[]
+    >("/status");
+    for (const s of statuses) {
+      if (s.statusCategory?.key) {
+        map.set(s.name.trim().toLowerCase(), s.statusCategory.key);
+      }
+    }
+    // Only persist the cache on a successful fetch, so a transient Jira error
+    // doesn't permanently force cycle-time to fall back to lead time.
+    statusCategoryCache = map;
+  } catch (err) {
+    logger.warn({ err }, "Failed to load status categories");
+  }
+  return map;
+}
+
+// --- QA rejection detection ---
+
+let allStatusesCache: { name: string; statusCategory?: { key: string } }[] | null = null;
+
+const QA_PATTERNS = [/qa/i, /test(ing)?/i, /quality/i, /qc/i, /verification/i];
+
+export function isQaStatus(statusName: string): boolean {
+  return QA_PATTERNS.some((p) => p.test(statusName.trim()));
+}
+
+async function fetchAllStatuses(): Promise<
+  { name: string; statusCategory?: { key: string } }[]
+> {
+  if (!isJiraConfigured()) return [];
+  if (allStatusesCache) return allStatusesCache;
+  try {
+    const statuses = await jiraFetch<
+      { name: string; statusCategory?: { key: string } }[]
+    >("/status");
+    allStatusesCache = statuses;
+    return statuses;
+  } catch (err) {
+    logger.warn({ err }, "Failed to load statuses");
+    return [];
+  }
+}
+
+function deduplicateCaseInsensitive(names: string[]): string[] {
+  const seen = new Set<string>();
+  return names.filter((n) => {
+    const lower = n.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
+}
+
+/** Returns all status names that are QA-related (matched by pattern). */
+export async function getQaStatuses(): Promise<string[]> {
+  const statuses = await fetchAllStatuses();
+  return deduplicateCaseInsensitive(
+    statuses.filter((s) => isQaStatus(s.name)).map((s) => s.name)
+  );
+}
+
+const DEV_RETURN_BLOCKLIST_PATTERNS = [
+  /ready for approve/i,
+  /listo para aprob/i,
+  /^approved$/i,
+  /^aprobado$/i,
+  /po accepted/i,
+  /aprobe po/i,
+  /peer review/i,
+  /in review/i,
+  /revision.*progreso/i,
+  /ready for po/i,
+  /listo para po/i,
+  /validaci/i,
+];
+
+/** Statuses in "new" or "indeterminate" categories that ARE QA-related AND
+ *  NOT in the blocklist are valid "return to dev" targets. */
+export async function getDevReturnStatuses(): Promise<string[]> {
+  const statuses = await fetchAllStatuses();
+  return deduplicateCaseInsensitive(
+    statuses
+      .filter((s) => {
+        const cat = s.statusCategory?.key;
+        if (cat !== "new" && cat !== "indeterminate") return false;
+        if (isQaStatus(s.name)) return false;
+        return !DEV_RETURN_BLOCKLIST_PATTERNS.some((p) => p.test(s.name));
+      })
+      .map((s) => s.name)
+  );
+}
+
+/** Build lookup sets for fast case-insensitive matching. */
+export async function getQaStatusSet(): Promise<Set<string>> {
+  const names = await getQaStatuses();
+  return new Set(names.map((n) => n.toLowerCase()));
+}
+
+export async function getDevReturnStatusSet(): Promise<Set<string>> {
+  const names = await getDevReturnStatuses();
+  return new Set(names.map((n) => n.toLowerCase()));
+}
+
+/** Scan an issue's changelog for transitions from a QA status to a Dev/backlog
+ *  status. Returns an array of QaRejection objects. */
+export function findQaRejections(
+  issue: JiraIssue,
+  qaStatusSet: Set<string>,
+  devStatusSet: Set<string>
+): QaRejection[] {
+  const histories = issue.changelog?.histories ?? [];
+  const rejections: QaRejection[] = [];
+
+  for (const h of histories) {
+    for (const item of h.items) {
+      if (item.field !== "status") continue;
+      const from = item.fromString?.trim() ?? "";
+      const to = item.toString?.trim() ?? "";
+      if (!from || !to) continue;
+
+      if (qaStatusSet.has(from.toLowerCase()) && devStatusSet.has(to.toLowerCase())) {
+        rejections.push({
+          issueKey: issue.key,
+          issueSummary: issue.fields.summary,
+          issueType: issue.fields.issuetype.name,
+          fromStatus: from,
+          toStatus: to,
+          transitionedAt: new Date(h.created),
+        });
+      }
+    }
+  }
+
+  return rejections;
+}
+
+export function isBugIssue(issue: JiraIssue): boolean {
+  return /^bug$/i.test(issue.fields.issuetype.name.trim());
+}
+
+/** Extract bugs linked via issuelinks from a set of issues.
+ *  For each issue, scans its issuelinks looking for Bug-type linked issues.
+ *  Returns deduplicated LinkedBug entries. */
+export function extractLinkedBugs(
+  issues: JiraIssue[],
+  rejectedIssueKeys: Set<string>
+): LinkedBug[] {
+  const bugs = new Map<string, LinkedBug>();
+
+  for (const issue of issues) {
+    const links = issue.issuelinks ?? [];
+    for (const link of links) {
+      // The linked issue could be inward or outward
+      const linked = link.inwardIssue ?? link.outwardIssue;
+      if (!linked) continue;
+      if (!/^bug$/i.test(linked.fields.issuetype.name.trim())) continue;
+
+      const bugKey = linked.key;
+      if (bugs.has(bugKey)) continue;
+
+      bugs.set(bugKey, {
+        bugKey,
+        bugSummary: linked.fields.summary,
+        bugStatus: linked.fields.status.name,
+        bugCreated: linked.fields.created,
+        parentStoryKey: issue.key,
+        parentStorySummary: issue.fields.summary,
+        parentStoryRejected: rejectedIssueKeys.has(issue.key),
+      });
+    }
+  }
+
+  return Array.from(bugs.values());
+}
+
+/** Count standalone Bug issues (not linked to any story in the set). */
+export function countStandaloneBugs(
+  issues: JiraIssue[],
+  linkedBugKeys: Set<string>
+): number {
+  return issues.filter(
+    (i) => isBugIssue(i) && !linkedBugKeys.has(i.key)
+  ).length;
+}
+
+// --- End QA rejection detection ---
+
+/** Best effort resolution date: use resolutiondate, or find the last changelog
+ * transition into a "done" status, or fall back to updated date. */
+export async function getResolutionDate(
+  issue: JiraIssue
+): Promise<Date | null> {
+  if (issue.fields.resolutiondate) {
+    return new Date(issue.fields.resolutiondate);
+  }
+  if (!isIssueDone(issue)) return null;
+
+  const histories = issue.changelog?.histories ?? [];
+  if (histories.length > 0) {
+    const categoryMap = await getStatusCategoryMap();
+    const doneTransitions = histories
+      .filter((h) => h.items.some((it) => it.field === "status"))
+      .map((h) => ({
+        at: new Date(h.created).getTime(),
+        to: h.items.find((it) => it.field === "status")?.toString ?? "",
+      }))
+      .filter((t) => categoryMap.get(t.to.trim().toLowerCase()) === "done");
+    if (doneTransitions.length > 0) {
+      doneTransitions.sort((a, b) => b.at - a.at);
+      return new Date(doneTransitions[0].at);
+    }
+  }
+
+  return new Date(issue.fields.updated);
+}
+
+/** Lead time (days) = from issue creation to resolution. Total elapsed time,
+ * including time spent waiting in the backlog. */
+export async function getLeadTimeDays(issue: JiraIssue): Promise<number | null> {
+  if (!isIssueDone(issue)) return null;
+  const resolved = await getResolutionDate(issue);
+  if (!resolved) return null;
+  const created = new Date(issue.fields.created).getTime();
+  return (resolved.getTime() - created) / (1000 * 60 * 60 * 24);
+}
+
+/** Cycle time (days) = from when active work started (first transition into an
+ * "in progress" status) to resolution. Falls back to lead time when no such
+ * transition is recorded in the changelog. */
+export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null> {
+  if (!isIssueDone(issue)) return null;
+  const resolved = await getResolutionDate(issue);
+  if (!resolved) return null;
+  const resolvedMs = resolved.getTime();
+
+  const histories = issue.changelog?.histories ?? [];
+  if (histories.length > 0) {
+    const categoryMap = await getStatusCategoryMap();
+    const transitions = histories
+      .filter((h) => h.items.some((it) => it.field === "status"))
+      .map((h) => ({
+        at: new Date(h.created).getTime(),
+        to: h.items.find((it) => it.field === "status")?.toString ?? "",
+      }))
+      .sort((a, b) => a.at - b.at);
+
+    const firstInProgress = transitions.find(
+      (t) => categoryMap.get(t.to.trim().toLowerCase()) === "indeterminate"
+    );
+    if (firstInProgress) {
+      return (resolvedMs - firstInProgress.at) / (1000 * 60 * 60 * 24);
+    }
+  }
+
+  // No changelog / no in-progress transition recorded: fall back to lead time.
+  return getLeadTimeDays(issue);
+}
+
+export interface JiraSprint {
+  id: number;
+  name: string;
+  state: string;
+  startDate?: string;
+  endDate?: string;
+  completeDate?: string;
+}
+
+const JIRA_URL = process.env["JIRA_URL"] ?? "";
+const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";
+const JIRA_API_TOKEN = process.env["JIRA_API_TOKEN"] ?? "";
+
+export const isJiraConfigured = () =>
+  JIRA_URL.trim() !== "" &&
+  JIRA_EMAIL.trim() !== "" &&
+  JIRA_API_TOKEN.trim() !== "";
+
+function jiraHeaders(): Record<string, string> {
+  const token = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
+  return {
+    Authorization: `Basic ${token}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+}
+
+async function jiraFetch<T>(path: string): Promise<T> {
+  const url = `${JIRA_URL}/rest/api/3${path}`;
+  const response = await fetch(url, { headers: jiraHeaders() });
+
+  if (!response.ok) {
+    const text = await response.text();
+    logger.error({ status: response.status, path, body: text }, "Jira API error");
+    throw new Error(`Jira API error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function listJiraProjects(): Promise<JiraProject[]> {
+  if (!isJiraConfigured()) {
+    return getMockProjects();
+  }
+
+  return withCache(projectsCacheKey(), async () => {
+    try {
+      const result = await jiraFetch<{ values: JiraProject[] }>(
+        "/project/search?maxResults=50&orderBy=name"
+      );
+      return result.values;
+    } catch (err) {
+      logger.warn({ err }, "Failed to fetch Jira projects, using mock data");
+      return getMockProjects();
+    }
+  });
+}
+
+export async function getJiraProject(projectId: string): Promise<JiraProject | null> {
+  if (!isJiraConfigured()) {
+    return getMockProjects().find((p) => p.id === projectId || p.key === projectId) ?? null;
+  }
+
+  try {
+    return await jiraFetch<JiraProject>(`/project/${projectId}`);
+  } catch (err) {
+    logger.warn({ err, projectId }, "Failed to fetch Jira project");
+    return null;
+  }
+}
+
+/** Detect whether a project is run as Scrum or Kanban by inspecting its boards.
+ * A project with at least one Scrum board is treated as Scrum (has velocity);
+ * otherwise it's treated as Kanban (no velocity). */
+/** Manual overrides when Jira board detection is incorrect.
+ *  Key can be project ID (numeric) or project key. */
+const MANUAL_BOARD_OVERRIDES: Record<string, ProjectBoardType> = {
+  "10003": "scrum",  // OLP - Olimpo: board is "simple" but team uses Scrum
+  "OLP": "scrum",
+  "10013": "scrum",  // OLI - Olimpo Internacional: board 15 is Scrum
+  "OLI": "scrum",
+};
+
+export async function getProjectBoardType(
+  projectId: string
+): Promise<ProjectBoardType> {
+  if (!isJiraConfigured()) return "scrum";
+
+  const override = MANUAL_BOARD_OVERRIDES[projectId];
+  if (override) return override;
+
+  return withCache(`boardType:${projectId}`, async () => {
+    try {
+      const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(
+        projectId
+      )}&maxResults=50`;
+      const response = await fetch(url, { headers: jiraHeaders() });
+      if (!response.ok) {
+        logger.warn({ status: response.status, projectId }, "Failed to fetch boards");
+        return "simple";
+      }
+      const data = (await response.json()) as {
+        values?: { type?: string; location?: { projectId?: number; projectKey?: string } }[];
+      };
+      const boards = data.values ?? [];
+
+      const owned = boards.filter((b) => {
+        const loc = b.location;
+        if (!loc) return false;
+        return (
+          String(loc.projectId ?? "") === String(projectId) ||
+          String(loc.projectKey ?? "") === String(projectId)
+        );
+      });
+      if (owned.length === 0) return "simple";
+
+      // Use the first owned board's type (Jira returns boards in creation order)
+      const primaryType = owned[0]!.type;
+      if (primaryType === "scrum" || primaryType === "kanban") return primaryType;
+      return "simple";
+    } catch (err) {
+      logger.warn({ err, projectId }, "Failed to detect board type");
+      return "simple";
+    }
+  });
+}
+
+export async function getBoardId(
+  projectId: string
+): Promise<number | null> {
+  if (!isJiraConfigured()) return null;
+  try {
+    const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(projectId)}&maxResults=50`;
+    const resp = await fetch(url, { headers: jiraHeaders() });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {
+      values?: { id: number; type?: string; location?: { projectId?: number; projectKey?: string } }[];
+    };
+    const boards = data.values ?? [];
+    // Find a board that belongs to this project (by location)
+    const owned = boards.filter((b) => {
+      const loc = b.location;
+      if (!loc) return false;
+      return (
+        String(loc.projectId ?? "") === String(projectId) ||
+        String(loc.projectKey ?? "") === String(projectId)
+      );
+    });
+    if (owned.length === 0) return null;
+    // Prefer a scrum board
+    const scrum = owned.find((b) => b.type === "scrum");
+    return (scrum ?? owned[0]!).id ?? null;
+  } catch (err) {
+    logger.warn({ err, projectId }, "Failed to get board ID");
+    return null;
+  }
+}
+
+export async function getJiraSprints(
+  projectId: string,
+  maxResults: number = 50
+): Promise<JiraSprint[]> {
+  if (!isJiraConfigured()) return [];
+
+  return withCache(sprintsCacheKey(projectId), async () => {
+    try {
+      const boardId = await getBoardId(projectId);
+      if (!boardId) return [];
+
+      // Fetch all sprints with pagination
+      const allSprints: JiraSprint[] = [];
+      const pageSize = 50;
+      let startAt = 0;
+      let total = 0;
+
+      for (let page = 0; page < 5; page++) {
+        const sprintUrl = `${JIRA_URL}/rest/agile/1.0/board/${boardId}/sprint?maxResults=${pageSize}&startAt=${startAt}&state=closed,active`;
+        const sprintResp = await fetch(sprintUrl, { headers: jiraHeaders() });
+        if (!sprintResp.ok) break;
+
+        const sprintData = (await sprintResp.json()) as {
+          values: JiraSprint[];
+          total?: number;
+          isLast?: boolean;
+        };
+
+        const sprints = sprintData.values ?? [];
+        allSprints.push(...sprints);
+        total = sprintData.total ?? allSprints.length;
+
+        if (sprintData.isLast || sprints.length < pageSize) break;
+        startAt += pageSize;
+      }
+
+      return allSprints.sort((a, b) => {
+        const aEnd = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const bEnd = b.endDate ? new Date(b.endDate).getTime() : 0;
+        return bEnd - aEnd;
+      });
+    } catch (err) {
+      logger.warn({ err, projectId }, "Failed to fetch sprints");
+      return [];
+    }
+  });
+}
+
+/** Fetch all issues assigned to a specific sprint via JQL `sprint = {sprintId}`. */
+export async function getSprintIssues(
+  sprintId: number,
+  maxResults: number = 100
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) return [];
+  const fields =
+    "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
+  try {
+    const allIssues: JiraIssue[] = [];
+    let startAt = 0;
+    for (let page = 0; page < 5; page++) {
+      const jql = encodeURIComponent(`sprint = ${sprintId} ORDER BY created DESC`);
+      const result = await jiraFetch<{ issues: JiraIssue[]; total: number }>(
+        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
+      );
+      const pageIssues = result.issues ?? [];
+      allIssues.push(...pageIssues);
+      if (pageIssues.length < maxResults) break;
+      startAt += maxResults;
+    }
+    return allIssues;
+  } catch (err) {
+    logger.warn({ err, sprintId }, "Failed to fetch sprint issues");
+    return [];
+  }
+}
+
+export async function getJiraIssuesForProject(
+  projectId: string,
+  periodDays: number
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId);
+  }
+
+  return withCache(issuesCacheKey(projectId, periodDays), async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+    const sinceStr = since.toISOString().split("T")[0];
+
+    const fields =
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated,issuelinks";
+
+    try {
+      const allIssues: JiraIssue[] = [];
+      const maxResults = 100;
+      const maxPages = 5; // up to 500 issues
+      let cursorDate = "";
+
+      for (let page = 0; page < maxPages; page++) {
+        const cursorClause = cursorDate
+          ? `AND created <= "${cursorDate}"`
+          : "";
+        const jql = encodeURIComponent(
+          `project = ${projectId} AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}")${cursorClause} ORDER BY created DESC`
+        );
+        const result = await jiraFetch<{ issues: JiraIssue[]; total: number }>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
+        );
+        const pageIssues = result.issues ?? [];
+        allIssues.push(...pageIssues);
+        if (pageIssues.length < maxResults) break;
+        const last = pageIssues[pageIssues.length - 1];
+        cursorDate = last?.fields?.created?.split("T")[0] ?? "";
+        if (!cursorDate) break;
+      }
+
+      // Deduplicate by key (date-based pagination may overlap on same-date issues)
+      const seen = new Set<string>();
+      return allIssues.filter((i) => {
+        if (seen.has(i.key)) return false;
+        seen.add(i.key);
+        return true;
+      });
+    } catch (err) {
+      logger.warn({ err, projectId }, "Failed to fetch Jira issues, using mock data");
+      return getMockIssues(projectId);
+    }
+  });
+}
+
+export function periodToDays(period: string): number {
+  switch (period) {
+    case "1m": return 30;
+    case "3m": return 90;
+    case "6m": return 180;
+    default: return 30;
+  }
+}
+
+// --- Mock data for when Jira is not configured ---
+
+function getMockProjects(): JiraProject[] {
+  return [
+    {
+      id: "10001",
+      key: "PLATFORM",
+      name: "Platform Engineering",
+      description: "Core infrastructure and platform services",
+      projectTypeKey: "software",
+      avatarUrls: { "48x48": "" },
+      lead: { displayName: "Alice Johnson" },
+      self: "",
+    },
+    {
+      id: "10002",
+      key: "MOBILE",
+      name: "Mobile App",
+      description: "iOS and Android applications",
+      projectTypeKey: "software",
+      avatarUrls: { "48x48": "" },
+      lead: { displayName: "Bob Chen" },
+      self: "",
+    },
+    {
+      id: "10003",
+      key: "API",
+      name: "API Services",
+      description: "REST and GraphQL API development",
+      projectTypeKey: "software",
+      avatarUrls: { "48x48": "" },
+      lead: { displayName: "Carol Martinez" },
+      self: "",
+    },
+    {
+      id: "10004",
+      key: "DATA",
+      name: "Data Platform",
+      description: "Analytics pipeline and data warehouse",
+      projectTypeKey: "software",
+      avatarUrls: { "48x48": "" },
+      lead: { displayName: "David Kim" },
+      self: "",
+    },
+  ];
+}
+
+function getMockIssues(projectId: string): JiraIssue[] {
+  const statuses = ["To Do", "In Progress", "In Review", "Done"];
+  const types = ["Story", "Bug", "Task", "Epic"];
+  const priorities = ["High", "Medium", "Low"];
+  const assignees = [
+    { displayName: "Alice Johnson", accountId: "user-1" },
+    { displayName: "Bob Chen", accountId: "user-2" },
+    { displayName: "Carol Martinez", accountId: "user-3" },
+    { displayName: "David Kim", accountId: "user-4" },
+    { displayName: "Eve Wilson", accountId: "user-5" },
+  ];
+
+  const now = new Date();
+
+  return Array.from({ length: 25 }, (_, i) => {
+    const daysAgo = Math.floor(Math.random() * 80);
+    const createdDate = new Date(now);
+    createdDate.setDate(createdDate.getDate() - daysAgo);
+
+    const status = statuses[Math.floor(Math.random() * statuses.length)]!;
+    const resolvedDate =
+      status === "Done"
+        ? new Date(createdDate.getTime() + Math.random() * 7 * 24 * 60 * 60 * 1000)
+        : undefined;
+
+    return {
+      id: `${10100 + i}`,
+      key: `${getMockProjects().find((p) => p.id === projectId)?.key ?? "PROJ"}-${100 + i}`,
+      fields: {
+        summary: [
+          "Implement user authentication flow",
+          "Fix memory leak in background service",
+          "Add dark mode support",
+          "Optimize database queries",
+          "Refactor API response handling",
+          "Write unit tests for core module",
+          "Set up CI/CD pipeline",
+          "Update dependencies to latest versions",
+          "Implement rate limiting",
+          "Add error monitoring integration",
+        ][i % 10]!,
+        status: { name: status },
+        issuetype: { name: types[i % types.length]! },
+        priority: { name: priorities[i % priorities.length]! },
+        assignee: assignees[i % assignees.length],
+        customfield_10016: Math.random() > 0.3 ? Math.ceil(Math.random() * 8) : undefined,
+        created: createdDate.toISOString(),
+        resolutiondate: resolvedDate?.toISOString(),
+        updated: createdDate.toISOString(),
+      },
+    };
+  });
+}

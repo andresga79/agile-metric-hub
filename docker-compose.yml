@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: agile_metrics_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agile_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agile_password}
+      POSTGRES_DB: ${POSTGRES_DB:-agile_metrics}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agile_user} -d ${POSTGRES_DB:-agile_metrics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api-node/Dockerfile
+    container_name: agile_metrics_api
+    environment:
+      PORT: "8000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agile_user}:${POSTGRES_PASSWORD:-agile_password}@db:5432/${POSTGRES_DB:-agile_metrics}
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-please-change-in-production}
+      JWT_EXPIRE: ${JWT_EXPIRE:-24h}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin123}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+      args:
+        SKIP_CODEGEN: '1'
+    container_name: agile_metrics_web
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

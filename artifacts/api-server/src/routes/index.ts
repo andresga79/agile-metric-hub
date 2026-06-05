@@ -1,0 +1,48 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import authRouter from "./auth";
+import projectsRouter from "./projects";
+import metricsRouter from "./metrics";
+import cfdRouter from "./cfd";
+import userProjectSettingsRouter from "./user-project-settings";
+import dashboardRouter from "./dashboard";
+import forecastRouter from "./forecast";
+import projectHealthRouter from "./project-health";
+import analyticsRouter from "./analytics";
+import slaRouter from "./sla";
+import portfolioRouter from "./portfolio";
+import targetsRouter from "./targets";
+import predictiveForecastRouter from "./predictive-forecast";
+import issuesByWeekRouter from "./issues-by-week";
+import qaRejectedRouter from "./qa-rejected";
+import sprintMetricsRouter from "./sprint-metrics";
+import kanbanMetricsRouter from "./kanban-metrics";
+import adminRouter from "./admin";
+import rolePermissionsRouter from "./role-permissions";
+import syncStatusRouter from "./sync-status";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(authRouter);
+router.use(projectsRouter);
+router.use(metricsRouter);
+router.use(cfdRouter);
+router.use(userProjectSettingsRouter);
+router.use(dashboardRouter);
+router.use(forecastRouter);
+router.use(projectHealthRouter);
+router.use(analyticsRouter);
+router.use(slaRouter);
+router.use(portfolioRouter);
+router.use(targetsRouter);
+router.use(predictiveForecastRouter);
+router.use(issuesByWeekRouter);
+router.use(qaRejectedRouter);
+router.use(sprintMetricsRouter);
+router.use(kanbanMetricsRouter);
+router.use(rolePermissionsRouter);
+router.use(syncStatusRouter);
+router.use(adminRouter);
+
+export default router;

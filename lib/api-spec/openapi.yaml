@@ -1,0 +1,1479 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Agile Metrics Dashboard API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: admin
+    description: Admin user management operations
+  - name: projects
+    description: Jira project operations
+  - name: metrics
+    description: Agile metrics operations
+  - name: dashboard
+    description: Dashboard summary operations
+  - name: settings
+    description: Admin settings operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginCredentials"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthToken"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all Jira projects
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a single project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/metrics/{period}:
+    get:
+      operationId: getProjectMetrics
+      tags: [metrics]
+      summary: Get KPI metrics for a project by period
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Project metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMetrics"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/members/{period}:
+    get:
+      operationId: getProjectMembers
+      tags: [metrics]
+      summary: Get team member statistics for a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Member statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MemberStats"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/issues/{period}:
+    get:
+      operationId: getProjectIssues
+      tags: [metrics]
+      summary: Get recent issues for a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Issues list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Issue"
+
+  /projects/{projectId}/cfd/{period}:
+    get:
+      operationId: getProjectCfd
+      tags: [metrics]
+      summary: Get Cumulative Flow Diagram data for a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: CFD data points
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CfdResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /user/projects:
+    get:
+      operationId: listUserProjects
+      tags: [projects]
+      summary: List all projects with user visibility settings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of projects with visibility
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectWithVisibility"
+    put:
+      operationId: updateProjectVisibility
+      tags: [projects]
+      summary: Batch update project visibility settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectVisibilityUpdate"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/forecast:
+    post:
+      operationId: postProjectForecast
+      tags: [metrics]
+      summary: Monte Carlo forecast for a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForecastRequest"
+      responses:
+        "200":
+          description: Forecast results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/health/{period}:
+    get:
+      operationId: getProjectHealth
+      tags: [metrics]
+      summary: Get health radar dimensions for a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Health dimensions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/issues/{period}/csv:
+    get:
+      operationId: downloadProjectIssuesCsv
+      tags: [metrics]
+      summary: Export issues as CSV
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /projects/{projectId}/qa-rejected/{period}:
+    get:
+      operationId: getProjectQaRejected
+      tags: [metrics]
+      summary: Get QA rejected issues for a project by period
+      description: >
+        Scans issue changelogs for transitions from a QA status back to a
+        Dev/backlog status (e.g. "QA In Progress" → "Ready for Dev").
+        Returns aggregated counts per sprint and the list of rejected issues.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: QA rejected metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QaRejectedResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/kanban/{period}:
+    get:
+      operationId: getProjectKanbanMetrics
+      tags: [metrics]
+      summary: Get weekly Kanban metrics (throughput, cycle time) for non-Scrum projects
+      description: >
+        Groups completed issues by ISO week and computes throughput, cycle time,
+        reopened count, and issue type breakdown per week. Only available for
+        Kanban/simple board projects.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Kanban weekly metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KanbanMetricsResponse"
+        "400":
+          description: Project is a Scrum project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/sprints/{period}:
+    get:
+      operationId: getProjectSprintMetrics
+      tags: [metrics]
+      summary: Get sprint-level metrics (velocity, completion, cycle time) for Scrum projects
+      description: >
+        Returns per-sprint breakdown: velocity, completion rate, cycle time,
+        reopened count, and issue type breakdown. Only available for Scrum projects.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PeriodPath"
+      responses:
+        "200":
+          description: Sprint metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintMetricsResponse"
+        "400":
+          description: Project is not a Scrum project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List all users (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createAdminUser
+      tags: [admin]
+      summary: Create a new user (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username or email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}:
+    put:
+      operationId: updateAdminUser
+      tags: [admin]
+      summary: Update a user (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserRequest"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAdminUser
+      tags: [admin]
+      summary: Delete a user (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Cannot delete own account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get high-level dashboard summary stats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /settings/project-visibility:
+    get:
+      operationId: getProjectVisibilitySettings
+      tags: [settings]
+      summary: Get project visibility settings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Project visibility settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectVisibilitySettings"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProjectVisibilitySettings
+      tags: [settings]
+      summary: Update project visibility settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectVisibilityRequest"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+    PeriodPath:
+      name: period
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: ["1m", "3m", "6m"]
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    LoginCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+
+    AuthToken:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    UserRole:
+      type: string
+      enum: [admin, member, viewer]
+
+    User:
+      type: object
+      required: [id, username, email, role]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        createdAt:
+          type: string
+
+    AdminUser:
+      type: object
+      required: [id, username, email, role]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        createdAt:
+          type: string
+
+    AdminCreateUserRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+        role:
+          type: string
+          enum: [admin, member, viewer]
+          default: member
+
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+        role:
+          type: string
+          enum: [admin, member, viewer]
+
+    Project:
+      type: object
+      required: [id, key, name, projectType, issueCount, doneCount, inProgressCount, visible]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        projectType:
+          type: string
+        boardType:
+          type: string
+          enum: [scrum, kanban, simple]
+          description: Agile board methodology detected from Jira boards
+        methodology:
+          type: string
+          description: Human-readable methodology label (Scrum or Kanban)
+        avatarUrl:
+          type: ["string", "null"]
+        issueCount:
+          type: integer
+        doneCount:
+          type: integer
+        inProgressCount:
+          type: integer
+        visible:
+          type: boolean
+        lead:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        usingMockData:
+          type: boolean
+          description: Whether the data is from Jira or demo/mock data
+
+    ProjectWithVisibility:
+      type: object
+      required: [id, key, name, projectType, issueCount, doneCount, inProgressCount, visible]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        projectType:
+          type: string
+        boardType:
+          type: string
+          enum: [scrum, kanban, simple]
+        methodology:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        issueCount:
+          type: integer
+        doneCount:
+          type: integer
+        inProgressCount:
+          type: integer
+        lead:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        usingMockData:
+          type: boolean
+        visible:
+          type: boolean
+          description: Whether this project is visible in the dashboard
+
+    ProjectVisibilityUpdate:
+      type: object
+      required: [projectId, visible]
+      properties:
+        projectId:
+          type: string
+        visible:
+          type: boolean
+
+    ProjectVisibilityItem:
+      type: object
+      required: [projectId, projectKey, name, visible]
+      properties:
+        projectId:
+          type: string
+        projectKey:
+          type: string
+        name:
+          type: string
+        visible:
+          type: boolean
+
+    ProjectVisibilitySettings:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectVisibilityItem"
+
+    UpdateProjectVisibilityRequest:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            type: object
+            required: [projectKey, visible]
+            properties:
+              projectKey:
+                type: string
+              visible:
+                type: boolean
+
+    ProjectMetrics:
+      type: object
+      required: [projectId, period, boardType, isScrum, velocity, cycleTime, leadTime, throughput, resolvedCount, velocityTrend, throughputTrend, velocityByWeek, cycleTimePercentiles, leadTimePercentiles, dora]
+      properties:
+        projectId:
+          type: string
+        period:
+          type: string
+        boardType:
+          type: string
+          enum: [scrum, kanban, simple]
+          description: Agile board methodology detected from Jira boards
+        isScrum:
+          type: boolean
+          description: Whether velocity applies (only true for Scrum projects)
+        velocity:
+          type: ["number", "null"]
+          description: Story points completed per sprint (null for non-Scrum projects)
+        cycleTime:
+          type: number
+          description: Average days from start to done
+        leadTime:
+          type: number
+          description: Average days from creation to done (lead time)
+        throughput:
+          type: number
+          description: Issues completed per week
+        resolvedCount:
+          type: integer
+          description: Total resolved issues in period
+        velocityTrend:
+          type: number
+          description: Percentage change vs previous period
+        throughputTrend:
+          type: number
+          description: Percentage change vs previous period
+        velocityByWeek:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyDataPoint"
+        cycleTimeDistribution:
+          type: array
+          items:
+            $ref: "#/components/schemas/CycleTimeDataPoint"
+        cycleTimePercentiles:
+          allOf:
+            - $ref: "#/components/schemas/Percentiles"
+          description: P50/P75/P85/P95 cycle time percentiles
+        leadTimePercentiles:
+          allOf:
+            - $ref: "#/components/schemas/Percentiles"
+          description: P50/P75/P85/P95 lead time percentiles
+        dora:
+          $ref: "#/components/schemas/DoraMetrics"
+
+    WeeklyDataPoint:
+      type: object
+      required: [week, value]
+      properties:
+        week:
+          type: string
+        value:
+          type: number
+
+    CycleTimeDataPoint:
+      type: object
+      required: [range, count]
+      properties:
+        range:
+          type: string
+        count:
+          type: integer
+
+    MemberStats:
+      type: object
+      required: [accountId, displayName, issuesResolved, storyPoints, avgCycleTime, issuesInProgress]
+      properties:
+        accountId:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        issuesResolved:
+          type: integer
+        storyPoints:
+          type: number
+        avgCycleTime:
+          type: number
+        issuesInProgress:
+          type: integer
+
+    Issue:
+      type: object
+      required: [id, key, summary, status, issueType, priority, createdAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+        issueType:
+          type: string
+        priority:
+          type: string
+        assignee:
+          type: ["string", "null"]
+        storyPoints:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+        resolvedAt:
+          type: ["string", "null"]
+        cycleTimeDays:
+          type: ["number", "null"]
+
+    CfdResponse:
+      type: object
+      required: [projectId, period, dataPoints]
+      properties:
+        projectId:
+          type: string
+        period:
+          type: string
+        dataPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/CfdDataPoint"
+
+    CfdDataPoint:
+      type: object
+      required: [date, todo, inProgress, done]
+      properties:
+        date:
+          type: string
+          format: date
+        todo:
+          type: integer
+          description: Issues in To Do / backlog state
+        inProgress:
+          type: integer
+          description: Issues actively being worked on
+        done:
+          type: integer
+          description: Issues completed
+
+    DashboardSummary:
+      type: object
+      required: [totalProjects, totalIssuesResolved, avgVelocity, avgCycleTime, activeProjects]
+      properties:
+        totalProjects:
+          type: integer
+        totalIssuesResolved:
+          type: integer
+        avgVelocity:
+          type: number
+        avgCycleTime:
+          type: number
+        activeProjects:
+          type: integer
+        topPerformingProject:
+          type: ["string", "null"]
+        usingMockData:
+          type: boolean
+          description: Whether the data is from Jira or demo/mock data
+
+    Percentiles:
+      type: object
+      required: [p50, p75, p85, p95]
+      properties:
+        p50:
+          type: number
+          description: 50th percentile (median)
+        p75:
+          type: number
+          description: 75th percentile
+        p85:
+          type: number
+          description: 85th percentile
+        p95:
+          type: number
+          description: 95th percentile
+
+    DoraClassification:
+      type: object
+      required: [deploymentFrequency, leadTimeForChanges, changeFailureRate, mttr]
+      properties:
+        deploymentFrequency:
+          type: string
+          enum: [elite, high, medium, low]
+        leadTimeForChanges:
+          type: string
+          enum: [elite, high, medium, low]
+        changeFailureRate:
+          type: string
+          enum: [elite, high, medium, low]
+        mttr:
+          type: string
+          enum: [elite, high, medium, low]
+
+    DoraMetrics:
+      type: object
+      required: [deploymentFrequency, leadTimeForChanges, changeFailureRate, mttr, classification]
+      properties:
+        deploymentFrequency:
+          type: number
+          description: Issues completed per week (proxy for deploy frequency)
+        leadTimeForChanges:
+          type: number
+          description: Average lead time in days
+        changeFailureRate:
+          type: number
+          description: Percentage of resolved issues that are bugs
+        mttr:
+          type: number
+          description: Mean time to restore — average cycle time of bugs in days
+        classification:
+          $ref: "#/components/schemas/DoraClassification"
+
+    ForecastRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          type: number
+          description: Number of issues or story points to forecast
+        unit:
+          type: string
+          enum: [issues, story_points]
+          default: issues
+        simulations:
+          type: integer
+          default: 10000
+          description: Number of Monte Carlo simulations (max 50000)
+        windowDays:
+          type: integer
+          default: 180
+          description: Historical lookback window in days (30, 90, or 180)
+
+    ForecastResponse:
+      type: object
+      required: [target, unit, simulations, probability, medianWeeks, p75Weeks, p85Weeks, p95Weeks, histogram]
+      properties:
+        target:
+          type: number
+        unit:
+          type: string
+          enum: [issues, story_points]
+        simulations:
+          type: integer
+        probability:
+          type: number
+          description: Probability of hitting target (0-100%)
+        medianWeeks:
+          type: number
+        p75Weeks:
+          type: number
+        p85Weeks:
+          type: number
+        p95Weeks:
+          type: number
+        histogram:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastHistogramBin"
+
+    ForecastHistogramBin:
+      type: object
+      required: [week, count]
+      properties:
+        week:
+          type: integer
+        count:
+          type: integer
+          description: Percentage of simulations
+
+    HealthResponse:
+      type: object
+      required: [projectId, period, dimensions]
+      properties:
+        projectId:
+          type: string
+        period:
+          type: string
+        dimensions:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthDimension"
+
+    HealthDimension:
+      type: object
+      required: [name, value, description]
+      properties:
+        name:
+          type: string
+        value:
+          type: integer
+          description: Normalized score 0-100
+        description:
+          type: string
+
+    QaRejectedResponse:
+      type: object
+      required:
+        - projectId
+        - period
+        - qaStatuses
+        - devReturnStatuses
+        - totalRejectedReversions
+        - totalIssuesRejected
+        - totalIssuesThatEnteredQa
+        - overallRejectionRate
+        - totalLinkedBugs
+        - totalStandaloneBugs
+        - overallBugRate
+        - overallQaImpactRate
+        - bySprint
+        - rejectedIssues
+        - linkedBugs
+      properties:
+        projectId:
+          type: string
+        period:
+          type: string
+        qaStatuses:
+          type: array
+          items:
+            type: string
+          description: Auto-detected QA status names
+        devReturnStatuses:
+          type: array
+          items:
+            type: string
+          description: Auto-detected Dev/backlog status names (not QA, not Done)
+        totalRejectedReversions:
+          type: integer
+          description: Total QA→Dev transitions across all issues
+        totalIssuesRejected:
+          type: integer
+          description: Unique issues with at least one QA rejection
+        totalIssuesThatEnteredQa:
+          type: integer
+          description: Unique issues that ever entered a QA status
+        overallRejectionRate:
+          type: number
+          description: Percentage of issues rejected by QA out of those that entered QA
+        totalLinkedBugs:
+          type: integer
+          description: Bugs linked to stories via issuelinks
+        totalStandaloneBugs:
+          type: integer
+          description: Bug issues not linked to any story
+        overallBugRate:
+          type: number
+          description: Bugs per issue that entered QA
+        overallQaImpactRate:
+          type: number
+          description: Combined rejection + bug impact rate
+        bySprint:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectedBySprint"
+        rejectedIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectedIssue"
+        linkedBugs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkedBug"
+
+    RejectedBySprint:
+      type: object
+      required: [sprintName, rejectedCount, totalEnteredQa, rate, bugsCount, bugRate, qaImpactRate]
+      properties:
+        sprintName:
+          type: string
+        rejectedCount:
+          type: integer
+          description: QA→Dev reversions in this sprint
+        totalEnteredQa:
+          type: integer
+          description: Times issues entered QA in this sprint
+        rate:
+          type: number
+          description: Rejection rate percentage
+        bugsCount:
+          type: integer
+          description: Linked bugs created during this sprint
+        bugRate:
+          type: number
+          description: Bugs per issue that entered QA
+        qaImpactRate:
+          type: number
+          description: Combined rejection + bug impact rate
+
+    RejectedIssue:
+      type: object
+      required: [key, summary, issueType, fromStatus, toStatus, transitionedAt]
+      properties:
+        key:
+          type: string
+        summary:
+          type: string
+        issueType:
+          type: string
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        transitionedAt:
+          type: string
+          format: date-time
+        sprintName:
+          type: ["string", "null"]
+
+    LinkedBug:
+      type: object
+      required: [bugKey, bugSummary, bugStatus, bugCreated, parentStoryKey, parentStorySummary, parentStoryRejected]
+      properties:
+        bugKey:
+          type: string
+        bugSummary:
+          type: string
+        bugStatus:
+          type: string
+        bugCreated:
+          type: string
+          format: date-time
+        parentStoryKey:
+          type: string
+        parentStorySummary:
+          type: string
+        parentStoryRejected:
+          type: boolean
+          description: Whether the parent story was rejected by QA
+
+    SprintMetricsResponse:
+      type: object
+      required: [sprints, summary]
+      properties:
+        sprints:
+          type: array
+          items:
+            $ref: "#/components/schemas/SprintMetric"
+        summary:
+          $ref: "#/components/schemas/SprintMetricsSummary"
+
+    SprintMetric:
+      type: object
+      required:
+        [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
+         completedIssues, completedStoryPoints, completionRate, velocity, reopenedCount,
+         avgCycleTimeDays, breakdown]
+      properties:
+        sprintId:
+          type: integer
+        sprintName:
+          type: string
+        state:
+          type: string
+        startDate:
+          type: ["string", "null"]
+        endDate:
+          type: ["string", "null"]
+        totalIssues:
+          type: integer
+        totalStoryPoints:
+          type: number
+        completedIssues:
+          type: integer
+        completedStoryPoints:
+          type: number
+        completionRate:
+          type: number
+          description: Percentage of issues completed (0-100)
+        velocity:
+          type: number
+          description: Story points completed in this sprint
+        reopenedCount:
+          type: integer
+          description: Number of issues reopened after being marked done
+        avgCycleTimeDays:
+          type: ["number", "null"]
+        breakdown:
+          $ref: "#/components/schemas/IssueTypeBreakdown"
+
+    IssueTypeBreakdown:
+      type: object
+      required: [Story, Bug, Task, Epic, Other]
+      properties:
+        Story:
+          type: integer
+        Bug:
+          type: integer
+        Task:
+          type: integer
+        Epic:
+          type: integer
+        Other:
+          type: integer
+
+    SprintMetricsSummary:
+      type: object
+      required: [totalSprints, avgVelocity, avgCompletionRate, avgCycleTimeDays, totalCompletedStoryPoints]
+      properties:
+        totalSprints:
+          type: integer
+        avgVelocity:
+          type: number
+        avgCompletionRate:
+          type: number
+        avgCycleTimeDays:
+          type: ["number", "null"]
+        totalCompletedStoryPoints:
+          type: number
+
+    KanbanMetricsResponse:
+      type: object
+      required: [weeks, summary]
+      properties:
+        weeks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeekMetric"
+        summary:
+          $ref: "#/components/schemas/KanbanMetricsSummary"
+
+    WeekMetric:
+      type: object
+      required:
+        [weekStart, weekLabel, totalIssues, totalStoryPoints, avgCycleTimeDays,
+         reopenedCount, breakdown]
+      properties:
+        weekStart:
+          type: string
+          format: date
+          description: ISO date of the Monday of this week
+        weekLabel:
+          type: string
+          description: Human-readable label like "Mar 2 - Mar 8"
+        totalIssues:
+          type: integer
+          description: Issues completed this week (throughput)
+        totalStoryPoints:
+          type: number
+        avgCycleTimeDays:
+          type: ["number", "null"]
+        reopenedCount:
+          type: integer
+        breakdown:
+          $ref: "#/components/schemas/IssueTypeBreakdown"
+
+    KanbanMetricsSummary:
+      type: object
+      required:
+        [totalWeeks, avgThroughput, avgCycleTimeDays, totalCompletedIssues, totalCompletedStoryPoints]
+      properties:
+        totalWeeks:
+          type: integer
+        avgThroughput:
+          type: number
+        avgCycleTimeDays:
+          type: ["number", "null"]
+        totalCompletedIssues:
+          type: integer
+        totalCompletedStoryPoints:
+          type: number
+
+
