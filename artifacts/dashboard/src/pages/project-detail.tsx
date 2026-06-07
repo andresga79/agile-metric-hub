@@ -9,6 +9,9 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MetricTooltip } from "@/components/metric-tooltip";
+import { DetailSkeleton } from "@/components/page-skeleton";
+import { describeTrend, isImproving } from "@/lib/trend-analysis";
 import { ArrowUpRight, ArrowDownRight, Users, HeartPulse, Activity, BarChart3, GitPullRequest, FileText, Target, ShieldAlert } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
@@ -90,17 +93,28 @@ export default function ProjectDetail() {
 
   const getTarget = (metric: string) => targets.find((t) => t.metric === metric && t.period === period);
 
-  if (loadingProject || loadingMetrics || loadingIssues) return <div>{t('page.detail.loading')}</div>;
+  if (loadingProject || loadingMetrics || loadingIssues) return <DetailSkeleton />;
   if (!project) return <div>{t('page.detail.notFound')}</div>;
 
-  const renderTrend = (value: number | undefined) => {
+  const renderTrend = (value: number | undefined, metricKey?: string, currentValue?: number | null, lowerBetter?: boolean) => {
     if (value === undefined) return null;
     const isPositive = value >= 0;
+    const improving = metricKey && currentValue != null ? isImproving(metricKey, value, lowerBetter ?? false) : null;
     return (
-      <span className={`flex items-center text-xs mt-1 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-        {isPositive ? <ArrowUpRight size={14} className="mr-1" /> : <ArrowDownRight size={14} className="mr-1" />}
-        {Math.abs(value).toFixed(1)}% {t('page.detail.vsPrev')}
-      </span>
+      <div className="flex flex-col gap-0.5">
+        <span className={`flex items-center text-xs ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+          {isPositive ? <ArrowUpRight size={14} className="mr-1" /> : <ArrowDownRight size={14} className="mr-1" />}
+          {Math.abs(value).toFixed(1)}% {t('page.detail.vsPrev')}
+        </span>
+        {metricKey && currentValue != null && (
+          <span className={`text-[11px] ${improving === null ? 'text-muted-foreground' : improving ? 'text-green-500/70' : 'text-red-500/70'}`}>
+            {describeTrend(metricKey, value, currentValue, t)}
+            {improving != null && (
+              <span className="ml-1">{improving ? t('trend.good') : t('trend.bad')}</span>
+            )}
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -167,18 +181,18 @@ export default function ProjectDetail() {
         {metrics?.isScrum && (
           <Card className="bg-card/40">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.velocity')}</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.velocity')}<MetricTooltip description={t('tooltip.velocity')} /></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{(metrics?.velocity ?? 0).toFixed(1)}</div>
-              {renderTrend(metrics?.velocityTrend)}
+              {renderTrend(metrics?.velocityTrend, 'metric.velocity', metrics?.velocity, false)}
             </CardContent>
           </Card>
         )}
 
         <Card className="bg-card/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.leadTime')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.leadTime')}<MetricTooltip description={t('tooltip.leadTime')} /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{(metrics?.leadTime ?? 0).toFixed(1)}d</div>
@@ -196,7 +210,7 @@ export default function ProjectDetail() {
 
         <Card className="bg-card/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.cycleTime')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.cycleTime')}<MetricTooltip description={t('tooltip.cycleTime')} /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{(metrics?.cycleTime ?? 0).toFixed(1)}d</div>
@@ -214,11 +228,11 @@ export default function ProjectDetail() {
 
         <Card className="bg-card/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.throughput')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.detail.throughput')}<MetricTooltip description={t('tooltip.throughput')} /></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{(metrics?.throughput ?? 0).toFixed(1)}</div>
-            {renderTrend(metrics?.throughputTrend)}
+            {renderTrend(metrics?.throughputTrend, 'metric.throughput', metrics?.throughput, false)}
           </CardContent>
         </Card>
       </div>
@@ -394,7 +408,7 @@ export default function ProjectDetail() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-border p-4">
-              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.deploymentFreq')}</div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.deploymentFreq')}<MetricTooltip description={t('tooltip.deploymentFreq')} /></div>
               <div className="text-2xl font-bold">{metrics?.dora.deploymentFrequency.toFixed(1)}<span className="text-sm font-normal text-muted-foreground"> /week</span></div>
               <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded ${
                 metrics?.dora.classification.deploymentFrequency === 'elite' ? 'bg-green-500/20 text-green-400' :
@@ -407,7 +421,7 @@ export default function ProjectDetail() {
               <p className="text-xs text-muted-foreground mt-1">{t('page.detail.deploymentFreqDesc')}</p>
             </div>
             <div className="rounded-lg border border-border p-4">
-              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.leadTimeChanges')}</div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.leadTimeChanges')}<MetricTooltip description={t('tooltip.leadTimeChanges')} /></div>
               <div className="text-2xl font-bold">{(metrics?.dora.leadTimeForChanges ?? 0).toFixed(1)}<span className="text-sm font-normal text-muted-foreground">d</span></div>
               <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded ${
                 metrics?.dora.classification.leadTimeForChanges === 'elite' ? 'bg-green-500/20 text-green-400' :
@@ -420,7 +434,7 @@ export default function ProjectDetail() {
               <p className="text-xs text-muted-foreground mt-1">{t('page.detail.leadTimeChangesDesc')}</p>
             </div>
             <div className="rounded-lg border border-border p-4">
-              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.changeFailureRate')}</div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.changeFailureRate')}<MetricTooltip description={t('tooltip.changeFailureRate')} /></div>
               <div className="text-2xl font-bold">{(metrics?.dora.changeFailureRate ?? 0).toFixed(1)}<span className="text-sm font-normal text-muted-foreground">%</span></div>
               <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded ${
                 metrics?.dora.classification.changeFailureRate === 'elite' ? 'bg-green-500/20 text-green-400' :
@@ -433,7 +447,7 @@ export default function ProjectDetail() {
               <p className="text-xs text-muted-foreground mt-1">{t('page.detail.changeFailureRateDesc')}</p>
             </div>
             <div className="rounded-lg border border-border p-4">
-              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.mttr')}</div>
+              <div className="text-sm font-medium text-muted-foreground mb-1">{t('page.detail.mttr')}<MetricTooltip description={t('tooltip.mttr')} /></div>
               <div className="text-2xl font-bold">{(metrics?.dora.mttr ?? 0).toFixed(1)}<span className="text-sm font-normal text-muted-foreground">d</span></div>
               <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded ${
                 metrics?.dora.classification.mttr === 'elite' ? 'bg-green-500/20 text-green-400' :

@@ -6,6 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MetricTooltip } from "@/components/metric-tooltip";
 import { Activity, Target, Clock, CheckCircle2, AlertTriangle, LayoutDashboard, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,7 +105,7 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.activeProjects')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.activeProjects')}<MetricTooltip description={t('tooltip.activeProjects')} /></CardTitle>
             <Target className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -119,7 +120,7 @@ export default function Dashboard() {
 
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.avgVelocity')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.avgVelocity')}<MetricTooltip description={t('tooltip.avgVelocity')} /></CardTitle>
             <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -134,7 +135,7 @@ export default function Dashboard() {
 
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.avgCycleTime')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.avgCycleTime')}<MetricTooltip description={t('tooltip.avgCycleTime')} /></CardTitle>
             <Clock className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -149,7 +150,7 @@ export default function Dashboard() {
 
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.issuesResolved')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.issuesResolved')}<MetricTooltip description={t('tooltip.issuesResolved')} /></CardTitle>
             <CheckCircle2 className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -164,7 +165,7 @@ export default function Dashboard() {
 
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.throughput90')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.throughput90')}<MetricTooltip description={t('tooltip.throughput90d')} /></CardTitle>
             <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -179,7 +180,7 @@ export default function Dashboard() {
 
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.totalWip')}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.totalWip')}<MetricTooltip description={t('tooltip.totalWip')} /></CardTitle>
             <Clock className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -16,6 +17,7 @@ interface CycleTimeChartsProps {
 }
 
 export function CycleTimeScatter({ issues }: { issues: Issue[] }) {
+  const { t } = useTranslation();
   const points = issues
     .filter((i) => i.cycleTimeDays !== null && i.resolvedAt)
     .map((i) => ({
@@ -27,7 +29,7 @@ export function CycleTimeScatter({ issues }: { issues: Issue[] }) {
   if (points.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        No data available
+        {t('common.noData')}
       </div>
     );
   }
@@ -55,7 +57,7 @@ export function CycleTimeScatter({ issues }: { issues: Issue[] }) {
           tickLine={false}
           axisLine={false}
           label={{
-            value: "Days",
+            value: t('common.days'),
             angle: -90,
             position: "insideLeft",
             style: { fill: "hsl(var(--muted-foreground))", fontSize: 11 },
@@ -69,8 +71,8 @@ export function CycleTimeScatter({ issues }: { issues: Issue[] }) {
           }}
           itemStyle={{ color: "hsl(var(--foreground))" }}
           formatter={(value: number, name: string) => {
-            if (name === "y") return [`${value.toFixed(1)}d`, "Cycle Time"];
-            return [new Date(value).toLocaleDateString(), "Resolved"];
+            if (name === "y") return [`${value.toFixed(1)}d`, t('terms.cycleTime')];
+            return [new Date(value).toLocaleDateString(), t('common.resolved')];
           }}
           labelFormatter={() => ""}
         />
@@ -96,10 +98,11 @@ const DIST_COLORS = [
 ];
 
 export function CycleTimeHistogram({ distribution }: { distribution: CycleTimeDist[] }) {
+  const { t } = useTranslation();
   if (distribution.every((d) => d.count === 0)) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        No data available
+        {t('common.noData')}
       </div>
     );
   }
@@ -130,7 +133,7 @@ export function CycleTimeHistogram({ distribution }: { distribution: CycleTimeDi
           }}
           itemStyle={{ color: "hsl(var(--foreground))" }}
         />
-        <Bar dataKey="count" name="Issues" radius={[3, 3, 0, 0]}>
+        <Bar dataKey="count" name={t('common.issues')} radius={[3, 3, 0, 0]}>
           {distribution.map((_, index) => (
             <Cell key={index} fill={DIST_COLORS[index % DIST_COLORS.length]} fillOpacity={0.7} />
           ))}

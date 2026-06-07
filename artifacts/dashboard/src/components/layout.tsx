@@ -3,12 +3,24 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetCurrentUser, getGetCurrentUserQueryKey, ApiError } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/auth";
-import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert } from "lucide-react";
+import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw, Zap } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return;
+    fetch("/api/sync/status", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then(setSyncStatus)
+      .catch(() => {});
+  }, []);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: user, isLoading, isError, error } = useGetCurrentUser({
@@ -62,6 +74,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </Link>
 
       <Link
+        href="/executive-summary"
+        onClick={() => setSidebarOpen(false)}
+        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm font-medium"
+      >
+        <Zap size={18} />
+        {t('nav.executive')}
+      </Link>
+
+      <Link
         href="/settings"
         onClick={() => setSidebarOpen(false)}
         className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm font-medium"
@@ -83,8 +104,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </nav>
   );
 
+  const formatLastSynced = (iso: string | null) => {
+    if (!iso) return t('page.dashboard.never');
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return t('page.dashboard.now');
+    if (diffMin < 60) return t('page.dashboard.minAgo', { count: diffMin });
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return t('page.dashboard.hAgo', { count: diffH });
+    return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+
   const userFooter = (
     <div className="p-4 border-t border-border">
+      {syncStatus && (
+        <div className="flex items-center gap-2 mb-3 px-2 text-xs text-muted-foreground">
+          <RefreshCw size={12} className={syncStatus?.isSyncing ? "animate-spin" : ""} />
+          <span className="truncate">{t('page.dashboard.synced')} {formatLastSynced(syncStatus.lastSyncedAt)}</span>
+        </div>
+      )}
       <div className="flex items-center gap-3 mb-3">
         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
           {user?.username?.[0]?.toUpperCase()}

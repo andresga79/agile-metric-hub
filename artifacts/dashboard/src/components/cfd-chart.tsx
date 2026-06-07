@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -14,6 +15,7 @@ interface CfdChartProps {
 }
 
 export default function CfdChart({ data }: CfdChartProps) {
+  const { t } = useTranslation();
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data}>
@@ -49,7 +51,7 @@ export default function CfdChart({ data }: CfdChartProps) {
           stroke="hsl(142, 76%, 36%)"
           fill="hsl(142, 76%, 36%)"
           fillOpacity={0.6}
-          name="Done"
+          name={t('page.detail.done')}
         />
         <Area
           type="monotone"
@@ -58,7 +60,7 @@ export default function CfdChart({ data }: CfdChartProps) {
           stroke="hsl(199, 89%, 48%)"
           fill="hsl(199, 89%, 48%)"
           fillOpacity={0.5}
-          name="In Progress"
+          name={t('common.inProgress')}
         />
         <Area
           type="monotone"
@@ -67,7 +69,7 @@ export default function CfdChart({ data }: CfdChartProps) {
           stroke="hsl(220, 10%, 60%)"
           fill="hsl(220, 10%, 60%)"
           fillOpacity={0.4}
-          name="To Do"
+          name={t('common.toDo')}
         />
       </AreaChart>
     </ResponsiveContainer>
