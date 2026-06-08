@@ -19,7 +19,6 @@ import ProjectSprints from "@/pages/project-sprints";
 import ProjectKanban from "@/pages/project-kanban";
 import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
-import ExecutiveSummary from "@/pages/executive-summary";
 
 import "@/lib/auth"; // init auth token getter
 import { getAuthToken, setAuthToken } from "@/lib/auth";
@@ -146,9 +145,6 @@ function Router() {
       </Route>
       <Route path="/admin">
         {() => <AdminRoute component={Admin} />}
-      </Route>
-      <Route path="/executive-summary">
-        {() => <ProtectedRoute component={ExecutiveSummary} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

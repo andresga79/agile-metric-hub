@@ -10,7 +10,7 @@ import { MetricTooltip } from "@/components/metric-tooltip";
 import { Activity, Target, Clock, CheckCircle2, AlertTriangle, LayoutDashboard, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -18,7 +18,6 @@ export default function Dashboard() {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
-
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() }
   });
@@ -27,7 +26,11 @@ export default function Dashboard() {
     query: { queryKey: getListUserProjectsQueryKey() }
   });
   const visibleProjects = userProjects?.filter((p) => p.visible) ?? [];
-  const visibleIds = new Set(visibleProjects.map((p) => p.id));
+  const visibleIds = useMemo(() => new Set(visibleProjects.map((p) => p.id)), [visibleProjects]);
+  const visiblePortfolio = useMemo(
+    () => portfolioData.filter((p) => visibleIds.has(p.id)),
+    [portfolioData, visibleIds]
+  );
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -49,8 +52,6 @@ export default function Dashboard() {
   const isLoading = loadingSummary || loadingProjects;
 
   const isMockData = (summary as any)?.usingMockData ?? (userProjects as any)?.[0]?.usingMockData;
-
-  const visiblePortfolio = portfolioData.filter((p) => visibleIds.has(p.id));
 
   const formatLastSynced = (iso: string | null) => {
     if (!iso) return t('page.dashboard.never');
@@ -253,6 +254,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
     </div>
   );
 }

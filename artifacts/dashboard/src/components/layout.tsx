@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetCurrentUser, getGetCurrentUserQueryKey, ApiError } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/auth";
-import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw, Zap } from "lucide-react";
+import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -71,15 +71,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       >
         <LayoutDashboard size={18} />
         {t('nav.dashboard')}
-      </Link>
-
-      <Link
-        href="/executive-summary"
-        onClick={() => setSidebarOpen(false)}
-        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm font-medium"
-      >
-        <Zap size={18} />
-        {t('nav.executive')}
       </Link>
 
       <Link

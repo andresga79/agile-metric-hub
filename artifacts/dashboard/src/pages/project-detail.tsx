@@ -15,6 +15,7 @@ import { describeTrend, isImproving } from "@/lib/trend-analysis";
 import { ArrowUpRight, ArrowDownRight, Users, HeartPulse, Activity, BarChart3, GitPullRequest, FileText, Target, ShieldAlert } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
+import FlowHealthCard from "@/components/flow-health-card";
 
 type Period = "1m" | "3m" | "6m";
 type SignalLevel = "green" | "yellow" | "red";
@@ -397,6 +398,19 @@ export default function ProjectDetail() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <GitPullRequest size={20} />
+            {t('page.detail.flowHealth')}
+          </CardTitle>
+          <CardDescription>{t('page.detail.flowHealthDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FlowHealthCard projectId={projectId!} period={period} />
         </CardContent>
       </Card>
 
