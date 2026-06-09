@@ -6,6 +6,7 @@
   "nav.loading": "Cargando...",
   "nav.connectionError": "Error de conexión. Intente nuevamente más tarde.",
   "nav.openMenu": "Abrir menú",
+  "nav.toggleTheme": "Cambiar tema",
 
   "page.login.subtitle": "Plataforma de inteligencia de entrega",
   "page.login.signIn": "Iniciar Sesión",

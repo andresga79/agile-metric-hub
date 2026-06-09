@@ -6,6 +6,7 @@
   "nav.loading": "Loading...",
   "nav.connectionError": "Connection error. Please try again later.",
   "nav.openMenu": "Open menu",
+  "nav.toggleTheme": "Toggle theme",
 
   "page.login.subtitle": "Delivery intelligence platform",
   "page.login.signIn": "Sign In",

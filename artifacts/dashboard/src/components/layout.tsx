@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetCurrentUser, getGetCurrentUserQueryKey, ApiError } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/auth";
-import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw } from "lucide-react";
+import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw, Sun, Moon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -108,14 +109,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const userFooter = (
     <div className="p-4 border-t border-border">
-      {syncStatus && (
-        <div className="flex items-center gap-2 mb-3 px-2 text-xs text-muted-foreground">
-          <RefreshCw size={12} className={syncStatus?.isSyncing ? "animate-spin" : ""} />
-          <span className="truncate">{t('page.dashboard.synced')} {formatLastSynced(syncStatus.lastSyncedAt)}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between mb-3 px-2">
+        {syncStatus && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw size={12} className={syncStatus?.isSyncing ? "animate-spin" : ""} />
+            <span className="truncate">{t('page.dashboard.synced')} {formatLastSynced(syncStatus.lastSyncedAt)}</span>
+          </div>
+        )}
+        {mounted && (
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors shrink-0"
+            aria-label={t('nav.toggleTheme')}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        )}
+      </div>
       <div className="flex items-center gap-3 mb-3">
         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
           {user?.username?.[0]?.toUpperCase()}
