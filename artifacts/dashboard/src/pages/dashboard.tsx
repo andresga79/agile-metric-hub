@@ -37,14 +37,14 @@ export default function Dashboard() {
     fetch("/api/portfolio", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : [])
       .then(setPortfolioData)
-      .catch(console.error)
+      .catch(() => setPortfolioData([]))
       .finally(() => setPortfolioLoading(false));
     fetch("/api/sync/status", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : null)
       .then(setSyncStatus)
       .catch(() => {});
   }, []);

@@ -11,6 +11,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -22,6 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       .then(setSyncStatus)
       .catch(() => {});
   }, []);
+  useEffect(() => setMounted(true), []);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: user, isLoading, isError, error } = useGetCurrentUser({
@@ -108,10 +111,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (diffH < 24) return t('page.dashboard.hAgo', { count: diffH });
     return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
-
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   const userFooter = (
     <div className="p-4 border-t border-border">
