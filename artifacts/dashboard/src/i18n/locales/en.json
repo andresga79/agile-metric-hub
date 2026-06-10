@@ -283,11 +283,6 @@
   "page.report.cycleTime": "Cycle Time",
   "page.report.leadTime": "Lead Time",
   "page.report.resolved": "Resolved",
-  "page.report.doraTitle": "DORA Metrics",
-  "page.report.deploymentFreq": "Deployment Frequency",
-  "page.report.leadTimeChanges": "Lead Time for Changes",
-  "page.report.changeFailureRate": "Change Failure Rate",
-  "page.report.mttr": "MTTR",
   "page.report.percentiles": "Percentiles",
 
   "page.qa.loading": "Loading QA Quality data...",

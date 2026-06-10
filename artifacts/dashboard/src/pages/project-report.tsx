@@ -139,15 +139,6 @@ export default function ProjectReport() {
           </div>
         </div>
 
-        <div className="border border-gray-200 rounded p-3">
-          <h3 className="text-sm font-semibold mb-2">{t('page.report.doraTitle')}</h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>{t('page.report.deploymentFreq')}: <strong>{metrics?.dora?.deploymentFrequency?.toFixed(1) ?? "—"}/wk</strong></div>
-            <div>{t('page.report.leadTimeChanges')}: <strong>{metrics?.dora?.leadTimeForChanges?.toFixed(1) ?? "—"}d</strong></div>
-            <div>{t('page.report.changeFailureRate')}: <strong>{metrics?.dora?.changeFailureRate?.toFixed(1) ?? "—"}%</strong></div>
-            <div>{t('page.report.mttr')}: <strong>{metrics?.dora?.mttr?.toFixed(1) ?? "—"}d</strong></div>
-          </div>
-        </div>
 
         <div className="border border-gray-200 rounded p-3">
           <h3 className="text-sm font-semibold mb-2">{t('page.report.percentiles')}</h3>
