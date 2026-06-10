@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-suggestions";
 
@@ -48,9 +49,9 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
                 <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${config.badge}`}>
                   {t(config.label)}
                 </span>
-                <CardTitle className="text-base">{suggestion.label}</CardTitle>
+                <CardTitle>{suggestion.label}</CardTitle>
               </div>
-              <CardDescription className="mt-1 text-sm">{suggestion.diagnosis}</CardDescription>
+              <CardDescription className="mt-1">{suggestion.diagnosis}</CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -66,7 +67,7 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
       {expanded && suggestion.actions.length > 0 && (
         <CardContent className="pt-0 pb-4">
           <div className="flex items-start gap-2 text-sm text-muted-foreground mb-2">
-            <Lightbulb size={14} className="shrink-0 mt-0.5 text-primary" />
+            <Lightbulb size={16} className="shrink-0 mt-0.5 text-primary" />
             <span className="font-medium text-foreground">{t('page.health.suggestedActions')}</span>
           </div>
           <ul className="space-y-1.5 ml-5">
@@ -85,13 +86,51 @@ export default function ProjectHealth() {
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
 
-  const { data: project } = useGetProject(projectId!, {
+  const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
-  const { suggestions, loading } = useHealthSuggestions(projectId, period);
+  const { suggestions, loading: loadingHealth } = useHealthSuggestions(projectId, period);
 
-  if (loading) return <div className="p-6 text-muted-foreground">{t('page.health.loading')}</div>;
+  if (loadingProject) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-8 w-28 rounded-md" />
+        </div>
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-36" />
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="bg-card/40">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <Skeleton className="h-5 w-5 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-16 rounded" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-4 w-full max-w-md" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-7 w-16" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!project) return <div className="p-6">{t('page.health.notFound')}</div>;
 
   const critical = suggestions.filter((s) => s.status === "critical");
@@ -134,8 +173,8 @@ export default function ProjectHealth() {
         <>
           {critical.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-red-400 flex items-center gap-2">
-                <AlertCircle size={16} />
+              <h2 className="text-base font-semibold text-red-400 flex items-center gap-2">
+                <AlertCircle size={18} />
                 {t('page.health.needsAttention')}
               </h2>
               {critical.map((s, i) => (
@@ -146,8 +185,8 @@ export default function ProjectHealth() {
 
           {warning.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
-                <AlertTriangle size={16} />
+              <h2 className="text-base font-semibold text-amber-400 flex items-center gap-2">
+                <AlertTriangle size={18} />
                 {t('page.health.monitor')}
               </h2>
               {warning.map((s, i) => (
@@ -158,8 +197,8 @@ export default function ProjectHealth() {
 
           {good.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
-                <CheckCircle size={16} />
+              <h2 className="text-base font-semibold text-green-400 flex items-center gap-2">
+                <CheckCircle size={18} />
                 {t('page.health.onTrack')}
               </h2>
               {good.map((s, i) => (
