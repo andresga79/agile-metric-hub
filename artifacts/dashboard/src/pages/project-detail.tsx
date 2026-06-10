@@ -215,21 +215,7 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className={`grid gap-4 md:grid-cols-2 ${metrics?.isScrum ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        {metrics?.isScrum && (
-          <MetricCard
-            metricKey="velocity"
-            info={metricInfo("velocity")}
-            trend={renderTrend(metrics?.velocityTrend, 'metric.velocity', metrics?.velocity, false)}
-            editingValue={editingTarget?.metric === "velocity" ? editingTarget.value : ""}
-            onEdit={() => setEditingTarget({ metric: "velocity", value: String(getTarget("velocity")?.targetValue ?? "") })}
-            onSave={() => saveTarget("velocity")}
-            onCancel={() => setEditingTarget(null)}
-            onValueChange={(v) => setEditingTarget({ metric: "velocity", value: v })}
-            percentiles={null}
-          />
-        )}
-
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           metricKey="leadTime"
           info={metricInfo("leadTime")}
@@ -269,8 +255,8 @@ export default function ProjectDetail() {
 
       <Card className="bg-card/40">
         <CardHeader>
-          <CardTitle className="text-lg">{metrics?.isScrum ? t('page.detail.velocityTrend') : t('page.detail.throughputTrend')}</CardTitle>
-          <CardDescription>{metrics?.isScrum ? t('page.detail.velocityTrendDesc') : t('page.detail.throughputTrendDesc')}</CardDescription>
+          <CardTitle className="text-lg">{t('page.detail.throughputTrend')}</CardTitle>
+          <CardDescription>{t('page.detail.throughputTrendDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
