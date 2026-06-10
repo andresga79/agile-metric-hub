@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, rolePermissionsTable } from "@workspace/db";
+import { db, usersTable, rolePermissionsTable, defaultMetricThresholdsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireAdmin, type AuthRequest } from "../middleware/auth";
 
@@ -226,6 +226,73 @@ router.put("/admin/role-permissions", async (req, res): Promise<void> => {
   }
 
   res.json(updated);
+});
+
+const DEFAULT_HEALTH_THRESHOLDS: { metric: string; goodValue: number; warningValue: number }[] = [
+  { metric: "cycleTime", goodValue: 15, warningValue: 25 },
+  { metric: "leadTime", goodValue: 20, warningValue: 35 },
+  { metric: "throughput", goodValue: 10, warningValue: 5 },
+  { metric: "wipRatio", goodValue: 30, warningValue: 50 },
+  { metric: "cfr", goodValue: 10, warningValue: 25 },
+  { metric: "predictability", goodValue: 70, warningValue: 40 },
+  { metric: "flowEfficiency", goodValue: 40, warningValue: 20 },
+  { metric: "blocked", goodValue: 0, warningValue: 3 },
+];
+
+// GET /admin/metric-thresholds — list all default health thresholds
+router.get("/admin/metric-thresholds", async (_req, res): Promise<void> => {
+  let rows = await db.select().from(defaultMetricThresholdsTable).orderBy(defaultMetricThresholdsTable.metric);
+
+  if (rows.length === 0) {
+    const inserted = await db
+      .insert(defaultMetricThresholdsTable)
+      .values(DEFAULT_HEALTH_THRESHOLDS)
+      .returning();
+    res.json(inserted);
+    return;
+  }
+
+  res.json(rows);
+});
+
+// PUT /admin/metric-thresholds/:metric — upsert a threshold
+router.put("/admin/metric-thresholds/:metric", async (req, res): Promise<void> => {
+  const metric = req.params.metric;
+  const { goodValue, warningValue } = req.body;
+
+  if (goodValue === undefined || warningValue === undefined) {
+    res.status(400).json({ error: "goodValue and warningValue are required" });
+    return;
+  }
+
+  const gv = Number(goodValue);
+  const wv = Number(warningValue);
+  if (isNaN(gv) || isNaN(wv)) {
+    res.status(400).json({ error: "goodValue and warningValue must be valid numbers" });
+    return;
+  }
+
+  const existing = await db
+    .select()
+    .from(defaultMetricThresholdsTable)
+    .where(eq(defaultMetricThresholdsTable.metric, metric))
+    .limit(1);
+
+  let result;
+  if (existing.length > 0) {
+    [result] = await db
+      .update(defaultMetricThresholdsTable)
+      .set({ goodValue: String(gv), warningValue: String(wv) })
+      .where(eq(defaultMetricThresholdsTable.id, existing[0].id))
+      .returning();
+  } else {
+    [result] = await db
+      .insert(defaultMetricThresholdsTable)
+      .values({ metric, goodValue: String(gv), warningValue: String(wv) })
+      .returning();
+  }
+
+  res.json(result);
 });
 
 export default router;

@@ -10,8 +10,28 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, Trash2, Shield, ShieldAlert, Save } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Shield, ShieldAlert, Save, Activity } from "lucide-react";
 import { useRolePermissions, type PermissionEntry } from "@/lib/project-section-permissions";
+
+interface ThresholdRow {
+  metric: string;
+  goodValue: number;
+  warningValue: number;
+}
+
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"];
+const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency"];
+
+const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
+  cycleTime: { label: "Cycle Time", unit: "d" },
+  leadTime: { label: "Lead Time", unit: "d" },
+  throughput: { label: "Throughput", unit: "/sem" },
+  wipRatio: { label: "WIP Balance", unit: "%" },
+  cfr: { label: "Calidad (CFR)", unit: "%" },
+  predictability: { label: "Predictabilidad", unit: "" },
+  flowEfficiency: { label: "Flow Efficiency", unit: "%" },
+  blocked: { label: "Issues Bloqueados", unit: "" },
+};
 
 export default function Admin() {
   const { t } = useTranslation();
@@ -27,6 +47,49 @@ export default function Admin() {
 
   const { data: permissions, refetch: refetchPermissions } = useRolePermissions();
   const [localPerms, setLocalPerms] = useState<PermissionEntry[]>([]);
+
+  const [thresholds, setThresholds] = useState<ThresholdRow[]>([]);
+  const [thresholdsDirty, setThresholdsDirty] = useState(false);
+  const [savingThresholds, setSavingThresholds] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    fetch("/api/admin/metric-thresholds", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setThresholds(data.map((t: any) => ({
+            metric: t.metric,
+            goodValue: Number(t.goodValue),
+            warningValue: Number(t.warningValue),
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const updateThreshold = (metric: string, field: "goodValue" | "warningValue", value: number) => {
+    setThresholds((prev) => prev.map((t) => t.metric === metric ? { ...t, [field]: value } : t));
+    setThresholdsDirty(true);
+  };
+
+  const saveAllThresholds = async () => {
+    const token = localStorage.getItem("auth_token");
+    setSavingThresholds(true);
+    for (const t of thresholds) {
+      try {
+        await fetch(`/api/admin/metric-thresholds/${t.metric}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ goodValue: t.goodValue, warningValue: t.warningValue }),
+        });
+      } catch {}
+    }
+    setSavingThresholds(false);
+    setThresholdsDirty(false);
+  };
 
   useEffect(() => {
     if (permissions) setLocalPerms(permissions);
@@ -322,6 +385,90 @@ export default function Admin() {
             </Table>
           </div>
           <p className="text-xs text-muted-foreground mt-2">{t('page.admin.adminFullAccess')}</p>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/40">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Activity size={18} className="text-primary" />
+                {t('page.admin.healthThresholds')}
+              </CardTitle>
+              <CardDescription>{t('page.admin.thresholdsDesc')}</CardDescription>
+            </div>
+            {thresholdsDirty && (
+              <button
+                onClick={saveAllThresholds}
+                disabled={savingThresholds}
+                className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors disabled:opacity-50"
+              >
+                <Save size={14} />
+                {savingThresholds ? t('common.loading') : t('page.admin.saveThresholds')}
+              </button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead>{t('page.admin.metric')}</TableHead>
+                  <TableHead className="text-center">{t('page.admin.good')}</TableHead>
+                  <TableHead className="text-center">{t('page.admin.warning')}</TableHead>
+                  <TableHead className="text-center text-xs text-muted-foreground">{t('page.admin.direction')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {thresholds.map((row) => {
+                  const meta = METRIC_LABELS[row.metric] ?? { label: row.metric, unit: "" };
+                  const isLower = LOWER_BETTER.includes(row.metric);
+                  return (
+                    <TableRow key={row.metric} className="border-border hover:bg-accent/50">
+                      <TableCell className="font-medium">{meta.label}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <span className={`text-xs ${isLower ? "text-green-400" : "text-green-400"}`}>
+                            {isLower ? "≤" : "≥"}
+                          </span>
+                          <input
+                            type="number"
+                            value={row.goodValue}
+                            onChange={(e) => updateThreshold(row.metric, "goodValue", Number(e.target.value))}
+                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums"
+                          />
+                          <span className="text-xs text-muted-foreground">{meta.unit}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <span className="text-xs text-amber-400">
+                            {isLower ? "≤" : "≥"}
+                          </span>
+                          <input
+                            type="number"
+                            value={row.warningValue}
+                            onChange={(e) => updateThreshold(row.metric, "warningValue", Number(e.target.value))}
+                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums"
+                          />
+                          <span className="text-xs text-muted-foreground">{meta.unit}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          isLower ? "bg-blue-500/15 text-blue-400" : "bg-purple-500/15 text-purple-400"
+                        }`}>
+                          {isLower ? t('page.admin.lowerBetter') : t('page.admin.higherBetter')}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

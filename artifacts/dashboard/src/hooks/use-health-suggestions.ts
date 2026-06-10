@@ -46,11 +46,27 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
     Promise.all([
       fetch(`/api/projects/${projectId}/health/${period}`, { headers }).then((r) => r.json()),
       fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then((r) => r.json()),
+      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
     ])
-      .then(([healthData, analyticsData]) => {
+      .then(([healthData, analyticsData, thresholds]) => {
         const raw: RawHealth = healthData.raw;
         const analytics = analyticsData;
         const result: Suggestion[] = [];
+
+        const mergedThresholds: Record<string, { good: number; warning: number }> = {};
+        for (const key of Object.keys(DEFAULT_THRESHOLDS)) {
+          mergedThresholds[key] = { ...DEFAULT_THRESHOLDS[key as keyof typeof DEFAULT_THRESHOLDS] };
+        }
+        if (Array.isArray(thresholds)) {
+          for (const t of thresholds) {
+            if (t.metric && t.goodValue !== undefined && t.warningValue !== undefined) {
+              mergedThresholds[t.metric] = {
+                good: Number(t.goodValue),
+                warning: Number(t.warningValue),
+              };
+            }
+          }
+        }
 
         const isLowerBetter = (metric: string) =>
           ["cycleTime", "leadTime", "cfr", "wipRatio"].includes(metric);
@@ -85,7 +101,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Cycle Time ---
         evalMetric(
-          "cycleTime", "Cycle Time", raw.avgCycleTime, DEFAULT_THRESHOLDS.cycleTime,
+          "cycleTime", "Cycle Time", raw.avgCycleTime, mergedThresholds.cycleTime,
           (v, t) => v > t
             ? `El cycle time promedio es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Los issues tardan demasiado en completarse una vez iniciados.`
             : `El cycle time promedio de ${v.toFixed(1)}d está dentro del rango saludable (≤${t}d).`,
@@ -99,14 +115,14 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Lead Time ---
         evalMetric(
-          "leadTime", "Lead Time", null, DEFAULT_THRESHOLDS.leadTime,
+          "leadTime", "Lead Time", null, mergedThresholds.leadTime,
           () => "Lead time no disponible para este período.",
           []
         );
 
         // --- Throughput ---
         evalMetric(
-          "throughput", "Throughput", raw.throughput, DEFAULT_THRESHOLDS.throughput,
+          "throughput", "Throughput", raw.throughput, mergedThresholds.throughput,
           (v, t) => v < t
             ? `El throughput es de ${v.toFixed(1)} issues/semana, por debajo del objetivo de ${t}/semana. El equipo está entregando menos de lo esperado.`
             : `El throughput de ${v.toFixed(1)} issues/semana se mantiene en un nivel saludable (≥${t}/semana).`,
@@ -120,7 +136,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- WIP Balance ---
         evalMetric(
-          "wipRatio", "WIP Balance", raw.wipRatio, DEFAULT_THRESHOLDS.wipRatio,
+          "wipRatio", "WIP Balance", raw.wipRatio, mergedThresholds.wipRatio,
           (v, t) => v > t
             ? `El ${v.toFixed(0)}% de los issues están en progreso, superando el límite recomendado de ${t}%. Hay demasiados frentes abiertos simultáneamente.`
             : `Solo el ${v.toFixed(0)}% de los issues están en progreso, el equipo mantiene un WIP controlado (≤${t}%).`,
@@ -133,7 +149,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Quality (CFR) ---
         evalMetric(
-          "cfr", "Calidad (CFR)", raw.cfr, DEFAULT_THRESHOLDS.cfr,
+          "cfr", "Calidad (CFR)", raw.cfr, mergedThresholds.cfr,
           (v, t) => v > t
             ? `La tasa de fallo (CFR) es del ${v.toFixed(1)}%, superando el ${t}% recomendado. El ${raw.bugCount} de ${raw.resolvedCount} issues resueltos fueron bugs.`
             : `La tasa de fallo (CFR) del ${v.toFixed(1)}% está dentro del rango saludable (≤${t}%).`,
@@ -147,7 +163,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Predictability ---
         evalMetric(
-          "predictability", "Predictabilidad", raw.predictability, DEFAULT_THRESHOLDS.predictability,
+          "predictability", "Predictabilidad", raw.predictability, mergedThresholds.predictability,
           (v, t) => v < t
             ? `La predictabilidad es de ${v.toFixed(0)}/100, por debajo del mínimo recomendado de ${t}. La variación semanal del throughput es alta.`
             : `La predictabilidad de ${v.toFixed(0)}/100 es buena (≥${t}). El equipo mantiene un ritmo consistente semana a semana.`,
@@ -162,7 +178,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         const flowEff = analytics?.flowEfficiency;
         if (flowEff !== undefined && flowEff !== null) {
           evalMetric(
-            "flowEfficiency", "Eficiencia de Flujo", flowEff, DEFAULT_THRESHOLDS.flowEfficiency,
+            "flowEfficiency", "Eficiencia de Flujo", flowEff, mergedThresholds.flowEfficiency,
             (v, t) => v < t
               ? `La eficiencia de flujo es del ${v.toFixed(0)}%, por debajo del ${t}% recomendado. Los issues pasan demasiado tiempo en espera.`
               : `La eficiencia de flujo del ${v.toFixed(0)}% es saludable (≥${t}%). El tiempo activo vs espera es adecuado.`,
@@ -179,7 +195,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         const blockedCount = blocked?.length ?? 0;
         if (blockedCount > 0) {
           evalMetric(
-            "blocked", "Issues Bloqueados", blockedCount, DEFAULT_THRESHOLDS.blocked,
+            "blocked", "Issues Bloqueados", blockedCount, mergedThresholds.blocked,
             (v, t) => v > t
               ? `Hay ${v.toFixed(0)} issues bloqueados actualmente. Los bloqueos prolongados detienen el flujo y acumulan deuda.`
               : `Solo ${v.toFixed(0)} issues bloqueados, dentro del rango esperado.`,
