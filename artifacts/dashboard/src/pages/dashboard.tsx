@@ -83,7 +83,10 @@ export default function Dashboard() {
   const boardTypeMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of userProjects ?? []) {
-      if (p.boardType) map.set(p.id, p.boardType);
+      if (p.boardType) {
+        // Jira devuelve "scrum", "kanban" o "simple"; "simple" se trata como Kanban
+        map.set(p.id, p.boardType === "scrum" ? "scrum" : "kanban");
+      }
     }
     return map;
   }, [userProjects]);

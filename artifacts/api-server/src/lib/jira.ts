@@ -475,10 +475,17 @@ const MANUAL_BOARD_OVERRIDES: Record<string, ProjectBoardType> = {
   "OLI": "scrum",
 };
 
+const MOCK_BOARD_TYPES: Record<string, ProjectBoardType> = {
+  "10001": "scrum",
+  "10002": "kanban",
+  "10003": "scrum",
+  "10004": "kanban",
+};
+
 export async function getProjectBoardType(
   projectId: string
 ): Promise<ProjectBoardType> {
-  if (!isJiraConfigured()) return "scrum";
+  if (!isJiraConfigured()) return MOCK_BOARD_TYPES[projectId] ?? "scrum";
 
   const override = MANUAL_BOARD_OVERRIDES[projectId];
   if (override) return override;
