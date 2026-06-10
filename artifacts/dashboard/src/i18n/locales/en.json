@@ -96,6 +96,7 @@
   "page.notFound.title": "404 Page Not Found",
   "page.notFound.message": "Did you forget to add the page to the router?",
 
+  "page.detail.summaryTab": "Summary",
   "page.detail.loading": "Loading project data...",
   "page.detail.notFound": "Project not found",
   "page.detail.velocity": "Velocity",
@@ -367,6 +368,8 @@
   "page.sprints.completion": "Completion",
   "page.sprints.reopened": "Reopened",
   "page.sprints.cycleTime": "Cycle Time",
+  "page.sprints.startDate": "Start",
+  "page.sprints.endDate": "End",
   "page.sprints.breakdownCol": "Breakdown",
 
   "page.kanban.loading": "Loading Kanban metrics...",
@@ -411,6 +414,7 @@
   "common.month1": "1 month",
   "common.month3": "3 months",
   "common.month6": "6 months",
+  "common.more": "More",
   "common.days": "days",
 
   "terms.sprint": "Sprint",

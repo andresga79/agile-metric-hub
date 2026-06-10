@@ -18,6 +18,11 @@ function days(value: number | null): string {
   return `${value.toFixed(1)}d`;
 }
 
+function sprintDate(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function ProjectSprints() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -176,11 +181,12 @@ export default function ProjectSprints() {
                     <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.sprints.sprint')}</TableHead>
                     <TableHead>{t('page.sprints.state')}</TableHead>
+                    <TableHead>{t('page.sprints.startDate')}</TableHead>
+                    <TableHead>{t('page.sprints.endDate')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.spPlanned')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.spDone')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.completion')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.reopened')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.breakdownCol')}</TableHead>
                     </TableRow>
@@ -200,6 +206,8 @@ export default function ProjectSprints() {
                             {s.state}
                           </span>
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{sprintDate(s.startDate)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{sprintDate(s.endDate)}</TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {s.completedIssues}/{s.totalIssues}
                         </TableCell>
@@ -213,11 +221,6 @@ export default function ProjectSprints() {
                           }`}>
                             {pct(s.completionRate)}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {s.reopenedCount > 0 ? (
-                            <span className="text-red-400">{s.reopenedCount}</span>
-                          ) : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{days(s.avgCycleTimeDays)}</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">

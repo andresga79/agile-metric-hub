@@ -8,6 +8,7 @@ import {
   getStoryPoints,
   getCycleTimeDays,
   mapIssueType,
+  periodToDays,
   type JiraSprint,
   type JiraIssue,
   isJiraConfigured,
@@ -127,6 +128,9 @@ router.get(
     const period = req.params.period ?? "3m";
 
     const maxSprints = period === "1m" ? 4 : period === "3m" ? 8 : 16;
+    const periodDays = periodToDays(period as any);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - periodDays);
 
     const jiraProject = await getJiraProject(projectId);
     if (!jiraProject) {
@@ -141,11 +145,15 @@ router.get(
     }
 
     const sprints = await getJiraSprints(projectId, 50);
-    // Sort by endDate descending, take the last N sprints matching the period
+    // Filter by endDate within the period, sort descending, limit to maxSprints
     const filteredSprints = [...sprints]
+      .filter((s) => {
+        const endDate = s.endDate ? new Date(s.endDate).getTime() : s.completeDate ? new Date(s.completeDate).getTime() : 0;
+        return endDate >= startDate.getTime();
+      })
       .sort((a, b) => {
-        const aEnd = a.endDate ? new Date(a.endDate).getTime() : 0;
-        const bEnd = b.endDate ? new Date(b.endDate).getTime() : 0;
+        const aEnd = a.endDate ? new Date(a.endDate).getTime() : a.completeDate ? new Date(a.completeDate).getTime() : 0;
+        const bEnd = b.endDate ? new Date(b.endDate).getTime() : b.completeDate ? new Date(b.completeDate).getTime() : 0;
         return bEnd - aEnd;
       })
       .slice(0, maxSprints)
