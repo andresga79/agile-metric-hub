@@ -92,8 +92,8 @@ export default function Dashboard() {
 
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('page.dashboard.overview')}</h1>
-          <p className="text-muted-foreground mt-1">{t('page.dashboard.subtitle')}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t('page.dashboard.overview')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('page.dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
           <RefreshCw size={14} className={syncStatus?.isSyncing ? "animate-spin" : ""} />

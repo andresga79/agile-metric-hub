@@ -92,11 +92,11 @@ export default function ProjectTeam() {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
             <Users className="text-primary" />
             {t('page.team.title')}
           </h1>
-          <p className="text-muted-foreground mt-1">{t('page.team.subtitle')} {project.name}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('page.team.subtitle')} {project.name}</p>
         </div>
         
         <div className="flex bg-background border border-border rounded-md p-1">
@@ -176,7 +176,7 @@ export default function ProjectTeam() {
                           <div key={item.key} className="text-xs">
                             <span className="font-mono text-primary mr-2">{item.key}</span>
                             <span className="text-muted-foreground">{item.summary}</span>
-                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">
+                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground">
                               {item.status}
                             </span>
                           </div>
@@ -185,7 +185,7 @@ export default function ProjectTeam() {
                           <span className="text-xs text-muted-foreground">{t('page.team.noActive')}</span>
                         )}
                         {!showAllWorkItems && (memberWorkByName.get(member.displayName)?.length ?? 0) > 3 && (
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             +{(memberWorkByName.get(member.displayName)?.length ?? 0) - 3} {t('page.team.more')}
                           </span>
                         )}

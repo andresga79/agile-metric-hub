@@ -54,8 +54,8 @@ export default function ProjectKanban() {
             )}
             <span className="text-xs font-semibold bg-amber-500/20 text-amber-400 px-2 py-1 rounded">{t('page.kanban.kanban')}</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('page.kanban.title')}</h1>
-          <p className="text-muted-foreground mt-1">{t('page.kanban.subtitle')}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t('page.kanban.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('page.kanban.subtitle')}</p>
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
           {(["1m", "3m", "6m"] as Period[]).map((p) => (
