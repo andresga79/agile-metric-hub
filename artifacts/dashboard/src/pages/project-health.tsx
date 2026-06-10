@@ -1,51 +1,102 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
-import { useGetProject, getGetProjectQueryKey, useGetProjectHealth, getGetProjectHealthQueryKey } from "@workspace/api-client-react";
+import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend } from "recharts";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
+import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-suggestions";
 
 type Period = "1m" | "3m" | "6m";
 
-const PERIOD_OPTIONS: Period[] = ["1m", "3m", "6m"];
+const STATUS_CONFIG = {
+  critical: {
+    icon: AlertCircle,
+    bg: "bg-red-500/10 border-red-500/30",
+    badge: "bg-red-500/20 text-red-400",
+    label: "page.health.critical",
+  },
+  warning: {
+    icon: AlertTriangle,
+    bg: "bg-amber-500/10 border-amber-500/30",
+    badge: "bg-amber-500/20 text-amber-400",
+    label: "page.health.warning",
+  },
+  good: {
+    icon: CheckCircle,
+    bg: "bg-green-500/10 border-green-500/30",
+    badge: "bg-green-500/20 text-green-400",
+    label: "page.health.good",
+  },
+};
 
+function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: number }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const config = STATUS_CONFIG[suggestion.status];
+  const Icon = config.icon;
 
+  if (suggestion.actions.length === 0 && suggestion.status === "good") return null;
+
+  return (
+    <Card className={`${config.bg} transition-colors`}>
+      <CardHeader className="pb-3 cursor-pointer" onClick={() => suggestion.actions.length > 0 && setExpanded(!expanded)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <Icon size={20} className="shrink-0 mt-0.5 text-foreground" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${config.badge}`}>
+                  {t(config.label)}
+                </span>
+                <CardTitle className="text-base">{suggestion.label}</CardTitle>
+              </div>
+              <CardDescription className="mt-1 text-sm">{suggestion.diagnosis}</CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-2xl font-bold tabular-nums">{suggestion.value}</span>
+            {suggestion.actions.length > 0 && (
+              <button className="text-muted-foreground hover:text-foreground transition-colors">
+                {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      {expanded && suggestion.actions.length > 0 && (
+        <CardContent className="pt-0 pb-4">
+          <div className="flex items-start gap-2 text-sm text-muted-foreground mb-2">
+            <Lightbulb size={14} className="shrink-0 mt-0.5 text-primary" />
+            <span className="font-medium text-foreground">{t('page.health.suggestedActions')}</span>
+          </div>
+          <ul className="space-y-1.5 ml-5">
+            {suggestion.actions.map((action, i) => (
+              <li key={i} className="text-sm text-muted-foreground list-disc">{action}</li>
+            ))}
+          </ul>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 export default function ProjectHealth() {
+  const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
-  const [comparePeriod, setComparePeriod] = useState<Period | "">("");
-  const { t } = useTranslation();
-
-  const PERIOD_LABELS: Record<Period, string> = {
-    "1m": t('common.month1'),
-    "3m": t('common.month3'),
-    "6m": t('common.month6'),
-  };
 
   const { data: project } = useGetProject(projectId!, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
-  const { data: health, isLoading } = useGetProjectHealth(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectHealthQueryKey(projectId!, period) },
-  });
+  const { suggestions, loading } = useHealthSuggestions(projectId, period);
 
-  const { data: compareHealth } = useGetProjectHealth(projectId!, comparePeriod as Period, {
-    query: { enabled: !!projectId && !!comparePeriod, queryKey: getGetProjectHealthQueryKey(projectId!, comparePeriod as Period) },
-  });
+  if (loading) return <div className="p-6 text-muted-foreground">{t('page.health.loading')}</div>;
+  if (!project) return <div className="p-6">{t('page.health.notFound')}</div>;
 
-  if (isLoading) return <div>{t('page.health.loading')}</div>;
-  if (!project) return <div>{t('page.health.notFound')}</div>;
-
-  const chartData = (health?.dimensions ?? []).map((d, i) => ({
-    dimension: d.name,
-    value: d.value,
-    fullMark: 100,
-    description: d.description,
-    compareValue: compareHealth?.dimensions[i]?.value ?? null,
-  }));
+  const critical = suggestions.filter((s) => s.status === "critical");
+  const warning = suggestions.filter((s) => s.status === "warning");
+  const good = suggestions.filter((s) => s.status === "good" && s.actions.length > 0);
 
   return (
     <div className="space-y-6">
@@ -60,106 +111,64 @@ export default function ProjectHealth() {
           <h1 className="text-2xl font-bold tracking-tight">{t('page.health.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('page.health.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex bg-background border border-border rounded-md p-1">
-            {PERIOD_OPTIONS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {p.toUpperCase()}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">{t('page.health.compare')}</label>
-            <select
-              value={comparePeriod}
-              onChange={(e) => setComparePeriod(e.target.value as Period | "")}
-              className="px-2 py-1 text-xs bg-background border border-border rounded"
+        <div className="flex bg-background border border-border rounded-md p-1">
+          {(["1m", "3m", "6m"] as Period[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
-              <option value="">{t('page.health.none')}</option>
-              {PERIOD_OPTIONS.filter((p) => p !== period).map((p) => (
-                <option key={p} value={p}>{p.toUpperCase()}</option>
-              ))}
-            </select>
-          </div>
+              {p.toUpperCase()}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {suggestions.length === 0 ? (
         <Card className="bg-card/40">
-          <CardHeader>
-            <CardTitle>{t('page.health.radar')}</CardTitle>
-            <CardDescription>{t('page.health.radarDesc')}</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={chartData}>
-                <PolarGrid stroke="hsl(var(--border))" />
-                <PolarAngleAxis dataKey="dimension" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickCount={6} />
-                <Radar name={PERIOD_LABELS[period]} dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.2} />
-                {comparePeriod && (
-                  <Radar name={PERIOD_LABELS[comparePeriod as Period]} dataKey="compareValue" stroke="hsl(35, 85%, 55%)" fill="hsl(35, 85%, 55%)" fillOpacity={0.1} />
-                )}
-                <Legend wrapperStyle={{ fontSize: "12px", color: "hsl(var(--muted-foreground))" }} />
-              </RadarChart>
-            </ResponsiveContainer>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            {t('page.health.noData')}
           </CardContent>
         </Card>
-
-        <Card className="bg-card/40">
-          <CardHeader>
-            <CardTitle>{t('page.health.dimensionDetails')}</CardTitle>
-            <CardDescription>{t('page.health.dimensionDesc')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {chartData.map((d) => (
-                <div key={d.dimension} className="flex items-center justify-between border-b border-border pb-2 last:border-0">
-                  <div>
-                    <div className="text-sm font-medium">{d.dimension}</div>
-                    <div className="text-xs text-muted-foreground">{d.description}</div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-primary" />
-                      <span className={`text-sm font-bold min-w-[2rem] text-right ${d.value >= 70 ? "text-green-400" : d.value >= 40 ? "text-amber-400" : "text-red-400"}`}>
-                        {d.value}
-                      </span>
-                    </div>
-                    {comparePeriod && d.compareValue !== null && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "hsl(35, 85%, 55%)" }} />
-                        <span className={`text-sm font-bold min-w-[2rem] text-right ${d.compareValue >= 70 ? "text-green-400" : d.compareValue >= 40 ? "text-amber-400" : "text-red-400"}`}>
-                          {d.compareValue}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+      ) : (
+        <>
+          {critical.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-red-400 flex items-center gap-2">
+                <AlertCircle size={16} />
+                {t('page.health.needsAttention')}
+              </h2>
+              {critical.map((s, i) => (
+                <SuggestionCard key={s.area} suggestion={s} index={i} />
               ))}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
 
-      <Card className="bg-card/40">
-        <CardHeader>
-          <CardTitle>{t('page.health.howItWorks')}</CardTitle>
-          <CardDescription>{t('page.health.howItWorksDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-1">
-          <p><strong>Throughput</strong> — {t('page.health.throughputDesc')}</p>
-          <p><strong>Cycle Time</strong> — {t('page.health.cycleTimeDesc')}</p>
-          <p><strong>DORA Score</strong> — {t('page.health.doraDesc')}</p>
-          <p><strong>WIP Balance</strong> — {t('page.health.wipDesc')}</p>
-          <p><strong>Predictability</strong> — {t('page.health.predictabilityDesc')}</p>
-          <p><strong>Quality</strong> — {t('page.health.qualityDesc')}</p>
-        </CardContent>
-      </Card>
+          {warning.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                <AlertTriangle size={16} />
+                {t('page.health.monitor')}
+              </h2>
+              {warning.map((s, i) => (
+                <SuggestionCard key={s.area} suggestion={s} index={i} />
+              ))}
+            </div>
+          )}
+
+          {good.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
+                <CheckCircle size={16} />
+                {t('page.health.onTrack')}
+              </h2>
+              {good.map((s, i) => (
+                <SuggestionCard key={s.area} suggestion={s} index={i} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

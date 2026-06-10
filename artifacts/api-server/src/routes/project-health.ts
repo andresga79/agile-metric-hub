@@ -130,7 +130,22 @@ router.get(
       },
     ];
 
-    res.json({ projectId, period, dimensions });
+    res.json({
+      projectId,
+      period,
+      dimensions,
+      raw: {
+        throughput,
+        avgCycleTime,
+        cfr: Math.round(cfr * 10) / 10,
+        wipRatio: Math.round(wipRatio * 10) / 10,
+        predictability,
+        bugCount,
+        resolvedCount: resolved.length,
+        inProgressCount: inProgress.length,
+        totalIssues: total,
+      },
+    });
   }
 );
 
