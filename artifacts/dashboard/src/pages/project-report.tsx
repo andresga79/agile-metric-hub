@@ -2,9 +2,12 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey, useGetProjectMetrics, getGetProjectMetricsQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Download, Users } from "lucide-react";
 import CfdChart from "@/components/cfd-chart";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { toast } from "@/hooks/use-toast";
 
 type Period = "1m" | "3m" | "6m";
 
@@ -52,22 +55,39 @@ export default function ProjectReport() {
     if (!reportRef.current) return;
     setGenerating(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
+      await new Promise((r) => setTimeout(r, 300));
 
       const canvas = await html2canvas(reportRef.current, {
         backgroundColor: "#ffffff",
         scale: 2,
+        useCORS: true,
+        logging: false,
       });
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      let heightLeft = imgHeight;
+      let pos = 0;
+      pdf.addImage(imgData, "PNG", 0, pos, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        pos = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, pos, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
       pdf.save(`${project?.key ?? projectId}-report-${period}.pdf`);
+      toast({ title: "PDF exported successfully" });
     } catch (e) {
       console.error("PDF generation failed", e);
+      toast({ title: "PDF export failed", description: "Check the console for details", variant: "destructive" });
     }
     setGenerating(false);
   };
