@@ -1,4 +1,6 @@
 {
+  "nav.primary": "Principal",
+  "nav.configuration": "Configuración",
   "nav.dashboard": "Resumen Ejecutivo",
   "nav.settings": "Configuración",
   "nav.admin": "Administración",

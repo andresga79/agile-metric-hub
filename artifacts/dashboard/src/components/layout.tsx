@@ -68,6 +68,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navLinks = (
     <nav className="flex-1 p-4 space-y-1">
+      <p className="px-3 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        {t('nav.primary')}
+      </p>
       <Link
         href="/"
         onClick={() => setSidebarOpen(false)}
@@ -77,6 +80,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {t('nav.dashboard')}
       </Link>
 
+      <hr className="my-3 border-border" />
+
+      <p className="px-3 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        {t('nav.configuration')}
+      </p>
       <Link
         href="/settings"
         onClick={() => setSidebarOpen(false)}

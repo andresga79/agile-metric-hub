@@ -9,7 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ArrowUpRight, ArrowDownRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine } from "lucide-react";
+import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
 import {
@@ -128,10 +128,11 @@ export default function ProjectDetail() {
     const isPositive = value >= 0;
     const improving = metricKey && currentValue != null ? isImproving(metricKey, value, lowerBetter ?? false) : null;
     return (
-      <div className="flex items-center gap-1.5">
-        <span className={`flex items-center text-xs ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-          {isPositive ? <ArrowUpRight size={12} className="mr-0.5" /> : <ArrowDownRight size={12} className="mr-0.5" />}
-          {Math.abs(value).toFixed(1)}%
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+          isPositive ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
+        }`}>
+          {isPositive ? '\u2191' : '\u2193'} {Math.abs(value).toFixed(1)}%
         </span>
         {metricKey && currentValue != null && (
           <span className={`text-[11px] ${improving === null ? 'text-muted-foreground' : improving ? 'text-green-500/70' : 'text-red-500/70'}`}>
@@ -165,6 +166,12 @@ export default function ProjectDetail() {
           {project.description && <p className="text-muted-foreground mt-1 max-w-2xl">{project.description}</p>}
         </div>
       </div>
+
+      <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Link href="/" className="hover:text-foreground transition-colors">{t('nav.dashboard')}</Link>
+        <ChevronRight size={14} className="text-muted-foreground/50" />
+        <span className="text-foreground font-medium">{project.name}</span>
+      </nav>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1 flex-wrap">
@@ -250,6 +257,7 @@ export default function ProjectDetail() {
           onCancel={() => setEditingTarget(null)}
           onValueChange={(v) => setEditingTarget({ metric: "throughput", value: v })}
           percentiles={null}
+          sparklineData={metrics?.velocityByWeek}
         />
       </div>
 
@@ -288,6 +296,7 @@ function MetricCard({
   info,
   trend,
   percentiles,
+  sparklineData,
   editingValue,
   onEdit,
   onSave,
@@ -298,6 +307,7 @@ function MetricCard({
   info: { actual: number | undefined | null; targetVal: number | null; onTrack: boolean | null; isEditing: boolean; label: string; unit: string; canEdit: boolean };
   trend: React.ReactNode;
   percentiles: { p50: number; p75: number; p85: number; p95: number } | null;
+  sparklineData?: { week: string; value: number }[];
   editingValue: string;
   onEdit: () => void;
   onSave: () => void;
@@ -361,6 +371,21 @@ function MetricCard({
                   {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
                 </span>
                 <span className="text-[11px] text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
+              </div>
+            )}
+            {sparklineData && sparklineData.length > 1 && (
+              <div className="h-10 mt-3 -mx-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparklineData}>
+                    <defs>
+                      <linearGradient id={`sparkline-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={1.5} fillOpacity={1} fill={`url(#sparkline-${metricKey})`} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             )}
           </>

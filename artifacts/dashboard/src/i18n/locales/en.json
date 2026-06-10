@@ -1,4 +1,6 @@
 {
+  "nav.primary": "Main",
+  "nav.configuration": "Configuration",
   "nav.dashboard": "Dashboard",
   "nav.settings": "Settings",
   "nav.admin": "Admin",
