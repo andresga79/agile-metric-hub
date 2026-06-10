@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useParams } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,7 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine } from "lucide-react";
+import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine, Download } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
 import {
@@ -27,6 +27,8 @@ export default function ProjectDetail() {
   const [period, setPeriod] = useState<Period>("1m");
   const [targets, setTargets] = useState<any[]>([]);
   const [editingTarget, setEditingTarget] = useState<{ metric: string; value: string } | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [exportingChart, setExportingChart] = useState(false);
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) }
   });
@@ -75,6 +77,22 @@ export default function ProjectDetail() {
   };
 
   const getTarget = (metric: string) => targets.find((t) => t.metric === metric && t.period === period);
+
+  const downloadChart = async () => {
+    if (!chartRef.current) return;
+    setExportingChart(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(chartRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      const link = document.createElement("a");
+      link.download = `${project?.key}-throughput-trend.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (e) {
+      console.error("Chart export failed", e);
+    }
+    setExportingChart(false);
+  };
 
   if (loadingProject || loadingMetrics) return <DetailSkeleton />;
   if (!project) return <div>{t('page.detail.notFound')}</div>;
@@ -263,28 +281,42 @@ export default function ProjectDetail() {
 
       <Card className="bg-card/40">
         <CardHeader>
-          <CardTitle className="text-lg">{t('page.detail.throughputTrend')}</CardTitle>
-          <CardDescription>{t('page.detail.throughputTrendDesc')}</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">{t('page.detail.throughputTrend')}</CardTitle>
+              <CardDescription>{t('page.detail.throughputTrendDesc')}</CardDescription>
+            </div>
+            <button
+              onClick={downloadChart}
+              disabled={exportingChart}
+              className="text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent transition-colors"
+              title="Export as PNG"
+            >
+              <Download size={16} />
+            </button>
+          </div>
         </CardHeader>
         <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={metrics?.velocityByWeek || []}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="week" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
-                itemStyle={{ color: 'hsl(var(--foreground))' }}
-              />
-              <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div ref={chartRef} className="w-full h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={metrics?.velocityByWeek || []}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="week" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
+                />
+                <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -363,14 +395,22 @@ function MetricCard({
                 <span>P95 <strong className="text-foreground">{percentiles.p95.toFixed(1)}d</strong></span>
               </div>
             )}
-            {info.targetVal !== null && info.onTrack !== null && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                  info.onTrack ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                }`}>
-                  {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
-                </span>
-                <span className="text-[11px] text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
+            {info.targetVal !== null && info.onTrack !== null && info.actual !== null && info.actual !== undefined && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[11px] mb-1">
+                  <span className={info.onTrack ? "text-green-400" : "text-red-400"}>
+                    {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
+                  </span>
+                  <span className="text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
+                </div>
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      info.onTrack ? "bg-green-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${Math.min((Number(info.actual) / info.targetVal) * 100, 100)}%` }}
+                  />
+                </div>
               </div>
             )}
             {sparklineData && sparklineData.length > 1 && (

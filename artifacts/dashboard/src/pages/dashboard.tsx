@@ -7,10 +7,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MetricTooltip } from "@/components/metric-tooltip";
-import { Activity, Target, Clock, CheckCircle2, AlertTriangle, LayoutDashboard, RefreshCw } from "lucide-react";
+import { Activity, Target, Clock, CheckCircle2, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useMemo } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -18,6 +24,7 @@ export default function Dashboard() {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
+  const [methodologyFilter, setMethodologyFilter] = useState<string>("all");
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() }
   });
@@ -66,8 +73,20 @@ export default function Dashboard() {
     return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const totalThroughput = visiblePortfolio.reduce((s, p) => s + p.throughput, 0);
-  const totalWip = visiblePortfolio.reduce((s, p) => s + p.inProgressCount, 0);
+  const healthColor = (p: any) => {
+    const wipRatio = p.inProgressCount / Math.max(p.throughput, 1);
+    if (wipRatio < 2 && (p.cycleTimeP50 ?? 99) < 10) return "bg-green-500";
+    if (wipRatio > 5 || (p.cycleTimeP50 ?? 0) > 20) return "bg-red-500";
+    return "bg-yellow-500";
+  };
+
+  const filteredPortfolio = visiblePortfolio.filter((p) => {
+    if (methodologyFilter === "all") return true;
+    return p.boardType === methodologyFilter;
+  });
+
+  const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.throughput, 0);
+  const totalWip = filteredPortfolio.reduce((s, p) => s + p.inProgressCount, 0);
   const avgCycleP50 = (() => {
     const valid = visiblePortfolio.filter((p) => p.cycleTimeP50 !== null);
     if (valid.length === 0) return null;
@@ -195,6 +214,20 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <div className="flex items-center gap-1 bg-background border border-border rounded-md p-1 w-fit">
+        {["all", "scrum", "kanban"].map((m) => (
+          <button
+            key={m}
+            onClick={() => setMethodologyFilter(m)}
+            className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+              methodologyFilter === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {m === "all" ? "Todos" : m === "scrum" ? "Scrum" : "Kanban"}
+          </button>
+        ))}
+      </div>
+
       <Card className="bg-card/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -230,15 +263,19 @@ export default function Dashboard() {
                     <TableHead className="text-right">{t('page.dashboard.throughput')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.leadTime')}</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visiblePortfolio.map((p) => (
+                  {filteredPortfolio.map((p) => (
                     <TableRow key={p.id} className="border-border hover:bg-accent/50">
                       <TableCell>
-                        <Link href={`/projects/${p.id}`} className="text-primary hover:underline font-medium">
-                          {p.name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${healthColor(p)}`} />
+                          <Link href={`/projects/${p.id}`} className="text-primary hover:underline font-medium">
+                            {p.name}
+                          </Link>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs">{p.issueCount}</TableCell>
                       <TableCell className="text-right font-mono text-xs text-green-400">{p.doneCount}</TableCell>
@@ -246,6 +283,27 @@ export default function Dashboard() {
                       <TableCell className="text-right font-mono text-xs">{p.throughput}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{p.cycleTimeP50 !== null ? `${p.cycleTimeP50.toFixed(1)}d` : "—"}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{p.leadTimeAvg !== null ? `${p.leadTimeAvg}d` : "—"}</TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors">
+                            <MoreHorizontal size={16} />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/projects/${p.id}/health`} className="cursor-pointer">Health</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/projects/${p.id}/forecast`} className="cursor-pointer">Forecast</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/projects/${p.id}/${p.boardType === 'scrum' ? 'sprints' : 'kanban'}`} className="cursor-pointer">{p.boardType === 'scrum' ? 'Sprints' : 'Kanban'}</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/projects/${p.id}/report`} className="cursor-pointer">Report</Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
