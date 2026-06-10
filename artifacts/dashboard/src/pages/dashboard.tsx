@@ -80,9 +80,17 @@ export default function Dashboard() {
     return "bg-yellow-500";
   };
 
+  const boardTypeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of userProjects ?? []) {
+      if (p.boardType) map.set(p.id, p.boardType);
+    }
+    return map;
+  }, [userProjects]);
+
   const filteredPortfolio = visiblePortfolio.filter((p) => {
     if (methodologyFilter === "all") return true;
-    return p.boardType === methodologyFilter;
+    return boardTypeMap.get(p.id) === methodologyFilter;
   });
 
   const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.throughput, 0);
@@ -296,7 +304,7 @@ export default function Dashboard() {
                               <Link href={`/projects/${p.id}/forecast`} className="cursor-pointer">Forecast</Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
-                              <Link href={`/projects/${p.id}/${p.boardType === 'scrum' ? 'sprints' : 'kanban'}`} className="cursor-pointer">{p.boardType === 'scrum' ? 'Sprints' : 'Kanban'}</Link>
+                              <Link href={`/projects/${p.id}/${boardTypeMap.get(p.id) === 'scrum' ? 'sprints' : 'kanban'}`} className="cursor-pointer">{boardTypeMap.get(p.id) === 'scrum' ? 'Sprints' : 'Kanban'}</Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link href={`/projects/${p.id}/report`} className="cursor-pointer">Report</Link>
