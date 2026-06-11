@@ -281,6 +281,9 @@
   "page.flow.watchLabel": "Vigilancia",
   "page.flow.blockedTitle": "Análisis de Tiempo Bloqueado",
   "page.flow.blockedDesc": "issues con historial de bloqueo",
+  "page.flow.blockedNow": "bloqueadas ahora",
+  "page.flow.maxBlocked": "máx",
+  "page.flow.status": "Estado",
   "page.flow.noBlocked": "No se encontraron issues bloqueados. Esto podría significar que el proyecto no usa un estado \"Bloqueado\".",
   "page.flow.totalBlockedDays": "Total de Días Bloqueados",
 

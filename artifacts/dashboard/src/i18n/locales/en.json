@@ -281,6 +281,9 @@
   "page.flow.watchLabel": "Watch",
   "page.flow.blockedTitle": "Blocked Time Analysis",
   "page.flow.blockedDesc": "issues with blocked history",
+  "page.flow.blockedNow": "blocked now",
+  "page.flow.maxBlocked": "max",
+  "page.flow.status": "Status",
   "page.flow.noBlocked": "No blocked issues found. This could mean the project doesn't use a \"Blocked\" status.",
   "page.flow.totalBlockedDays": "Total Blocked Days",
 

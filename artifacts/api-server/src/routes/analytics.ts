@@ -328,11 +328,24 @@ router.get(
         }
 
         const totalDays = Math.round((totalBlockedMs / (1000 * 60 * 60 * 24)) * 10) / 10;
-        return { key: i.key, summary: i.fields.summary, issueType: i.fields.issuetype.name, priority: i.fields.priority.name, totalDays };
+        return {
+          key: i.key,
+          summary: i.fields.summary,
+          issueType: i.fields.issuetype.name,
+          priority: i.fields.priority.name,
+          totalDays,
+          isCurrentlyBlocked: blockedStart !== null,
+          currentStatus: i.fields.status.name,
+        };
       })
     );
 
-    const blockedIssues = blockedData.filter((b) => b.totalDays > 0).sort((a, b) => b.totalDays - a.totalDays);
+    const blockedIssues = blockedData
+      .filter((b) => b.totalDays > 0)
+      .sort((a, b) => {
+        if (a.isCurrentlyBlocked !== b.isCurrentlyBlocked) return a.isCurrentlyBlocked ? -1 : 1;
+        return b.totalDays - a.totalDays;
+      });
 
     // --- Time in Status (#9) ---
     const timeInStatus = await computeTimeInStatus(issues);

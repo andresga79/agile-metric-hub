@@ -218,7 +218,10 @@ export default function ProjectFlow() {
             <AlertTriangle size={18} />
             {t('page.flow.blockedTitle')}
           </CardTitle>
-          <CardDescription>{blockedItems.length} {t('page.flow.blockedDesc')}</CardDescription>
+          <CardDescription>
+            <span className="text-red-400 font-semibold">🔴 {blockedItems.filter((b: any) => b.isCurrentlyBlocked).length} {t('page.flow.blockedNow')}</span>
+            <span className="text-muted-foreground"> · {blockedItems.length} {t('page.flow.blockedDesc')} · ↑{blockedItems.length > 0 ? Math.max(...blockedItems.map((b: any) => b.totalDays)).toFixed(1) : 0}d {t('page.flow.maxBlocked')}</span>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {blockedItems.length === 0 ? (
@@ -232,16 +235,23 @@ export default function ProjectFlow() {
                     <TableHead>Summary</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Priority</TableHead>
+                    <TableHead>{t('page.flow.status')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.totalBlockedDays')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {blockedItems.map((item: any) => (
-                    <TableRow key={item.key} className="border-border hover:bg-accent/50">
+                    <TableRow key={item.key} className={`border-border hover:bg-accent/50 ${item.isCurrentlyBlocked ? 'bg-red-500/5' : ''}`}>
                       <TableCell className="font-mono text-xs text-primary">{item.key}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={item.summary}>{item.summary}</TableCell>
                       <TableCell>{item.issueType}</TableCell>
                       <TableCell>{item.priority}</TableCell>
+                      <TableCell>
+                        {item.isCurrentlyBlocked
+                          ? <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded">🔴 {item.currentStatus}</span>
+                          : <span className="text-xs text-muted-foreground">{item.currentStatus}</span>
+                        }
+                      </TableCell>
                       <TableCell className="text-right font-mono text-red-400">{item.totalDays}d</TableCell>
                     </TableRow>
                   ))}
