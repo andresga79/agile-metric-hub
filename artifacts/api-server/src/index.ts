@@ -82,6 +82,17 @@ async function initDb() {
       );
     `);
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS default_metric_thresholds (
+        id SERIAL PRIMARY KEY,
+        metric TEXT NOT NULL UNIQUE,
+        good_value NUMERIC NOT NULL,
+        warning_value NUMERIC NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     await ensureCacheTable();
     logger.info("Database tables ready");
 
