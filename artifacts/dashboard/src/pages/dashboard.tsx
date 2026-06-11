@@ -25,6 +25,8 @@ export default function Dashboard() {
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
   const [methodologyFilter, setMethodologyFilter] = useState<string>("all");
+  const [thresholds, setThresholds] = useState<Record<string, { goodValue: number; warningValue: number }>>({});
+
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() }
   });
@@ -44,15 +46,29 @@ export default function Dashboard() {
     fetch("/api/portfolio", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.ok ? r.json() : [])
+      .then(async (r) => { if (!r.ok) return []; const text = await r.text(); return text ? JSON.parse(text) : []; })
       .then(setPortfolioData)
       .catch(() => setPortfolioData([]))
       .finally(() => setPortfolioLoading(false));
     fetch("/api/sync/status", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.ok ? r.json() : null)
+      .then(async (r) => { if (!r.ok) return null; const text = await r.text(); return text ? JSON.parse(text) : null; })
       .then(setSyncStatus)
+      .catch(() => {});
+    fetch("/api/admin/metric-thresholds", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (r) => { const text = await r.text(); return text ? JSON.parse(text) : []; })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const map: Record<string, { goodValue: number; warningValue: number }> = {};
+          for (const t of data) {
+            map[t.metric] = { goodValue: Number(t.goodValue), warningValue: Number(t.warningValue) };
+          }
+          setThresholds(map);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -75,9 +91,27 @@ export default function Dashboard() {
 
   const healthColor = (p: any) => {
     const wipRatio = p.inProgressCount / Math.max(p.throughput, 1);
-    if (wipRatio < 2 && (p.cycleTimeP50 ?? 99) < 10) return "bg-green-500";
-    if (wipRatio > 5 || (p.cycleTimeP50 ?? 0) > 20) return "bg-red-500";
-    return "bg-yellow-500";
+    const ctThresh = thresholds["cycleTime"];
+    const wipThresh = thresholds["wipRatio"];
+
+    const wipPct = wipRatio * 100;
+    let cycleStatus: "good" | "warning" | "critical" = "good";
+    let wipStatus: "good" | "warning" | "critical" = "good";
+
+    if (ctThresh && p.cycleTimeP50 !== null) {
+      if (p.cycleTimeP50 <= ctThresh.goodValue) cycleStatus = "good";
+      else if (p.cycleTimeP50 <= ctThresh.warningValue) cycleStatus = "warning";
+      else cycleStatus = "critical";
+    }
+    if (wipThresh) {
+      if (wipPct <= wipThresh.goodValue) wipStatus = "good";
+      else if (wipPct <= wipThresh.warningValue) wipStatus = "warning";
+      else wipStatus = "critical";
+    }
+
+    if (cycleStatus === "critical" || wipStatus === "critical") return "bg-red-500";
+    if (cycleStatus === "warning" || wipStatus === "warning") return "bg-yellow-500";
+    return "bg-green-500";
   };
 
   const boardTypeMap = useMemo(() => {
@@ -244,6 +278,7 @@ export default function Dashboard() {
           <CardTitle className="flex items-center gap-2">
             <LayoutDashboard size={18} />
             {t('page.dashboard.projectOverview')}
+            <MetricTooltip description={t('page.dashboard.periodInfo')} />
           </CardTitle>
           <CardDescription>{t('page.dashboard.sortedByThroughput')}</CardDescription>
         </CardHeader>

@@ -39,6 +39,7 @@
   "page.dashboard.totalWip": "WIP Total",
   "page.dashboard.cycleTimeP50": "Cycle Time P50",
   "page.dashboard.projectOverview": "Resumen del Proyecto",
+  "page.dashboard.periodInfo": "Datos basados en issues creados o resueltos en los últimos 30 días.",
   "page.dashboard.sortedByThroughput": "Ordenado por throughput (más activos primero)",
   "page.dashboard.project": "Proyecto",
   "page.dashboard.issues": "Issues",

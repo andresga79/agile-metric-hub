@@ -94,6 +94,10 @@ async function initDb() {
     `);
 
     await ensureCacheTable();
+
+    // Clean stale cache entries from periods other than 30d (portfolio now uses 30d)
+    await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^issues:[^:]+:(?:84|90|180)$'`);
+
     logger.info("Database tables ready");
 
     const [existing] = await db

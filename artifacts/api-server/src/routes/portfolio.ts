@@ -17,7 +17,7 @@ router.get("/portfolio", requireAuth, async (_req, res): Promise<void> => {
 
   const portfolio = await Promise.all(
     jiraProjects.map(async (p) => {
-      const issues = await getJiraIssuesForProject(p.id, 90);
+      const issues = await getJiraIssuesForProject(p.id, 30);
       const done = issues.filter((i) => isIssueDone(i));
       const inProgress = issues.filter((i) => isIssueInProgress(i));
 
@@ -30,7 +30,7 @@ router.get("/portfolio", requireAuth, async (_req, res): Promise<void> => {
       const recentResolved = resolvedWithDates.filter((r) => {
         if (!r.resolvedAt) return false;
         const d = new Date();
-        d.setDate(d.getDate() - 90);
+        d.setDate(d.getDate() - 30);
         return r.resolvedAt >= d;
       }).map((r) => r.issue);
 
