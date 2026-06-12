@@ -758,7 +758,7 @@ export async function getIssuesStatusCounts(
 
     const counts: StatusCounts = { total: 0, done: 0, inProgress: 0, todo: 0 };
     const maxResults = 100;
-    const maxPages = 5;
+    const maxPages = 10;
     let pageToken: string | null = null;
 
     try {
@@ -773,9 +773,9 @@ export async function getIssuesStatusCounts(
         const pageIssues = result.issues ?? [];
         for (const issue of pageIssues) {
           counts.total++;
-          const category = issue.fields.status?.statusCategory?.name ?? "";
-          if (category === "Done") counts.done++;
-          else if (category === "In Progress") counts.inProgress++;
+          const key = issue.fields.status?.statusCategory?.key ?? "";
+          if (key === "done") counts.done++;
+          else if (key === "indeterminate") counts.inProgress++;
           else counts.todo++;
         }
         if (result.isLast || pageIssues.length < maxResults) break;
