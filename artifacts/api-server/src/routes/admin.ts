@@ -295,4 +295,21 @@ router.put("/admin/metric-thresholds/:metric", async (req, res): Promise<void> =
   res.json(result);
 });
 
+// POST /admin/portfolio/recalculate - force recalculation of portfolio cache
+router.post("/admin/portfolio/recalculate", async (_req, res): Promise<void> => {
+  try {
+    const { calculateAndCachePortfolio } = await import("../lib/portfolio-cache");
+    
+    // Return immediately, let calculation happen in background
+    res.json({ success: true, message: "Portfolio cache recalculation started in background" });
+    
+    // Execute in background without awaiting
+    setImmediate(async () => {
+      await calculateAndCachePortfolio();
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

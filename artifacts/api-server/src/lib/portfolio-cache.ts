@@ -2,10 +2,7 @@ import { db } from "@workspace/db";
 import { portfolioCacheTable } from "@workspace/db/schema";
 import {
   listJiraProjects,
-  getRecentlyResolvedIssues,
   getIssuesStatusCounts,
-  getLeadTimeDays,
-  getCycleTimeDays,
 } from "./jira";
 import { logger } from "./logger";
 import { eq } from "drizzle-orm";
@@ -14,18 +11,7 @@ const PORTFOLIO_PERIOD_DAYS = 180;
 
 async function processProject(p: { id: string; key: string; name: string }) {
   try {
-    const [counts, resolved] = await Promise.all([
-      getIssuesStatusCounts(p.id, PORTFOLIO_PERIOD_DAYS),
-      getRecentlyResolvedIssues(p.id, PORTFOLIO_PERIOD_DAYS),
-    ]);
-
-    const leadTimes = (await Promise.all(resolved.map((i) => getLeadTimeDays(i)))).filter((v): v is number => v !== null);
-    const cycleTimes = (await Promise.all(resolved.map((i) => getCycleTimeDays(i)))).filter((v): v is number => v !== null);
-
-    const sortedLead = [...leadTimes].sort((a, b) => a - b);
-    const sortedCycle = [...cycleTimes].sort((a, b) => a - b);
-    const p50 = sortedLead.length > 0 ? sortedLead[Math.floor(sortedLead.length * 0.5)] : null;
-    const cycleP50 = sortedCycle.length > 0 ? sortedCycle[Math.floor(sortedCycle.length * 0.5)] : null;
+    const counts = await getIssuesStatusCounts(p.id, PORTFOLIO_PERIOD_DAYS);
 
     return {
       projectId: p.id,
@@ -34,9 +20,9 @@ async function processProject(p: { id: string; key: string; name: string }) {
       issueCount: counts.total,
       doneCount: counts.done,
       inProgressCount: counts.inProgress,
-      throughput: resolved.length,
-      cycleTimeP50: cycleP50?.toString() || null,
-      leadTimeAvg: leadTimes.length > 0 ? (Math.round((leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length) * 10) / 10).toString() : null,
+      throughput: counts.done,  // Simplified: throughput = done count from period
+      cycleTimeP50: null,  // Skip expensive calculations
+      leadTimeAvg: null,   // Skip expensive calculations
       error: null,
     };
   } catch (err) {
@@ -64,8 +50,8 @@ export async function calculateAndCachePortfolio() {
     const jiraProjects = await listJiraProjects();
     const portfolio: Array<Record<string, unknown>> = [];
 
-    // Process in batches of 5 to manage load
-    const batchSize = 5;
+    // Process in batches of 10 to manage load
+    const batchSize = 10;
     for (let i = 0; i < jiraProjects.length; i += batchSize) {
       const batch = jiraProjects.slice(i, i + batchSize);
       const results = await Promise.allSettled(
@@ -73,7 +59,7 @@ export async function calculateAndCachePortfolio() {
           Promise.race<Record<string, unknown> | null>([
             processProject(p),
             new Promise<null>((resolve) =>
-              setTimeout(() => resolve(null), 30000)
+              setTimeout(() => resolve(null), 60000)
             ).then(() => {
               return {
                 projectId: p.id,
