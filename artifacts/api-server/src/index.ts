@@ -96,6 +96,25 @@ async function initDb() {
 
     await ensureCacheTable();
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS portfolio_cache (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL UNIQUE,
+        project_key TEXT NOT NULL,
+        project_name TEXT NOT NULL,
+        issue_count INTEGER NOT NULL DEFAULT 0,
+        done_count INTEGER NOT NULL DEFAULT 0,
+        in_progress_count INTEGER NOT NULL DEFAULT 0,
+        throughput INTEGER NOT NULL DEFAULT 0,
+        cycle_time_p50 NUMERIC,
+        lead_time_avg NUMERIC,
+        error TEXT,
+        calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // Clean stale cache entries from periods other than 30d
     await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
 

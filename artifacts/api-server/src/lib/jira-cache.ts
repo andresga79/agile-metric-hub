@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { calculateAndCachePortfolio, isPortfolioCacheStale } from "./portfolio-cache";
 
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -150,9 +151,24 @@ export function startBackgroundSync(): void {
     const { isJiraConfigured } = await import("./jira");
     if (!isJiraConfigured()) return;
     warmCache();
+
+    // Calculate portfolio cache on startup if stale
+    if (await isPortfolioCacheStale()) {
+      await calculateAndCachePortfolio();
+    }
   })();
+
+  // Warm Jira cache every 15 minutes
   setInterval(warmCache, 15 * 60 * 1000);
   logger.info("Background sync started (interval: 15min)");
+
+  // Recalculate portfolio cache every 24 hours
+  setInterval(async () => {
+    const { isJiraConfigured } = await import("./jira");
+    if (!isJiraConfigured()) return;
+    await calculateAndCachePortfolio();
+  }, 24 * 60 * 60 * 1000);
+  logger.info("Portfolio cache background job started (interval: 24h)");
 }
 
 export async function clearCache(cacheKey: string): Promise<void> {
