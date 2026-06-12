@@ -347,7 +347,7 @@ export async function getResolutionDate(
     }
   }
 
-  return new Date(issue.fields.updated);
+  return null;
 }
 
 /** Lead time (days) = from issue creation to resolution. Total elapsed time,
@@ -421,15 +421,39 @@ function jiraHeaders(): Record<string, string> {
 
 async function jiraFetch<T>(path: string): Promise<T> {
   const url = `${JIRA_URL}/rest/api/3${path}`;
-  const response = await fetch(url, { headers: jiraHeaders() });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
 
-  if (!response.ok) {
-    const text = await response.text();
-    logger.error({ status: response.status, path, body: text }, "Jira API error");
-    throw new Error(`Jira API error: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      const text = await response.text();
+      logger.error({ status: response.status, path, body: text }, "Jira API error");
+      throw new Error(`Jira API error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    clearTimeout(timeout);
   }
+}
 
-  return response.json() as Promise<T>;
+async function jiraAgileFetch<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logger.warn({ status: response.status, url, body: text }, "Jira Agile API error");
+      throw new Error(`Jira Agile API error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function listJiraProjects(): Promise<JiraProject[]> {
@@ -495,14 +519,9 @@ export async function getProjectBoardType(
       const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(
         projectId
       )}&maxResults=50`;
-      const response = await fetch(url, { headers: jiraHeaders() });
-      if (!response.ok) {
-        logger.warn({ status: response.status, projectId }, "Failed to fetch boards");
-        return "simple";
-      }
-      const data = (await response.json()) as {
+      const data = await jiraAgileFetch<{
         values?: { type?: string; location?: { projectId?: number; projectKey?: string } }[];
-      };
+      }>(url);
       const boards = data.values ?? [];
 
       const owned = boards.filter((b) => {
@@ -532,11 +551,9 @@ export async function getBoardId(
   if (!isJiraConfigured()) return null;
   try {
     const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(projectId)}&maxResults=50`;
-    const resp = await fetch(url, { headers: jiraHeaders() });
-    if (!resp.ok) return null;
-    const data = (await resp.json()) as {
+    const data = await jiraAgileFetch<{
       values?: { id: number; type?: string; location?: { projectId?: number; projectKey?: string } }[];
-    };
+    }>(url);
     const boards = data.values ?? [];
     // Find a board that belongs to this project (by location)
     const owned = boards.filter((b) => {
@@ -576,14 +593,11 @@ export async function getJiraSprints(
 
       for (let page = 0; page < 5; page++) {
         const sprintUrl = `${JIRA_URL}/rest/agile/1.0/board/${boardId}/sprint?maxResults=${pageSize}&startAt=${startAt}&state=closed,active`;
-        const sprintResp = await fetch(sprintUrl, { headers: jiraHeaders() });
-        if (!sprintResp.ok) break;
-
-        const sprintData = (await sprintResp.json()) as {
+        const sprintData = await jiraAgileFetch<{
           values: JiraSprint[];
           total?: number;
           isLast?: boolean;
-        };
+        }>(sprintUrl);
 
         const sprints = sprintData.values ?? [];
         allSprints.push(...sprints);
@@ -647,43 +661,132 @@ export async function getJiraIssuesForProject(
     const sinceStr = since.toISOString().split("T")[0];
 
     const fields =
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
+
+    try {
+      const allIssues: JiraIssue[] = [];
+      const maxResults = 100;
+      const maxPages = 20;
+      let pageToken: string | null = null;
+
+      for (let page = 0; page < maxPages; page++) {
+        const jql = encodeURIComponent(
+          `project = ${projectId} AND created >= "${sinceStr}" ORDER BY created DESC`
+        );
+        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
+        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${tokenParam}`
+        );
+        const pageIssues = result.issues ?? [];
+        allIssues.push(...pageIssues);
+        if (result.isLast || pageIssues.length < maxResults) break;
+        pageToken = result.nextPageToken ?? null;
+        if (!pageToken) break;
+      }
+
+      return allIssues;
+    } catch (err) {
+      logger.warn({ err, projectId }, "Failed to fetch Jira issues, using mock data");
+      return getMockIssues(projectId);
+    }
+  });
+}
+
+export async function getRecentlyResolvedIssues(
+  projectId: string,
+  periodDays: number
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId);
+  }
+
+  return withCache(`resolved:${projectId}:${periodDays}`, async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+    const sinceStr = since.toISOString().split("T")[0];
+
+    const fields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated,issuelinks";
 
     try {
       const allIssues: JiraIssue[] = [];
       const maxResults = 100;
-      const maxPages = 5; // up to 500 issues
-      let cursorDate = "";
+      let pageToken: string | null = null;
 
-      for (let page = 0; page < maxPages; page++) {
-        const cursorClause = cursorDate
-          ? `AND created <= "${cursorDate}"`
-          : "";
+      for (;;) {
         const jql = encodeURIComponent(
-          `project = ${projectId} AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}")${cursorClause} ORDER BY created DESC`
+          `project = ${projectId} AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC`
         );
-        const result = await jiraFetch<{ issues: JiraIssue[]; total: number }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
+        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
+        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${tokenParam}`
         );
         const pageIssues = result.issues ?? [];
         allIssues.push(...pageIssues);
-        if (pageIssues.length < maxResults) break;
-        const last = pageIssues[pageIssues.length - 1];
-        cursorDate = last?.fields?.created?.split("T")[0] ?? "";
-        if (!cursorDate) break;
+        if (result.isLast || pageIssues.length < maxResults) break;
+        pageToken = result.nextPageToken ?? null;
+        if (!pageToken) break;
       }
 
-      // Deduplicate by key (date-based pagination may overlap on same-date issues)
-      const seen = new Set<string>();
-      return allIssues.filter((i) => {
-        if (seen.has(i.key)) return false;
-        seen.add(i.key);
-        return true;
-      });
+      return allIssues;
     } catch (err) {
-      logger.warn({ err, projectId }, "Failed to fetch Jira issues, using mock data");
+      logger.warn({ err, projectId }, "Failed to fetch resolved Jira issues, using mock data");
       return getMockIssues(projectId);
     }
+  });
+}
+
+export interface StatusCounts {
+  total: number;
+  done: number;
+  inProgress: number;
+  todo: number;
+}
+
+export async function getIssuesStatusCounts(
+  projectId: string,
+  periodDays: number
+): Promise<StatusCounts> {
+  if (!isJiraConfigured()) {
+    return { total: 0, done: 0, inProgress: 0, todo: 0 };
+  }
+
+  return withCache(`status:${projectId}:${periodDays}`, async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+    const sinceStr = since.toISOString().split("T")[0];
+
+    const counts: StatusCounts = { total: 0, done: 0, inProgress: 0, todo: 0 };
+    const maxResults = 100;
+    const maxPages = 5;
+    let pageToken: string | null = null;
+
+    try {
+      for (let page = 0; page < maxPages; page++) {
+        const jql = encodeURIComponent(
+          `project = ${projectId} AND created >= "${sinceStr}" ORDER BY created DESC`
+        );
+        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
+        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status${tokenParam}`
+        );
+        const pageIssues = result.issues ?? [];
+        for (const issue of pageIssues) {
+          counts.total++;
+          const category = issue.fields.status?.statusCategory?.name ?? "";
+          if (category === "Done") counts.done++;
+          else if (category === "In Progress") counts.inProgress++;
+          else counts.todo++;
+        }
+        if (result.isLast || pageIssues.length < maxResults) break;
+        pageToken = result.nextPageToken ?? null;
+        if (!pageToken) break;
+      }
+    } catch (err) {
+      logger.warn({ err, projectId }, "Failed to fetch status counts, returning zeros");
+    }
+
+    return counts;
   });
 }
 

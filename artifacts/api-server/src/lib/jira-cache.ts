@@ -89,19 +89,55 @@ export async function warmCache(): Promise<void> {
   if (isSyncing) return;
   isSyncing = true;
   try {
-    const { isJiraConfigured, listJiraProjects, getJiraIssuesForProject, getProjectBoardType, getJiraSprints } = await import("./jira");
+    const { isJiraConfigured, listJiraProjects, getRecentlyResolvedIssues, getIssuesStatusCounts, getProjectBoardType, getJiraSprints } = await import("./jira");
     if (!isJiraConfigured()) return;
 
     const projects = await listJiraProjects();
-    for (const project of projects) {
-      await Promise.all([
-        getJiraIssuesForProject(project.id, 30),
-        getProjectBoardType(project.id),
-        getJiraSprints(project.id),
-      ]);
+    let aborted = false;
+    const overallTimeout = setTimeout(() => {
+      logger.warn("Warm cache overall timeout reached, proceeding with partial cache");
+      aborted = true;
+      isSyncing = false;
+    }, 180000);
+
+    const batchSize = 3;
+    try {
+      for (let i = 0; i < projects.length; i += batchSize) {
+        if (aborted) break;
+        const batch = projects.slice(i, i + batchSize);
+        await Promise.allSettled(
+          batch.map((project) =>
+            Promise.race([
+              (async () => {
+                try {
+                  await Promise.allSettled([
+                    getRecentlyResolvedIssues(project.id, 30),
+                    getIssuesStatusCounts(project.id, 30),
+                    getProjectBoardType(project.id),
+                    getJiraSprints(project.id),
+                  ]);
+                } catch (_) {
+                  /* individual project error already logged upstream */
+                }
+              })(),
+              new Promise<void>((resolve) =>
+                setTimeout(() => {
+                  logger.warn({ projectId: project.id }, "Warm cache project timeout, skipping");
+                  resolve();
+                }, 60000)
+              ),
+            ])
+          )
+        );
+        logger.info(`Warm cache progress: ${Math.min(i + batchSize, projects.length)}/${projects.length} projects`);
+      }
+      if (!aborted) {
+        lastSyncedAt = new Date();
+        logger.info({ projectCount: projects.length }, "Cache warmed successfully");
+      }
+    } finally {
+      clearTimeout(overallTimeout);
     }
-    lastSyncedAt = new Date();
-    logger.info({ projectCount: projects.length }, "Cache warmed successfully");
   } catch (err) {
     logger.error({ err }, "Cache warm failed");
   } finally {

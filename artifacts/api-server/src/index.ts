@@ -1,4 +1,5 @@
 import app from "./app";
+import http from "http";
 import { db, usersTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -95,8 +96,8 @@ async function initDb() {
 
     await ensureCacheTable();
 
-    // Clean stale cache entries from periods other than 30d (portfolio now uses 30d)
-    await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^issues:[^:]+:(?:84|90|180)$'`);
+    // Clean stale cache entries from periods other than 30d
+    await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
 
     logger.info("Database tables ready");
 
@@ -129,7 +130,11 @@ async function initDb() {
 }
 
 initDb().then(() => {
-  app.listen(port, (err) => {
+  const server = http.createServer(app);
+  server.requestTimeout = 0;
+  server.timeout = 0;
+  server.keepAliveTimeout = 120000;
+  server.listen(port, "0.0.0.0", (err?: Error) => {
     if (err) {
       logger.error({ err }, "Error listening on port");
       process.exit(1);
@@ -141,5 +146,7 @@ initDb().then(() => {
   // Start background Jira cache sync after DB is ready
   import("./lib/jira-cache").then(({ startBackgroundSync }) => {
     startBackgroundSync();
+  }).catch((err) => {
+    logger.error({ err }, "Failed to start background sync");
   });
 });
