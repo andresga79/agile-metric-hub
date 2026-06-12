@@ -4,14 +4,35 @@ import {
   listJiraProjects,
   getIssuesStatusCounts,
 } from "./jira";
+import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { logger } from "./logger";
-import { eq } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 
 const PORTFOLIO_PERIOD_DAYS = 180;
+let isPortfolioRecalculating = false;
+let portfolioRecalculationStartedAt: Date | null = null;
+let portfolioRecalculationFinishedAt: Date | null = null;
+let portfolioRecalculationLastError: string | null = null;
 
-async function processProject(p: { id: string; key: string; name: string }) {
+export interface PortfolioRecalculationStatus {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastCalculatedAt: string | null;
+  cachedProjects: number;
+  lastError: string | null;
+}
+
+async function processProject(
+  p: { id: string; key: string; name: string },
+  allowedIssueTypes: string[]
+) {
   try {
-    const counts = await getIssuesStatusCounts(p.id, PORTFOLIO_PERIOD_DAYS);
+    const counts = await getIssuesStatusCounts(
+      p.id,
+      PORTFOLIO_PERIOD_DAYS,
+      allowedIssueTypes
+    );
 
     return {
       projectId: p.id,
@@ -43,10 +64,19 @@ async function processProject(p: { id: string; key: string; name: string }) {
 }
 
 export async function calculateAndCachePortfolio() {
+  if (isPortfolioRecalculating) {
+    logger.info("Portfolio cache calculation already running, skipping duplicate trigger");
+    return;
+  }
+
+  isPortfolioRecalculating = true;
+  portfolioRecalculationStartedAt = new Date();
+  portfolioRecalculationLastError = null;
   logger.info("Starting portfolio cache calculation...");
   const startTime = Date.now();
 
   try {
+    const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
     const jiraProjects = await listJiraProjects();
     const portfolio: Array<Record<string, unknown>> = [];
 
@@ -57,7 +87,7 @@ export async function calculateAndCachePortfolio() {
       const results = await Promise.allSettled(
         batch.map((p) =>
           Promise.race<Record<string, unknown> | null>([
-            processProject(p),
+            processProject(p, allowedIssueTypes),
             new Promise<null>((resolve) =>
               setTimeout(() => resolve(null), 60000)
             ).then(() => {
@@ -110,9 +140,48 @@ export async function calculateAndCachePortfolio() {
     }
 
     const elapsed = Date.now() - startTime;
-    logger.info(`Portfolio cache calculated successfully in ${elapsed}ms (${portfolio.length} projects)`);
+    logger.info(
+      `Portfolio cache calculated successfully in ${elapsed}ms (${portfolio.length} projects)`
+    );
   } catch (err) {
+    portfolioRecalculationLastError = String(err);
     logger.error("Error calculating portfolio cache:", err);
+  } finally {
+    isPortfolioRecalculating = false;
+    portfolioRecalculationFinishedAt = new Date();
+  }
+}
+
+export async function getPortfolioRecalculationStatus(): Promise<PortfolioRecalculationStatus> {
+  try {
+    const [lastCalculated] = await db
+      .select({ calculatedAt: portfolioCacheTable.calculatedAt })
+      .from(portfolioCacheTable)
+      .orderBy(desc(portfolioCacheTable.calculatedAt))
+      .limit(1);
+
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(portfolioCacheTable);
+
+    return {
+      running: isPortfolioRecalculating,
+      startedAt: portfolioRecalculationStartedAt?.toISOString() ?? null,
+      finishedAt: portfolioRecalculationFinishedAt?.toISOString() ?? null,
+      lastCalculatedAt: lastCalculated?.calculatedAt?.toISOString() ?? null,
+      cachedProjects: countRow?.count ?? 0,
+      lastError: portfolioRecalculationLastError,
+    };
+  } catch (err) {
+    logger.error("Error getting portfolio recalculation status:", err);
+    return {
+      running: isPortfolioRecalculating,
+      startedAt: portfolioRecalculationStartedAt?.toISOString() ?? null,
+      finishedAt: portfolioRecalculationFinishedAt?.toISOString() ?? null,
+      lastCalculatedAt: null,
+      cachedProjects: 0,
+      lastError: portfolioRecalculationLastError ?? String(err),
+    };
   }
 }
 

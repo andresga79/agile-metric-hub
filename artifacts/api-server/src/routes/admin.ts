@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { db, usersTable, rolePermissionsTable, defaultMetricThresholdsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireAdmin, type AuthRequest } from "../middleware/auth";
+import {
+  getPortfolioAllowedIssueTypes,
+  updatePortfolioAllowedIssueTypes,
+} from "../lib/portfolio-metric-settings";
+import { getPortfolioRecalculationStatus } from "../lib/portfolio-cache";
 
 const VALID_ROLES = ["admin", "member", "viewer"] as const;
 const SECTIONS = ["team", "health", "analytics", "flow", "forecast", "report", "qa-rejected", "sprints", "kanban", "targets"] as const;
@@ -309,6 +314,57 @@ router.post("/admin/portfolio/recalculate", async (_req, res): Promise<void> => 
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /admin/portfolio/issue-types - current issue types used for portfolio calculations
+router.get("/admin/portfolio/issue-types", async (_req, res): Promise<void> => {
+  try {
+    const issueTypes = await getPortfolioAllowedIssueTypes();
+    res.json({ issueTypes });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /admin/portfolio/recalculate-status - runtime status and last cache timestamp
+router.get("/admin/portfolio/recalculate-status", async (_req, res): Promise<void> => {
+  try {
+    const status = await getPortfolioRecalculationStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// PUT /admin/portfolio/issue-types - update issue types and recalculate in background
+router.put("/admin/portfolio/issue-types", async (req, res): Promise<void> => {
+  try {
+    const { issueTypes } = req.body as { issueTypes?: string[] };
+    if (!Array.isArray(issueTypes) || issueTypes.some((value) => typeof value !== "string")) {
+      res.status(400).json({ error: "issueTypes must be an array of strings" });
+      return;
+    }
+
+    const authReq = req as AuthRequest;
+    const updatedIssueTypes = await updatePortfolioAllowedIssueTypes(
+      issueTypes,
+      authReq.user?.userId
+    );
+
+    res.json({
+      success: true,
+      issueTypes: updatedIssueTypes,
+      message: "Issue type filter updated. Portfolio recalculation started in background",
+    });
+
+    setImmediate(async () => {
+      const { calculateAndCachePortfolio } = await import("../lib/portfolio-cache");
+      await calculateAndCachePortfolio();
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
   }
 });
 

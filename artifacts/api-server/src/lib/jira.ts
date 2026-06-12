@@ -745,13 +745,18 @@ export interface StatusCounts {
 
 export async function getIssuesStatusCounts(
   projectId: string,
-  periodDays: number
+  periodDays: number,
+  allowedIssueTypes?: string[]
 ): Promise<StatusCounts> {
   if (!isJiraConfigured()) {
     return { total: 0, done: 0, inProgress: 0, todo: 0 };
   }
 
-  return withCache(`status:${projectId}:${periodDays}`, async () => {
+  const normalizedIssueTypes = (allowedIssueTypes ?? []).map((value) => mapIssueType(value));
+  normalizedIssueTypes.sort((a, b) => a.localeCompare(b));
+  const issueTypeKey = normalizedIssueTypes.length > 0 ? normalizedIssueTypes.join(",") : "all";
+
+  return withCache(`status:${projectId}:${periodDays}:${issueTypeKey}`, async () => {
     const since = new Date();
     since.setDate(since.getDate() - periodDays);
     const sinceStr = since.toISOString().split("T")[0];
@@ -760,6 +765,7 @@ export async function getIssuesStatusCounts(
     const maxResults = 100;
     const maxPages = 10;
     let pageToken: string | null = null;
+    const allowedTypeSet = new Set(normalizedIssueTypes);
 
     try {
       for (let page = 0; page < maxPages; page++) {
@@ -768,10 +774,15 @@ export async function getIssuesStatusCounts(
         );
         const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
         const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status${tokenParam}`
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status,issuetype${tokenParam}`
         );
         const pageIssues = result.issues ?? [];
         for (const issue of pageIssues) {
+          const issueType = mapIssueType(issue.fields.issuetype?.name ?? "");
+          if (allowedTypeSet.size > 0 && !allowedTypeSet.has(issueType)) {
+            continue;
+          }
+
           counts.total++;
           const key = issue.fields.status?.statusCategory?.key ?? "";
           if (key === "done") counts.done++;

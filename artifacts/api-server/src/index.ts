@@ -115,6 +115,23 @@ async function initDb() {
       );
     `);
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS portfolio_metric_settings (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL UNIQUE DEFAULT 'default',
+        allowed_issue_types TEXT[] NOT NULL,
+        updated_by INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await db.execute(sql`
+      INSERT INTO portfolio_metric_settings (key, allowed_issue_types)
+      VALUES ('default', ARRAY['Story', 'Task', 'Bug'])
+      ON CONFLICT (key) DO NOTHING;
+    `);
+
     // Clean stale cache entries from periods other than 30d
     await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
 

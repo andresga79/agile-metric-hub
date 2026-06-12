@@ -12,11 +12,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Pencil, Trash2, Shield, ShieldAlert, Save, Activity } from "lucide-react";
 import { useRolePermissions, type PermissionEntry } from "@/lib/project-section-permissions";
+import { useToast } from "@/hooks/use-toast";
 
 interface ThresholdRow {
   metric: string;
   goodValue: number;
   warningValue: number;
+}
+
+interface IssueTypeOption {
+  value: string;
+  label: string;
+}
+
+interface PortfolioRecalculationStatus {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastCalculatedAt: string | null;
+  cachedProjects: number;
+  lastError: string | null;
 }
 
 const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"];
@@ -33,8 +48,18 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   blocked: { label: "Issues Bloqueados", unit: "" },
 };
 
+const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
+  { value: "Story", label: "HU / Story" },
+  { value: "Task", label: "Task" },
+  { value: "Bug", label: "Bug" },
+  { value: "Epic", label: "Epic" },
+  { value: "Sub-task", label: "Sub-task" },
+  { value: "Spike", label: "Spike" },
+];
+
 export default function Admin() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useListAdminUsers();
   const createMutation = useCreateAdminUser();
@@ -51,6 +76,12 @@ export default function Admin() {
   const [thresholds, setThresholds] = useState<ThresholdRow[]>([]);
   const [thresholdsDirty, setThresholdsDirty] = useState(false);
   const [savingThresholds, setSavingThresholds] = useState(false);
+  const [allowedIssueTypes, setAllowedIssueTypes] = useState<string[]>([]);
+  const [issueTypesDirty, setIssueTypesDirty] = useState(false);
+  const [savingIssueTypes, setSavingIssueTypes] = useState(false);
+  const [newIssueType, setNewIssueType] = useState("");
+  const [issueTypeError, setIssueTypeError] = useState<string | null>(null);
+  const [recalculationStatus, setRecalculationStatus] = useState<PortfolioRecalculationStatus | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -69,6 +100,46 @@ export default function Admin() {
       })
       .catch(() => {});
   }, []);
+
+  const fetchPortfolioRecalculationStatus = useCallback(async () => {
+    const token = localStorage.getItem("auth_token");
+    try {
+      const response = await fetch("/api/admin/portfolio/recalculate-status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setRecalculationStatus(data);
+    } catch {
+      // Keep previous status if request fails
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    fetch("/api/admin/portfolio/issue-types", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data?.issueTypes)) {
+          setAllowedIssueTypes(data.issueTypes);
+        }
+      })
+      .catch(() => {});
+
+    fetchPortfolioRecalculationStatus();
+  }, [fetchPortfolioRecalculationStatus]);
+
+  useEffect(() => {
+    if (!recalculationStatus?.running) return;
+
+    const timer = setInterval(() => {
+      fetchPortfolioRecalculationStatus();
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [recalculationStatus?.running, fetchPortfolioRecalculationStatus]);
 
   const updateThreshold = (metric: string, field: "goodValue" | "warningValue", value: number) => {
     setThresholds((prev) => prev.map((t) => t.metric === metric ? { ...t, [field]: value } : t));
@@ -89,6 +160,95 @@ export default function Admin() {
     }
     setSavingThresholds(false);
     setThresholdsDirty(false);
+  };
+
+  const toggleIssueType = (issueType: string) => {
+    setIssueTypeError(null);
+    setAllowedIssueTypes((prev) => {
+      const exists = prev.some((i) => i.toLowerCase() === issueType.toLowerCase());
+      if (exists) {
+        if (prev.length === 1) {
+          setIssueTypeError("Debes mantener al menos un tipo de issue");
+          return prev;
+        }
+        setIssueTypesDirty(true);
+        return prev.filter((i) => i.toLowerCase() !== issueType.toLowerCase());
+      }
+
+      setIssueTypesDirty(true);
+      return [...prev, issueType];
+    });
+  };
+
+  const addCustomIssueType = () => {
+    const trimmed = newIssueType.trim();
+    if (!trimmed) return;
+
+    const exists = allowedIssueTypes.some((i) => i.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      setIssueTypeError("Ese tipo de issue ya esta agregado");
+      return;
+    }
+
+    setIssueTypeError(null);
+    setAllowedIssueTypes((prev) => [...prev, trimmed]);
+    setIssueTypesDirty(true);
+    setNewIssueType("");
+  };
+
+  const removeCustomIssueType = (issueType: string) => {
+    if (allowedIssueTypes.length === 1) {
+      setIssueTypeError("Debes mantener al menos un tipo de issue");
+      return;
+    }
+    setIssueTypeError(null);
+    setAllowedIssueTypes((prev) => prev.filter((i) => i.toLowerCase() !== issueType.toLowerCase()));
+    setIssueTypesDirty(true);
+  };
+
+  const saveIssueTypes = async () => {
+    const token = localStorage.getItem("auth_token");
+    setSavingIssueTypes(true);
+    setIssueTypeError(null);
+
+    try {
+      const response = await fetch("/api/admin/portfolio/issue-types", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ issueTypes: allowedIssueTypes }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        const errorMessage = data?.error ?? "No se pudo guardar la configuracion";
+        setIssueTypeError(errorMessage);
+        toast({
+          title: "No se pudo guardar",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (Array.isArray(data?.issueTypes)) {
+        setAllowedIssueTypes(data.issueTypes);
+      }
+      setIssueTypesDirty(false);
+      toast({
+        title: "Configuracion guardada",
+        description: "El recálculo de portfolio se inició en background.",
+      });
+      fetchPortfolioRecalculationStatus();
+    } catch {
+      setIssueTypeError("No se pudo guardar la configuracion");
+      toast({
+        title: "Error de red",
+        description: "No se pudo guardar la configuración de issue types.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingIssueTypes(false);
+    }
   };
 
   useEffect(() => {
@@ -170,6 +330,19 @@ export default function Admin() {
   const adminCount = users?.filter((u) => u.role === "admin").length ?? 0;
   const memberCount = users?.filter((u) => u.role === "member").length ?? 0;
   const viewerCount = users?.filter((u) => u.role === "viewer").length ?? 0;
+
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return "-";
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) return "-";
+    return dt.toLocaleString("es-ES", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -469,6 +642,116 @@ export default function Admin() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/40">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg">Filtro De Issue Types Para Portfolio</CardTitle>
+              <CardDescription>
+                Define que tipos de issue se consideran en los calculos de issue count, done, in progress y throughput.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${
+                  recalculationStatus?.running
+                    ? "bg-amber-500/15 text-amber-400"
+                    : "bg-emerald-500/15 text-emerald-400"
+                }`}
+              >
+                {recalculationStatus?.running ? "Recalculando" : "En espera"}
+              </span>
+              {issueTypesDirty && (
+                <button
+                  onClick={saveIssueTypes}
+                  disabled={savingIssueTypes}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  {savingIssueTypes ? t('common.loading') : "Guardar Y Recalcular"}
+                </button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {ISSUE_TYPE_OPTIONS.map((option) => {
+              const checked = allowedIssueTypes.some((i) => i.toLowerCase() === option.value.toLowerCase());
+              return (
+                <label
+                  key={option.value}
+                  className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm cursor-pointer hover:bg-accent/40"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleIssueType(option.value)}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={newIssueType}
+              onChange={(e) => setNewIssueType(e.target.value)}
+              placeholder="Agregar tipo custom (ej: Chore)"
+              className="w-full sm:max-w-xs bg-background border border-border rounded px-2 py-1.5 text-sm"
+            />
+            <button
+              onClick={addCustomIssueType}
+              className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded text-sm hover:bg-secondary/80"
+            >
+              Agregar
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {allowedIssueTypes.map((issueType) => {
+              const isPreset = ISSUE_TYPE_OPTIONS.some((opt) => opt.value.toLowerCase() === issueType.toLowerCase());
+              return (
+                <span
+                  key={issueType}
+                  className="inline-flex items-center gap-1 rounded bg-accent/50 px-2 py-1 text-xs"
+                >
+                  {issueType}
+                  {!isPreset && (
+                    <button
+                      onClick={() => removeCustomIssueType(issueType)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Quitar tipo"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+
+          {issueTypeError && <p className="text-xs text-destructive">{issueTypeError}</p>}
+
+          <div className="rounded border border-border bg-background/40 p-3 text-xs text-muted-foreground space-y-1">
+            <p>Estado: {recalculationStatus?.running ? "Recalculando portfolio" : "Sin recálculo en curso"}</p>
+            <p>Ultimo calculo completado: {formatDateTime(recalculationStatus?.lastCalculatedAt ?? null)}</p>
+            <p>Ultima ejecucion finalizada: {formatDateTime(recalculationStatus?.finishedAt ?? null)}</p>
+            <p>Proyectos cacheados: {recalculationStatus?.cachedProjects ?? 0}</p>
+            {recalculationStatus?.lastError && (
+              <p className="text-destructive">Ultimo error: {recalculationStatus.lastError}</p>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Al guardar se actualiza la configuracion y se lanza el recalculo de portfolio en background.
+          </p>
         </CardContent>
       </Card>
     </div>
