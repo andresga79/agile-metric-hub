@@ -40,6 +40,12 @@ interface KanbanMetricsResponse {
     totalCompletedIssues: number;
     totalCompletedStoryPoints: number;
   };
+  debug?: {
+    doneIssuesCount: number;
+    resolvedCount: number;
+    allDates: string[];
+    weekBreakdown: Array<{ week: string; count: number }>;
+  };
 }
 
 function getISOWeek(date: Date): { year: number; week: number; weekStart: string } {
@@ -147,6 +153,10 @@ router.get(
       (r): r is { issue: JiraIssue; resolvedAt: Date } => r.resolvedAt !== null
     );
 
+    // DEBUG: Log all resolution dates
+    const allResolutionDates = withResolved.map(r => r.resolvedAt.toISOString().split("T")[0]);
+    console.log(`DEBUG kanban: ${withResolved.length} issues with resolution dates:`, allResolutionDates.slice(0, 20));
+
     // Group by ISO week
     const weekMap = new Map<string, JiraIssue[]>();
     for (const { issue, resolvedAt } of withResolved) {
@@ -235,6 +245,12 @@ router.get(
         avgCycleTimeDays,
         totalCompletedIssues: recent.reduce((sum, w) => sum + w.totalIssues, 0),
         totalCompletedStoryPoints: recent.reduce((sum, w) => sum + w.totalStoryPoints, 0),
+      },
+      debug: {
+        doneIssuesCount: doneIssues.length,
+        resolvedCount: withResolved.length,
+        allDates: allResolutionDates,
+        weekBreakdown: Array.from(weekMap.entries()).map(([week, issues]) => ({ week, count: issues.length })),
       },
     };
 
