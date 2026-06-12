@@ -7,7 +7,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MetricTooltip } from "@/components/metric-tooltip";
-import { Activity, Target, Clock, CheckCircle2, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal } from "lucide-react";
+import { Activity, Target, Clock, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useMemo } from "react";
@@ -140,7 +140,6 @@ export default function Dashboard() {
 
   const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.throughput, 0);
   const totalWip = filteredPortfolio.reduce((s, p) => s + p.inProgressCount, 0);
-  const totalCompleted = filteredPortfolio.reduce((s, p) => s + p.doneCount, 0);
   const avgCycleP50 = (() => {
     const valid = visiblePortfolio.filter((p) => p.cycleTimeP50 !== null);
     if (valid.length === 0) return null;
@@ -181,7 +180,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.activeProjects')}<MetricTooltip description={t('tooltip.activeProjects')} /></CardTitle>
@@ -224,21 +223,6 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">{summary?.avgCycleTimeDisplay ?? formatDurationDays(summary?.avgCycleTime)}</div>
             )}
             <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.startToFinish')}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.issuesResolved')}<MetricTooltip description={t('tooltip.issuesResolved')} /></CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-16 mb-1" />
-            ) : (
-              <div className="text-2xl font-bold">{totalCompleted}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.allTime')}</p>
           </CardContent>
         </Card>
 
@@ -320,7 +304,7 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.dashboard.project')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.issuesResolved')}</TableHead>
+                    <TableHead className="text-right">{t('page.dashboard.issues')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.completed')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.wip')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.throughput')}</TableHead>

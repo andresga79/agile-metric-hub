@@ -77,6 +77,7 @@ async function getLightweightPortfolioMetrics(
   })();
 
   return {
+    resolvedCount: resolved.length,
     cycleTimeP50,
     leadTimeAvg: averageLeadTime,
   };
@@ -88,18 +89,13 @@ async function processProject(
 ) {
   try {
     const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS);
-    const allowedTypeSet = new Set(allowedIssueTypes.map((value) => mapIssueType(value)));
-    const filteredIssues = issues.filter((issue) => {
-      if (allowedTypeSet.size === 0) return true;
-      return allowedTypeSet.has(mapIssueType(issue.fields.issuetype?.name ?? ""));
-    });
-
-    const issueCount = filteredIssues.length;
-    const doneCount = filteredIssues.filter((issue) => isIssueDone(issue)).length;
-    const inProgressCount = filteredIssues.filter((issue) => isIssueInProgress(issue)).length;
-    const { cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
-      filteredIssues
+    const issueCount = issues.length;
+    const inProgressCount = issues.filter((issue) => isIssueInProgress(issue)).length;
+    const { resolvedCount, cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
+      issues
     );
+
+    const doneCount = resolvedCount;
 
     return {
       projectId: p.id,

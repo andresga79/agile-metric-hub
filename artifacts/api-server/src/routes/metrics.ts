@@ -47,8 +47,8 @@ function computePercentiles(
     const idx = k * (sorted.length - 1);
     const lo = Math.floor(idx);
     const hi = Math.ceil(idx);
-    if (lo === hi) return Math.round(sorted[lo] * 10) / 10;
-    return Math.round((sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo)) * 10) / 10;
+    if (lo === hi) return Math.round(sorted[lo] * 1000) / 1000;
+    return Math.round((sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo)) * 1000) / 1000;
   };
   return { p50: p(0.5), p75: p(0.75), p85: p(0.85), p95: p(0.95) };
 }
@@ -149,7 +149,7 @@ async function computeMetrics(
 
   const avg = (arr: number[]) =>
     arr.length > 0
-      ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10
+      ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 1000) / 1000
       : 0;
 
   const avgLeadTime = avg(leadTimes);
@@ -161,7 +161,8 @@ async function computeMetrics(
   const leadTimePercentiles = computePercentiles(sortedLT);
 
   const weeks = Math.max(1, Math.ceil(periodDays / 7));
-  const throughput = Math.round((resolved.length / weeks) * 10) / 10;
+  const throughput = resolved.length;
+  const deploymentFrequency = Math.round((resolved.length / weeks) * 10) / 10;
 
   // DORA: change failure rate = bugs / total resolved
   const bugIssues = resolved.filter((i) => isBugIssue(i));
@@ -177,7 +178,7 @@ async function computeMetrics(
   ).filter((v): v is number => v !== null);
   const mttr = avg(bugCycleTimes);
 
-  const doraClassification = classifyDora(throughput, avgLeadTime, cfr, mttr);
+  const doraClassification = classifyDora(deploymentFrequency, avgLeadTime, cfr, mttr);
 
   const resolvedMap = new Map<string, Date>(
     resolvedWithDates
@@ -236,7 +237,7 @@ async function computeMetrics(
     cycleTimePercentiles,
     leadTimePercentiles,
     dora: {
-      deploymentFrequency: throughput,
+      deploymentFrequency,
       leadTimeForChanges: avgLeadTime,
       changeFailureRate: cfr,
       mttr,
