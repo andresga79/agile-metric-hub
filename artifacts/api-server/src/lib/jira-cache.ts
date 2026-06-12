@@ -124,7 +124,7 @@ export async function warmCache(): Promise<void> {
                 setTimeout(() => {
                   logger.warn({ projectId: project.id }, "Warm cache project timeout, skipping");
                   resolve();
-                }, 60000)
+                }, 30000)
               ),
             ])
           )
