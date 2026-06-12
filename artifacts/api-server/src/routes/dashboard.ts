@@ -11,6 +11,7 @@ import { requireAuth } from "../middleware/auth";
 import { filterVisibleProjects } from "../lib/project-visibility";
 
 const router: IRouter = Router();
+const DASHBOARD_OVERVIEW_PERIOD_DAYS = 90;
 
 router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> => {
   const projects = await filterVisibleProjects(await listJiraProjects());
@@ -26,7 +27,7 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   const perProject = await Promise.all(
     projects.map(async (project) => {
       const [issues, boardType] = await Promise.all([
-        getJiraIssuesForProject(project.id, 30),
+        getJiraIssuesForProject(project.id, DASHBOARD_OVERVIEW_PERIOD_DAYS),
         getProjectBoardType(project.id),
       ]);
       return { project, issues, boardType };

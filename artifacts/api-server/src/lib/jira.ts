@@ -334,17 +334,34 @@ export async function getResolutionDate(
   const histories = issue.changelog?.histories ?? [];
   if (histories.length > 0) {
     const categoryMap = await getStatusCategoryMap();
-    const doneTransitions = histories
+    const statusTransitions = histories
       .filter((h) => h.items.some((it) => it.field === "status"))
       .map((h) => ({
         at: new Date(h.created).getTime(),
         to: h.items.find((it) => it.field === "status")?.toString ?? "",
-      }))
-      .filter((t) => categoryMap.get(t.to.trim().toLowerCase()) === "done");
+      }));
+
+    // Try first with category map, then fall back to regex pattern matching
+    let doneTransitions = statusTransitions.filter((t) => 
+      categoryMap.get(t.to.trim().toLowerCase()) === "done"
+    );
+
+    // If no matches using the category map, try regex pattern matching
+    if (doneTransitions.length === 0) {
+      doneTransitions = statusTransitions.filter((t) =>
+        /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(t.to.trim())
+      );
+    }
+
     if (doneTransitions.length > 0) {
       doneTransitions.sort((a, b) => b.at - a.at);
       return new Date(doneTransitions[0].at);
     }
+  }
+
+  // Fallback to updated date if issue is marked as done but has no explicit resolution date
+  if (issue.fields.updated) {
+    return new Date(issue.fields.updated);
   }
 
   return null;
@@ -380,9 +397,18 @@ export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null>
       }))
       .sort((a, b) => a.at - b.at);
 
-    const firstInProgress = transitions.find(
+    // Try first with category map for "indeterminate" (in progress)
+    let firstInProgress = transitions.find(
       (t) => categoryMap.get(t.to.trim().toLowerCase()) === "indeterminate"
     );
+
+    // If not found using category map, try regex pattern for in-progress statuses
+    if (!firstInProgress) {
+      firstInProgress = transitions.find((t) =>
+        /^(in progress|en progreso|en proceso|in development|en desarrollo|working|trabajando)$/i.test(t.to.trim())
+      );
+    }
+
     if (firstInProgress) {
       return (resolvedMs - firstInProgress.at) / (1000 * 60 * 60 * 24);
     }
@@ -671,7 +697,7 @@ export async function getJiraIssuesForProject(
 
       for (let page = 0; page < maxPages; page++) {
         const jql = encodeURIComponent(
-          `project = ${projectId} AND created >= "${sinceStr}" ORDER BY created DESC`
+          `project = ${projectId} AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY updated DESC`
         );
         const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
         const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(

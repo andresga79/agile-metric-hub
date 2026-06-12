@@ -2,13 +2,19 @@ import { db } from "@workspace/db";
 import { portfolioCacheTable } from "@workspace/db/schema";
 import {
   listJiraProjects,
-  getIssuesStatusCounts,
+  getJiraIssuesForProject,
+  getLeadTimeDays,
+  getCycleTimeDays,
+  getResolutionDate,
+  isIssueDone,
+  isIssueInProgress,
+  mapIssueType,
 } from "./jira";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { logger } from "./logger";
 import { desc, sql } from "drizzle-orm";
 
-const PORTFOLIO_PERIOD_DAYS = 180;
+const PORTFOLIO_METRICS_PERIOD_DAYS = 90;
 let isPortfolioRecalculating = false;
 let portfolioRecalculationStartedAt: Date | null = null;
 let portfolioRecalculationFinishedAt: Date | null = null;
@@ -23,27 +29,88 @@ export interface PortfolioRecalculationStatus {
   lastError: string | null;
 }
 
+async function getLightweightPortfolioMetrics(
+  issues: Awaited<ReturnType<typeof getJiraIssuesForProject>>
+) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - PORTFOLIO_METRICS_PERIOD_DAYS);
+
+  const resolvedWithDates = await Promise.all(
+    issues
+      .filter((issue) => isIssueDone(issue))
+      .map(async (issue) => ({
+        issue,
+        resolvedAt: await getResolutionDate(issue),
+      }))
+  );
+
+  const resolved = resolvedWithDates
+    .filter((entry) => entry.resolvedAt && entry.resolvedAt >= startDate)
+    .map((entry) => entry.issue);
+
+  const leadTimes = (
+    await Promise.all(resolved.map((issue) => getLeadTimeDays(issue)))
+  ).filter((value): value is number => value !== null);
+
+  const cycleTimes = (
+    await Promise.all(resolved.map((issue) => getCycleTimeDays(issue)))
+  ).filter((value): value is number => value !== null);
+
+  const averageLeadTime =
+    leadTimes.length > 0
+      ? Math.round(
+          (leadTimes.reduce((sum, value) => sum + value, 0) / leadTimes.length) * 10
+        ) / 10
+      : null;
+
+  const cycleTimeP50 = (() => {
+    if (cycleTimes.length === 0) return null;
+    const sorted = [...cycleTimes].sort((a, b) => a - b);
+    const idx = (sorted.length - 1) * 0.5;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    const value =
+      lo === hi
+        ? sorted[lo]
+        : sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
+    return Math.round(value * 10) / 10;
+  })();
+
+  return {
+    cycleTimeP50,
+    leadTimeAvg: averageLeadTime,
+  };
+}
+
 async function processProject(
   p: { id: string; key: string; name: string },
   allowedIssueTypes: string[]
 ) {
   try {
-    const counts = await getIssuesStatusCounts(
-      p.id,
-      PORTFOLIO_PERIOD_DAYS,
-      allowedIssueTypes
+    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS);
+    const allowedTypeSet = new Set(allowedIssueTypes.map((value) => mapIssueType(value)));
+    const filteredIssues = issues.filter((issue) => {
+      if (allowedTypeSet.size === 0) return true;
+      return allowedTypeSet.has(mapIssueType(issue.fields.issuetype?.name ?? ""));
+    });
+
+    const issueCount = filteredIssues.length;
+    const doneCount = filteredIssues.filter((issue) => isIssueDone(issue)).length;
+    const inProgressCount = filteredIssues.filter((issue) => isIssueInProgress(issue)).length;
+    const { cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
+      filteredIssues
     );
 
     return {
       projectId: p.id,
       projectKey: p.key,
       projectName: p.name,
-      issueCount: counts.total,
-      doneCount: counts.done,
-      inProgressCount: counts.inProgress,
-      throughput: counts.done,  // Simplified: throughput = done count from period
-      cycleTimeP50: null,  // Skip expensive calculations
-      leadTimeAvg: null,   // Skip expensive calculations
+      issueCount,
+      doneCount,
+      inProgressCount,
+      throughput: doneCount,
+      cycleTimeP50,
+      leadTimeAvg,
       error: null,
     };
   } catch (err) {
@@ -80,8 +147,8 @@ export async function calculateAndCachePortfolio() {
     const jiraProjects = await listJiraProjects();
     const portfolio: Array<Record<string, unknown>> = [];
 
-    // Process in batches of 10 to manage load
-    const batchSize = 10;
+    // Keep concurrency low so Jira searches don't trip the upstream 30s abort.
+    const batchSize = 3;
     for (let i = 0; i < jiraProjects.length; i += batchSize) {
       const batch = jiraProjects.slice(i, i + batchSize);
       const results = await Promise.allSettled(
@@ -89,7 +156,7 @@ export async function calculateAndCachePortfolio() {
           Promise.race<Record<string, unknown> | null>([
             processProject(p, allowedIssueTypes),
             new Promise<null>((resolve) =>
-              setTimeout(() => resolve(null), 60000)
+              setTimeout(() => resolve(null), 15000)
             ).then(() => {
               return {
                 projectId: p.id,
