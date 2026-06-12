@@ -42,13 +42,23 @@ interface KanbanMetricsResponse {
   };
 }
 
-function getWeekStart(date: Date): string {
+function getISOWeek(date: Date): { year: number; week: number; weekStart: string } {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0]!;
+  // Use same ISO calculation as analytics.ts for consistency
+  const temp = new Date(d.valueOf());
+  temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
+  const year = temp.getFullYear();
+  const week = Math.floor((temp.getTime() - new Date(year, 0, 4).getTime()) / 604800000) + 1;
+  
+  // Calculate Monday of this ISO week: subtract days since Monday
+  // dayNum: 0=Monday, 1=Tuesday, ..., 6=Sunday
+  const dayNum = (d.getDay() + 6) % 7;
+  const monday = new Date(d.valueOf());
+  monday.setDate(monday.getDate() - dayNum);
+  const weekStartStr = monday.toISOString().split("T")[0]!;
+  
+  return { year, week, weekStart: weekStartStr };
 }
 
 function formatWeekLabel(weekStartStr: string): string {
@@ -89,14 +99,15 @@ router.get(
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.id, i])).values());
     const doneIssues = uniqueIssues.filter((i) => isIssueDone(i));
 
-    // Generate week buckets for the entire period, even if no issues were done
+    // Generate week buckets using ISO weeks for consistency with analytics
     const emptyWeeks: WeekMetric[] = [];
     const now = new Date();
-    for (let i = 0; i < maxWeeks; i++) {
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1 - i * 7);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekStartStr = weekStart.toISOString().split("T")[0]!;
+    const startISO = getISOWeek(new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000));
+    const endISO = getISOWeek(now);
+    
+    let currentDate = new Date(startISO.weekStart);
+    while (currentDate <= new Date(endISO.weekStart)) {
+      const weekStartStr = currentDate.toISOString().split("T")[0]!;
       emptyWeeks.push({
         weekStart: weekStartStr,
         weekLabel: formatWeekLabel(weekStartStr),
@@ -106,8 +117,8 @@ router.get(
         reopenedCount: 0,
         breakdown: { Story: 0, Bug: 0, Task: 0, Epic: 0, Other: 0 },
       });
+      currentDate.setDate(currentDate.getDate() + 7);
     }
-    emptyWeeks.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
 
     if (doneIssues.length === 0) {
       const response: KanbanMetricsResponse = {
@@ -139,7 +150,8 @@ router.get(
     // Group by ISO week
     const weekMap = new Map<string, JiraIssue[]>();
     for (const { issue, resolvedAt } of withResolved) {
-      const weekStart = getWeekStart(resolvedAt);
+      const isoInfo = getISOWeek(resolvedAt);
+      const weekStart = isoInfo.weekStart;
       const existing = weekMap.get(weekStart) ?? [];
       existing.push(issue);
       weekMap.set(weekStart, existing);
