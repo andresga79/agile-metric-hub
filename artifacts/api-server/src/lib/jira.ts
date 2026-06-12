@@ -7,17 +7,25 @@ import {
 } from "./jira-cache";
 
 const ISSUE_TYPE_MAP: Record<string, string> = {
+  // English
   story: "Story",
-  historia: "Story",
+  "user story": "Story",
   bug: "Bug",
-  problema: "Bug",
-  error: "Bug",
   defect: "Bug",
   task: "Task",
+  subtask: "Task",
+  "sub-task": "Task",
+  epic: "Epic",
+  // Spanish
+  historia: "Story",
+  "historia de usuario": "Story",
+  problema: "Bug",
+  error: "Bug",
   tarea: "Task",
+  subtarea: "Task",
+  "sub-tarea": "Task",
   "tarea técnica": "Task",
   "tarea tecnica": "Task",
-  epic: "Epic",
   épica: "Epic",
   epica: "Epic",
 };
@@ -675,13 +683,19 @@ export async function getSprintIssues(
 
 export async function getJiraIssuesForProject(
   projectId: string,
-  periodDays: number
+  periodDays: number,
+  options?: { includeChangelog?: boolean }
 ): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) {
     return getMockIssues(projectId);
   }
 
-  return withCache(issuesCacheKey(projectId, periodDays), async () => {
+  const includeChangelog = options?.includeChangelog === true;
+  const cacheKey = includeChangelog
+    ? `${issuesCacheKey(projectId, periodDays)}:changelog`
+    : issuesCacheKey(projectId, periodDays);
+
+  return withCache(cacheKey, async () => {
     const since = new Date();
     since.setDate(since.getDate() - periodDays);
     const sinceStr = since.toISOString().split("T")[0];
@@ -700,8 +714,9 @@ export async function getJiraIssuesForProject(
           `project = ${projectId} AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY updated DESC`
         );
         const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
+        const expandParam = includeChangelog ? "&expand=changelog" : "";
         const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${tokenParam}`
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${tokenParam}`
         );
         const pageIssues = result.issues ?? [];
         allIssues.push(...pageIssues);

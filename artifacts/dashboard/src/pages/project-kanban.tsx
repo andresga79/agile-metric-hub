@@ -9,9 +9,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 type Period = "1m" | "3m" | "6m";
 
-function days(value: number | null): string {
+function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
-  return `${value.toFixed(1)}d`;
+  const totalMinutes = Math.round(value * 24 * 60);
+  if (totalMinutes < 60) return `${Math.max(1, totalMinutes)}m`;
+  if (totalMinutes < 24 * 60) return `${Math.round(totalMinutes / 60)}h`;
+  return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
 }
 
 export default function ProjectKanban() {
@@ -111,7 +114,7 @@ export default function ProjectKanban() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{days(summary?.avgCycleTimeDays ?? null)}</div>
+                <div className="text-3xl font-bold">{formatDurationDays(summary?.avgCycleTimeDays ?? null)}</div>
                 <p className="text-xs text-muted-foreground mt-1">{t('page.kanban.daysStartToDone')}</p>
               </CardContent>
             </Card>
@@ -173,7 +176,6 @@ export default function ProjectKanban() {
                     <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.kanban.week')}</TableHead>
                     <TableHead className="text-right">{t('page.kanban.issuesDone')}</TableHead>
-                    <TableHead className="text-right">{t('page.kanban.throughput')}</TableHead>
                     <TableHead className="text-right">{t('page.kanban.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.kanban.reopened')}</TableHead>
                     <TableHead className="text-right">{t('page.kanban.breakdown')}</TableHead>
@@ -183,19 +185,19 @@ export default function ProjectKanban() {
                     {[...weeks].reverse().map((w) => (
                       <TableRow key={w.weekStart} className="border-border hover:bg-accent/50">
                         <TableCell className="font-medium">{w.weekLabel}</TableCell>
-                        <TableCell className="text-right font-mono">{w.totalIssues}</TableCell>
                         <TableCell className="text-right font-mono font-bold">{w.totalIssues}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{days(w.avgCycleTimeDays)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatDurationDays(w.avgCycleTimeDays)}</TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {w.reopenedCount > 0 ? (
                             <span className="text-red-400">{w.reopenedCount}</span>
                           ) : "—"}
                         </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">
-                          <span className="text-blue-400">{w.breakdown.Story}</span>S /
-                          <span className="text-red-400">{w.breakdown.Bug}</span>B /
-                          <span className="text-green-400">{w.breakdown.Task}</span>T /
+                          <span className="text-blue-400">{w.breakdown.Story}</span>S /
+                          <span className="text-red-400">{w.breakdown.Bug}</span>B /
+                          <span className="text-green-400">{w.breakdown.Task}</span>T /
                           <span className="text-purple-400">{w.breakdown.Epic}</span>E
+                          {w.breakdown.Other > 0 && <> / <span className="text-muted-foreground">{w.breakdown.Other}</span>+</>}
                         </TableCell>
                       </TableRow>
                     ))}

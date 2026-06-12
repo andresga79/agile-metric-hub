@@ -77,7 +77,15 @@ async function computeTimeInStatus(
 
   for (const issue of issues) {
     const histories = issue.changelog?.histories ?? [];
-    if (histories.length === 0) continue;
+    const created = new Date(issue.fields.created).getTime();
+    const endTime = isIssueDone(issue)
+      ? (await getResolutionDate(issue))?.getTime() ?? Date.now()
+      : Date.now();
+
+    if (histories.length === 0) {
+      addTime(issue.fields.status.name, issue.key, (endTime - created) / (1000 * 60 * 60 * 24));
+      continue;
+    }
 
     const transitions = histories
       .filter((h) => h.items.some((it) => it.field === "status"))
@@ -89,9 +97,11 @@ async function computeTimeInStatus(
       .filter((t) => t.from || t.to)
       .sort((a, b) => a.at.getTime() - b.at.getTime());
 
-    if (transitions.length === 0) continue;
+    if (transitions.length === 0) {
+      addTime(issue.fields.status.name, issue.key, (endTime - created) / (1000 * 60 * 60 * 24));
+      continue;
+    }
 
-    const created = new Date(issue.fields.created).getTime();
     let prevTime = created;
 
     for (const t of transitions) {
@@ -101,13 +111,8 @@ async function computeTimeInStatus(
       prevTime = t.at.getTime();
     }
 
-    const lastTo = transitions[transitions.length - 1]!.to;
-    if (lastTo) {
-      const endTime = isIssueDone(issue)
-        ? (await getResolutionDate(issue))?.getTime() ?? Date.now()
-        : Date.now();
-      addTime(lastTo, issue.key, (endTime - prevTime) / (1000 * 60 * 60 * 24));
-    }
+    const lastTo = transitions[transitions.length - 1]!.to || issue.fields.status.name;
+    addTime(lastTo, issue.key, (endTime - prevTime) / (1000 * 60 * 60 * 24));
   }
 
   const entries: TimeInStatusEntry[] = [];
@@ -247,14 +252,17 @@ router.get(
       await clearCache(issuesCacheKey(projectId, periodDays));
     }
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
+    const issues = await getJiraIssuesForProject(projectId, periodDays, {
+      includeChangelog: true,
+    });
+    const uniqueIssues = Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
 
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
-    const metrics = await computePeriodMetrics(issues, startDate);
+    const metrics = await computePeriodMetrics(uniqueIssues, startDate);
 
     // --- WIP Aging Report (#2) ---
-    const inProgressIssues = issues.filter((i) => isIssueInProgress(i));
+    const inProgressIssues = uniqueIssues.filter((i) => isIssueInProgress(i));
     const wipAging = await Promise.all(
       inProgressIssues.map(async (i) => {
         const histories = i.changelog?.histories ?? [];
@@ -279,9 +287,12 @@ router.get(
           }
         }
 
-        const daysInProgress = enteredInProgress
-          ? Math.round((Date.now() - enteredInProgress.getTime()) / (1000 * 60 * 60 * 24) * 10) / 10
-          : null;
+        const fallbackStart = new Date(i.fields.created);
+        const effectiveStart = enteredInProgress ?? fallbackStart;
+        const daysInProgress = Math.max(
+          0,
+          Math.round(((Date.now() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) * 10) / 10
+        );
 
         return {
           id: i.id,
@@ -292,16 +303,17 @@ router.get(
           priority: i.fields.priority.name,
           daysInProgress,
           alertLevel: getAlertLevel(daysInProgress),
-          enteredDate: enteredInProgress?.toISOString() ?? null,
+          enteredDate: enteredInProgress?.toISOString() ?? fallbackStart.toISOString(),
         };
       })
     );
 
     wipAging.sort((a, b) => (b.daysInProgress ?? 0) - (a.daysInProgress ?? 0));
+    const wipAgingTop = wipAging.slice(0, 10);
 
     // --- Blocked Time Analysis (#7) ---
     const blockedData = await Promise.all(
-      issues.map(async (i) => {
+      uniqueIssues.map(async (i) => {
         const histories = i.changelog?.histories ?? [];
         let totalBlockedMs = 0;
         let blockedStart: number | null = null;
@@ -348,7 +360,7 @@ router.get(
       });
 
     // --- Time in Status (#9) ---
-    const timeInStatus = await computeTimeInStatus(issues);
+    const timeInStatus = await computeTimeInStatus(uniqueIssues);
 
     // --- Period-over-Period (#3) ---
     let previousPeriod: any = null;
@@ -371,7 +383,7 @@ router.get(
       compareTo,
       fetchedAt: cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null,
       ...metrics,
-      wipAging,
+      wipAging: wipAgingTop,
       blockedIssues,
       timeInStatus,
       previousPeriod,
