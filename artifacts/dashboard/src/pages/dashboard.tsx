@@ -18,6 +18,14 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 
+function formatDurationDays(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const totalMinutes = Math.round(value * 24 * 60);
+  if (totalMinutes < 60) return `${Math.max(1, totalMinutes)}m`;
+  if (totalMinutes < 24 * 60) return `${Math.round(totalMinutes / 60)}h`;
+  return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
+}
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
@@ -132,10 +140,16 @@ export default function Dashboard() {
 
   const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.throughput, 0);
   const totalWip = filteredPortfolio.reduce((s, p) => s + p.inProgressCount, 0);
+  const totalCompleted = filteredPortfolio.reduce((s, p) => s + p.doneCount, 0);
   const avgCycleP50 = (() => {
     const valid = visiblePortfolio.filter((p) => p.cycleTimeP50 !== null);
     if (valid.length === 0) return null;
     return valid.reduce((s, p) => s + p.cycleTimeP50, 0) / valid.length;
+  })();
+  const avgLeadTime = (() => {
+    const valid = visiblePortfolio.filter((p) => p.leadTimeAvg !== null);
+    if (valid.length === 0) return null;
+    return valid.reduce((s, p) => s + p.leadTimeAvg, 0) / valid.length;
   })();
 
   return (
@@ -207,7 +221,7 @@ export default function Dashboard() {
             {isLoading ? (
               <Skeleton className="h-8 w-20 mb-1" />
             ) : (
-              <div className="text-2xl font-bold">{summary?.avgCycleTime.toFixed(1)}d</div>
+              <div className="text-2xl font-bold">{summary?.avgCycleTimeDisplay ?? formatDurationDays(summary?.avgCycleTime)}</div>
             )}
             <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.startToFinish')}</p>
           </CardContent>
@@ -222,7 +236,7 @@ export default function Dashboard() {
             {isLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <div className="text-2xl font-bold">{summary?.totalIssuesResolved}</div>
+              <div className="text-2xl font-bold">{totalCompleted}</div>
             )}
             <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.allTime')}</p>
           </CardContent>
@@ -254,7 +268,10 @@ export default function Dashboard() {
             ) : (
               <div className="text-2xl font-bold">{totalWip}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">{avgCycleP50 !== null ? `${t('page.dashboard.cycleTimeP50')} ${avgCycleP50.toFixed(1)}d` : "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {avgCycleP50 !== null ? `${t('page.dashboard.cycleTimeP50')} ${formatDurationDays(avgCycleP50)}` : "—"}
+              {avgLeadTime !== null ? ` · ${t('page.dashboard.leadTime')} ${formatDurationDays(avgLeadTime)}` : ""}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -303,7 +320,7 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.dashboard.project')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.issues')}</TableHead>
+                    <TableHead className="text-right">{t('page.dashboard.issuesResolved')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.completed')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.wip')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.throughput')}</TableHead>
@@ -327,8 +344,8 @@ export default function Dashboard() {
                       <TableCell className="text-right font-mono text-xs text-green-400">{p.doneCount}</TableCell>
                       <TableCell className="text-right font-mono text-xs text-amber-400">{p.inProgressCount}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{p.throughput}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{p.cycleTimeP50 !== null ? `${p.cycleTimeP50.toFixed(1)}d` : "—"}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{p.leadTimeAvg !== null ? `${p.leadTimeAvg}d` : "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.cycleTimeP50)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.leadTimeAvg)}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors">

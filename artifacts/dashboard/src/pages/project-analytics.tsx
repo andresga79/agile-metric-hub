@@ -10,6 +10,14 @@ import { DrillDownModal } from "@/components/drill-down-modal";
 
 type Period = "1m" | "3m" | "6m";
 
+function formatDurationDays(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const totalMinutes = Math.round(value * 24 * 60);
+  if (totalMinutes < 60) return `${Math.max(1, totalMinutes)}m`;
+  if (totalMinutes < 24 * 60) return `${Math.round(totalMinutes / 60)}h`;
+  return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
+}
+
 const COLORS = ["hsl(var(--primary))", "hsl(142, 76%, 45%)", "hsl(35, 85%, 55%)", "hsl(0, 70%, 50%)", "hsl(270, 60%, 60%)"];
 
 export default function ProjectAnalytics() {
@@ -159,8 +167,8 @@ export default function ProjectAnalytics() {
                 <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold">{data.flowEfficiency}%</span>
               </div>
               <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                <span>{t('page.analytics.avgCycle')} <strong className="text-foreground">{data.avgCycleTime !== null ? `${data.avgCycleTime.toFixed(1)}d` : "—"}</strong></span>
-                <span>{t('page.analytics.avgLead')} <strong className="text-foreground">{data.avgLeadTime !== null ? `${data.avgLeadTime.toFixed(1)}d` : "—"}</strong></span>
+                <span>{t('page.analytics.avgCycle')} <strong className="text-foreground">{formatDurationDays(data.avgCycleTime)}</strong></span>
+                <span>{t('page.analytics.avgLead')} <strong className="text-foreground">{formatDurationDays(data.avgLeadTime)}</strong></span>
               </div>
             </div>
           ) : (

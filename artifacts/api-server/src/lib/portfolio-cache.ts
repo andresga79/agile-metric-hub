@@ -14,7 +14,7 @@ import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { logger } from "./logger";
 import { desc, sql } from "drizzle-orm";
 
-const PORTFOLIO_METRICS_PERIOD_DAYS = 90;
+const PORTFOLIO_METRICS_PERIOD_DAYS = 30;
 let isPortfolioRecalculating = false;
 let portfolioRecalculationStartedAt: Date | null = null;
 let portfolioRecalculationFinishedAt: Date | null = null;

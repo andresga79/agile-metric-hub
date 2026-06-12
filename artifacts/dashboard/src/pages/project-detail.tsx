@@ -21,6 +21,14 @@ import {
 
 type Period = "1m" | "3m" | "6m";
 
+function formatDurationDays(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const totalMinutes = Math.round(value * 24 * 60);
+  if (totalMinutes < 60) return `${Math.max(1, totalMinutes)}m`;
+  if (totalMinutes < 24 * 60) return `${Math.round(totalMinutes / 60)}h`;
+  return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
+}
+
 export default function ProjectDetail() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -389,10 +397,10 @@ function MetricCard({
             {trend && <div className="mt-1">{trend}</div>}
             {percentiles && (
               <div className="flex gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
-                <span>P50 <strong className="text-foreground">{percentiles.p50.toFixed(1)}d</strong></span>
-                <span>P75 <strong className="text-foreground">{percentiles.p75.toFixed(1)}d</strong></span>
-                <span>P85 <strong className="text-foreground">{percentiles.p85.toFixed(1)}d</strong></span>
-                <span>P95 <strong className="text-foreground">{percentiles.p95.toFixed(1)}d</strong></span>
+                <span>P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong></span>
+                <span>P75 <strong className="text-foreground">{formatDurationDays(percentiles.p75)}</strong></span>
+                <span>P85 <strong className="text-foreground">{formatDurationDays(percentiles.p85)}</strong></span>
+                <span>P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong></span>
               </div>
             )}
             {info.targetVal !== null && info.onTrack !== null && info.actual !== null && info.actual !== undefined && (
