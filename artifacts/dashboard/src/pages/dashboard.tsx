@@ -460,15 +460,15 @@ export default function Dashboard() {
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.dashboard.project')}</TableHead>
                     <TableHead className="text-right">
-                      Flow Load <MetricTooltip description="WIP en progreso / Issues completadas (90d). Menor = flujo mas sano." />
+                      Carga activa <MetricTooltip description="WIP en progreso / Issues completadas (90d). Un valor mayor a 1x indica que se acumula más trabajo del que sale." />
                     </TableHead>
                     <TableHead className="text-right">
-                      {t('page.dashboard.cycleTime')} <MetricTooltip description={t('tooltip.avgCycleTime')} />
+                      Tiempo en proceso <MetricTooltip description="Mediana del tiempo que tarda una tarea desde que se empieza hasta que se termina (Cycle Time P50)." />
                     </TableHead>
                     <TableHead className="text-right">
-                      {t('page.dashboard.leadTime')} <MetricTooltip description="Tiempo promedio desde creacion hasta completado." />
+                      Tiempo hasta cierre <MetricTooltip description="Promedio del tiempo desde que se crea una tarea hasta que se entrega (Lead Time Avg)." />
                     </TableHead>
-                    <TableHead className="text-right">Entrega (90d)</TableHead>
+                    <TableHead className="text-right">Entregas · En curso</TableHead>
                     <TableHead>Accion sugerida</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
