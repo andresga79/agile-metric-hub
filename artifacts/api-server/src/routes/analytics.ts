@@ -263,13 +263,12 @@ router.get(
     ]);
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
-    // Issue type filter only applies to portfolio-level metrics (throughput, cycle time, etc.)
-    // WIP aging, blocked time, and time in status use ALL issues regardless of type
-    const portfolioIssues = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-    const metrics = await computePeriodMetrics(portfolioIssues, startDate);
-
     // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+
+    // Issue type filter only applies to portfolio-level comparison.
+    // On the project detail page, ALL issue types are included for metrics.
+    const metrics = await computePeriodMetrics(uniqueIssues, startDate);
 
     // --- WIP Aging Report (#2) ---
     const inProgressIssues = uniqueIssues.filter((i) => isIssueInProgress(i));
