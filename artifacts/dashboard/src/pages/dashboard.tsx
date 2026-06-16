@@ -314,11 +314,6 @@ export default function Dashboard() {
     });
   }, [filteredPortfolio, avgCycleP50, avgLeadTime, thresholds]);
 
-  const topAttention = useMemo(
-    () => [...enrichedPortfolio].sort((a, b) => b.attentionPriority - a.attentionPriority).slice(0, 5),
-    [enrichedPortfolio]
-  );
-
   return (
     <div className="space-y-8">
       {isMockData && (
@@ -459,110 +454,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="bg-card/40 lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Salud por dimension</CardTitle>
-            <CardDescription>Flujo · Cycle Time · Lead Time · Entrega — valor real y referencia por proyecto</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {enrichedPortfolio.length === 0 && (
-              <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">Sin proyectos para evaluar.</div>
-            )}
-            {enrichedPortfolio.slice(0, 6).map((p) => (
-              <div key={p.id} className="rounded-md border border-border p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline">
-                    {p.name}
-                  </Link>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        p.semaphor === "Rojo"
-                          ? "bg-red-500/15 text-red-400"
-                          : p.semaphor === "Amarillo"
-                            ? "bg-yellow-500/15 text-yellow-300"
-                            : "bg-green-500/15 text-green-400"
-                      }`}
-                    >
-                      {p.semaphor}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{p.suggestedAction}</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-1">
-                  {p.dims.map((d: HealthDimension) => (
-                    <div
-                      key={d.key}
-                      className={`rounded p-2 text-xs border ${
-                        d.status === "fail"
-                          ? "border-red-500/30 bg-red-500/5"
-                          : d.status === "warn"
-                            ? "border-yellow-500/30 bg-yellow-500/5"
-                            : "border-border bg-card/50"
-                      }`}
-                    >
-                      <div className="text-muted-foreground font-medium mb-1">{d.label}</div>
-                      <div className={`font-mono font-semibold ${
-                        d.status === "fail" ? "text-red-400" : d.status === "warn" ? "text-yellow-300" : "text-green-400"
-                      }`}>
-                        {dimStatusIcon(d.status)} {d.value}
-                      </div>
-                      <div className="text-muted-foreground/70 mt-0.5">{d.ref}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/40">
-          <CardHeader>
-            <CardTitle>Top 5 Atencion</CardTitle>
-            <CardDescription>Prioridad por severidad de alertas explicitas</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {topAttention.map((p) => (
-              <div key={p.id} className="rounded-md border border-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline">
-                    {p.name}
-                  </Link>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-medium ${
-                      p.semaphor === "Rojo"
-                        ? "bg-red-500/15 text-red-400"
-                        : p.semaphor === "Amarillo"
-                          ? "bg-yellow-500/15 text-yellow-300"
-                          : "bg-green-500/15 text-green-400"
-                    }`}
-                  >
-                    {p.semaphor}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">{p.suggestedAction}</div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {p.dims.filter((d: HealthDimension) => d.status !== "ok").map((d: HealthDimension) => (
-                    <span
-                      key={d.key}
-                      className={`rounded px-1.5 py-0.5 text-xs ${
-                        d.status === "fail" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-300"
-                      }`}
-                    >
-                      {dimStatusIcon(d.status)} {d.label}: {d.value}
-                    </span>
-                  ))}
-                  {p.dims.every((d: HealthDimension) => d.status === "ok") && (
-                    <span className="text-xs text-green-400">✓ Todo en orden</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="bg-card/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -626,7 +517,7 @@ export default function Dashboard() {
                             p.semaphor === "Rojo"
                               ? "bg-red-500/15 text-red-400"
                               : p.semaphor === "Amarillo"
-                                ? "bg-yellow-500/15 text-yellow-300"
+                                ? "bg-amber-100 text-amber-800 dark:bg-yellow-500/15 dark:text-yellow-300"
                                 : "bg-green-500/15 text-green-400"
                           }`}
                         >
@@ -639,7 +530,9 @@ export default function Dashboard() {
                             <span
                               key={d.key}
                               className={`rounded px-1.5 py-0.5 ${
-                                d.status === "fail" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-300"
+                                d.status === "fail"
+                                  ? "bg-red-500/10 text-red-400"
+                                  : "bg-amber-100 text-amber-800 dark:bg-yellow-500/10 dark:text-yellow-300"
                               }`}
                             >
                               {dimStatusIcon(d.status)} {d.label}: {d.value}
