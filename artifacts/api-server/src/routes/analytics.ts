@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache";
 import {
   getJiraIssuesForProject,
+  getEffectiveIssueType,
   periodToDays,
   isIssueDone,
   isIssueInProgress,
@@ -13,6 +14,7 @@ import {
   getStatusCategoryMap,
   type JiraIssue,
 } from "../lib/jira";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -252,13 +254,20 @@ router.get(
       await clearCache(issuesCacheKey(projectId, periodDays));
     }
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays, {
-      includeChangelog: true,
-    });
-    const uniqueIssues = Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
-
+    const [issues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
+        logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
+        return [] as JiraIssue[];
+      }),
+      getPortfolioAllowedIssueTypes(),
+    ]);
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
+    // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
+    const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+
+    // Issue type filter only applies to portfolio-level comparison.
+    // On the project detail page, ALL issue types are included for metrics.
     const metrics = await computePeriodMetrics(uniqueIssues, startDate);
 
     // --- WIP Aging Report (#2) ---
@@ -367,11 +376,13 @@ router.get(
     if (compareTo) {
       const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
       const prevEndDate = new Date(startDate.getTime());
-      const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2);
-      const prevFiltered = prevIssues.filter((i) => {
-        const created = new Date(i.fields.created);
-        return created >= prevStartDate && created < prevEndDate;
-      });
+      const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2).catch(() => [] as JiraIssue[]);
+      const prevFiltered = prevIssues
+        .filter((i) => {
+          const created = new Date(i.fields.created);
+          return created >= prevStartDate && created < prevEndDate;
+        })
+        .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
       if (prevFiltered.length > 0) {
         previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate);
       }

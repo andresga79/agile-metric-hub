@@ -1,14 +1,7 @@
 import { Router, type IRouter } from "express";
-import {
-  listJiraProjects,
-  getJiraIssuesForProject,
-  getProjectBoardType,
-  isIssueDone,
-  getStoryPoints,
-  isJiraConfigured,
-} from "../lib/jira";
-import { requireAuth } from "../middleware/auth";
-import { filterVisibleProjects } from "../lib/project-visibility";
+import { db, portfolioCacheTable, userProjectSettingsTable } from "@workspace/db";
+import { desc, sql } from "drizzle-orm";
+import { requireAuth, type AuthRequest } from "../middleware/auth";
 
 const router: IRouter = Router();
 const DASHBOARD_OVERVIEW_PERIOD_DAYS = 30;
@@ -20,106 +13,53 @@ function formatDurationDays(value: number): string {
   return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
 }
 
-router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> => {
-  const projects = await filterVisibleProjects(await listJiraProjects());
+router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> => {
+  const authReq = req as AuthRequest;
+  const userId = authReq.user!.userId;
 
-  let totalResolved = 0;
-  let totalVelocity = 0;
-  let scrumProjectCount = 0;
-  let totalCycleTime = 0;
-  let totalLeadTime = 0;
-  let cycleTimeCount = 0;
-  let leadTimeCount = 0;
-  let totalWip = 0;
-  let topProject: string | null = null;
-  let topProjectResolved = 0;
+  const userSettings = await db
+    .select({ projectId: userProjectSettingsTable.projectId })
+    .from(userProjectSettingsTable)
+    .where(
+      sql`${userProjectSettingsTable.userId} = ${userId} AND ${userProjectSettingsTable.visible} = false`
+    );
+  const hiddenIds = new Set(userSettings.map((s) => s.projectId));
 
-  const perProject = await Promise.all(
-    projects.map(async (project) => {
-      const [issues, boardType] = await Promise.all([
-        getJiraIssuesForProject(project.id, DASHBOARD_OVERVIEW_PERIOD_DAYS),
-        getProjectBoardType(project.id),
-      ]);
-      return { project, issues, boardType };
-    })
-  );
+  const cached = await db
+    .select()
+    .from(portfolioCacheTable)
+    .orderBy(desc(portfolioCacheTable.throughput));
 
-  for (const { project, issues, boardType } of perProject) {
-    const resolved = issues.filter((i) => isIssueDone(i));
-    const wip = issues.filter((i) => i.fields.status.statusCategory?.key === "indeterminate");
+  const visible = hiddenIds.size > 0
+    ? cached.filter((p) => !hiddenIds.has(p.projectId))
+    : cached;
 
-    totalResolved += resolved.length;
-    totalWip += wip.length;
-
-    if (boardType === "scrum") {
-      const sp = resolved.reduce((sum, i) => sum + getStoryPoints(i), 0);
-      totalVelocity += sp / 2;
-      scrumProjectCount++;
-    }
-
-    const withCycle = resolved.filter((i) => i.fields.resolutiondate);
-    if (withCycle.length > 0) {
-      const avgCycle =
-        withCycle.reduce((sum, i) => {
-          return (
-            sum +
-            (new Date(i.fields.resolutiondate!).getTime() -
-              new Date(i.fields.created).getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
-        }, 0) / withCycle.length;
-      totalCycleTime += avgCycle;
-      cycleTimeCount++;
-    }
-
-    const withLead = resolved.filter((i) => i.fields.resolutiondate);
-    if (withLead.length > 0) {
-      const avgLead =
-        withLead.reduce((sum, i) => {
-          return (
-            sum +
-            (new Date(i.fields.resolutiondate!).getTime() -
-              new Date(i.fields.created).getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
-        }, 0) / withLead.length;
-      totalLeadTime += avgLead;
-      leadTimeCount++;
-    }
-
-    if (resolved.length > topProjectResolved) {
-      topProjectResolved = resolved.length;
-      topProject = project.name;
-    }
-  }
-
-  const avgVelocity =
-    scrumProjectCount > 0
-      ? Math.round((totalVelocity / scrumProjectCount) * 10) / 10
-      : 0;
-
+  const totalResolved = visible.reduce((sum, p) => sum + (p.doneCount ?? 0), 0);
+  const cycleValues = visible
+    .map((p) => (p.cycleTimeP50 ? Number(p.cycleTimeP50) : null))
+    .filter((v): v is number => v !== null);
   const avgCycleTime =
-    cycleTimeCount > 0
-      ? Math.round((totalCycleTime / cycleTimeCount) * 10) / 10
+    cycleValues.length > 0
+      ? Math.round(
+          (cycleValues.reduce((a, b) => a + b, 0) / cycleValues.length) * 10
+        ) / 10
       : 0;
 
-  const avgLeadTime =
-    leadTimeCount > 0
-      ? Math.round((totalLeadTime / leadTimeCount) * 10) / 10
-      : 0;
-
+  const topProject = visible.reduce<string | null>(
+    (best, p) =>
+      (p.doneCount ?? 0) > (visible.find((x) => x.projectName === best)?.doneCount ?? 0)
+        ? p.projectName
+        : best,
+    null
+  );
   res.json({
-    totalProjects: projects.length,
+    totalProjects: visible.length,
     totalIssuesResolved: totalResolved,
-    avgVelocity,
+    avgVelocity: 0,
     avgCycleTime,
-    avgLeadTime,
-    totalWip,
-    avgCycleTimeDisplay: formatDurationDays(avgCycleTime),
-    avgLeadTimeDisplay: formatDurationDays(avgLeadTime),
-    activeProjects: projects.length,
+    activeProjects: visible.length,
     topPerformingProject: topProject,
-    usingMockData: !isJiraConfigured(),
+    usingMockData: false,
   });
 });
 

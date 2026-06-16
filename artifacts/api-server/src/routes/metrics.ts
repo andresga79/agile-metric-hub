@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import {
-  getJiraProject,
   getJiraIssuesForProject,
   getProjectBoardType,
   listJiraProjects,
@@ -12,6 +11,7 @@ import {
   getCycleTimeDays,
   getResolutionDate,
   getJiraSprints,
+  getEffectiveIssueType,
   type JiraIssue,
   type JiraSprint,
   type ProjectBoardType,
@@ -316,18 +316,23 @@ router.get(
       return;
     }
 
-    const project = await getJiraProject(projectId);
+    const [allProjects, issues, boardType, sprints] = await Promise.all([
+      listJiraProjects(),
+      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
+      getProjectBoardType(projectId),
+      getJiraSprints(projectId),
+    ]);
+
+    const project = allProjects.find(
+      (p) => p.id === projectId || p.key === projectId
+    );
     if (!project) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
 
-    const [issues, boardType, sprints] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodToDays(period)),
-      getProjectBoardType(projectId),
-      getJiraSprints(projectId),
-    ]);
-    const metrics = await computeMetrics(issues, period, projectId, boardType, sprints);
+    const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints);
 
     res.json(metrics);
   }
@@ -352,7 +357,15 @@ router.get(
       return;
     }
 
-    const project = await getJiraProject(projectId);
+    const [allProjects, issues, allowedIssueTypes] = await Promise.all([
+      listJiraProjects(),
+      getJiraIssuesForProject(projectId, periodToDays(period)),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+
+    const project = allProjects.find(
+      (p) => p.id === projectId || p.key === projectId
+    );
     if (!project) {
       res.status(404).json({ error: "Project not found" });
       return;
@@ -363,8 +376,7 @@ router.get(
       res.status(404).json({ error: "Project not found" });
       return;
     }
-
-    const issues = await getJiraIssuesForProject(projectId, periodToDays(period));
+    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const startDate = getStartDate(periodToDays(period));
 
     const memberMap = new Map<
@@ -380,7 +392,7 @@ router.get(
       }
     >();
 
-    for (const issue of issues) {
+    for (const issue of filtered) {
       const assignee = issue.fields.assignee;
       if (!assignee) continue;
 
@@ -455,13 +467,16 @@ router.get(
 
     const days = periodToDays(period);
     const visibleProjects = await filterVisibleProjects(await listJiraProjects());
+    const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
 
     const perProject = await Promise.all(
       visibleProjects.map(async (project) => {
         const issues = await getJiraIssuesForProject(project.id, days);
+        const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+        const filtered = unique.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
         return {
           project,
-          inProgressIssues: issues.filter((issue) => isIssueInProgress(issue)),
+          inProgressIssues: filtered.filter((issue) => isIssueInProgress(issue)),
         };
       })
     );
@@ -511,10 +526,14 @@ router.get(
       return;
     }
 
-    const issues = await getJiraIssuesForProject(projectId, periodToDays(period));
+    const [issues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodToDays(period)),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     const mapped = await Promise.all(
-      issues.map(async (i) => {
+      filtered.map(async (i) => {
         const resolvedAt = await getResolutionDate(i);
         const cycleTimeDays = resolvedAt
           ? Math.round(
@@ -556,10 +575,14 @@ router.get(
       ? req.params.period[0]
       : req.params.period;
 
-    const issues = await getJiraIssuesForProject(projectId!, periodToDays(period ?? "1m"));
+    const [issues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId!, periodToDays(period ?? "1m")),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     const rows = await Promise.all(
-      issues.map(async (i) => {
+      filtered.map(async (i) => {
         const resolvedAt = await getResolutionDate(i);
         const cycleTimeDays = resolvedAt
           ? Math.round(((resolvedAt.getTime() - new Date(i.fields.created).getTime()) / (1000 * 60 * 60 * 24)) * 10) / 10

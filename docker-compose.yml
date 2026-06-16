@@ -22,6 +22,7 @@ services:
       dockerfile: docker/api/Dockerfile
     container_name: agile_metrics_api
     environment:
+      NODE_OPTIONS: "--max-old-space-size=4096"
       PORT: "8000"
       DATABASE_URL: postgresql://${POSTGRES_USER:-agile_user}:${POSTGRES_PASSWORD:-agile_password}@db:5432/${POSTGRES_DB:-agile_metrics}
       JIRA_URL: ${JIRA_URL:-}

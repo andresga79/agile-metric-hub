@@ -53,7 +53,7 @@ const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
   { value: "Task", label: "Task" },
   { value: "Bug", label: "Bug" },
   { value: "Epic", label: "Epic" },
-  { value: "Sub-task", label: "Sub-task" },
+  { value: "Subtask", label: "Subtarea / Subtask" },
   { value: "Spike", label: "Spike" },
 ];
 
