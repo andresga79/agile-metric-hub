@@ -9,6 +9,7 @@ const ISSUE_TYPE_ALIASES: Record<string, string> = {
   historia: "Story",
   "user story": "Story",
   story: "Story",
+  subtarea: "Subtask",
   bug: "Bug",
   problema: "Bug",
   error: "Bug",

@@ -1,29 +1,14 @@
 import { Router, type IRouter } from "express";
-import { db, userProjectSettingsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, userProjectSettingsTable, portfolioCacheTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../middleware/auth";
 import {
   listJiraProjects,
-  getJiraIssuesForProject,
-  getProjectBoardType,
-  isIssueDone,
-  isIssueInProgress,
   isJiraConfigured,
+  getProjectBoardType,
 } from "../lib/jira";
 
 const router: IRouter = Router();
-
-function computeIssueStats(
-  issues: Awaited<ReturnType<typeof getJiraIssuesForProject>>
-) {
-  const done = issues.filter((i) => isIssueDone(i)).length;
-  const inProgress = issues.filter((i) => isIssueInProgress(i)).length;
-  return {
-    issueCount: issues.length,
-    doneCount: done,
-    inProgressCount: inProgress,
-  };
-}
 
 interface ProjectWithVisibility {
   id: string;
@@ -50,42 +35,53 @@ router.get(
     const authReq = req as AuthRequest;
     const userId = authReq.user!.userId;
 
-    const jiraProjects = await listJiraProjects();
-    const settings = await db
-      .select()
-      .from(userProjectSettingsTable)
-      .where(eq(userProjectSettingsTable.userId, userId));
+    const [jiraProjects, settings, portfolioMap] = await Promise.all([
+      listJiraProjects(),
+      db
+        .select()
+        .from(userProjectSettingsTable)
+        .where(eq(userProjectSettingsTable.userId, userId)),
+      db
+        .select()
+        .from(portfolioCacheTable)
+        .then((rows) => new Map(rows.map((r) => [r.projectId, r]))),
+    ]);
 
     const settingsMap = new Map(
       settings.map((s) => [s.projectId, s.visible])
     );
 
-    const projects = await Promise.all(
+    const boardTypes = await Promise.all(
       jiraProjects.map(async (p) => {
-        const [issues, boardType] = await Promise.all([
-          getJiraIssuesForProject(p.id, 30),
-          getProjectBoardType(p.id),
-        ]);
-        const stats = computeIssueStats(issues);
-        return {
-          id: p.id,
-          key: p.key,
-          name: p.name,
-          description: p.description ?? null,
-          projectType: p.projectTypeKey,
-          boardType,
-          methodology: boardType === "scrum" ? "Scrum" : "Kanban",
-          avatarUrl: p.avatarUrls?.["48x48"] ?? null,
-          issueCount: stats.issueCount,
-          doneCount: stats.doneCount,
-          inProgressCount: stats.inProgressCount,
-          lead: p.lead?.displayName ?? null,
-          url: null,
-          usingMockData: !isJiraConfigured(),
-          visible: settingsMap.get(p.id) ?? true,
-        };
+        const bt = await getProjectBoardType(p.id).catch(() => "simple" as const);
+        return [p.id, bt] as const;
       })
     );
+    const boardTypeMap = new Map(boardTypes);
+
+    const projects: ProjectWithVisibility[] = jiraProjects.map((p) => {
+      const visible = settingsMap.get(p.id) ?? true;
+      const cached = portfolioMap.get(p.id);
+      const boardType = boardTypeMap.get(p.id) ?? "simple";
+
+      return {
+        id: p.id,
+        key: p.key,
+        name: p.name,
+        description: p.description ?? null,
+        projectType: p.projectTypeKey,
+        boardType,
+        methodology: boardType === "scrum" ? "Scrum" : "Kanban",
+        avatarUrl: p.avatarUrls?.["48x48"] ?? null,
+        issueCount: cached?.issueCount ?? 0,
+        doneCount: cached?.doneCount ?? 0,
+        inProgressCount: cached?.inProgressCount ?? 0,
+        lead: p.lead?.displayName ?? null,
+        url: null,
+        usingMockData: !isJiraConfigured(),
+        visible,
+      };
+    });
 
     res.json(projects);
   }

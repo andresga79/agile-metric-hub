@@ -9,9 +9,11 @@ import {
   getResolutionDate,
   periodToDays,
   mapIssueType,
+  getEffectiveIssueType,
   type JiraIssue,
 } from "../lib/jira";
 import { requireAuth } from "../middleware/auth";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -93,10 +95,12 @@ router.get(
     const periodDays = periodToDays(period);
     const maxWeeks = period === "1m" ? 4 : period === "3m" ? 13 : 26;
 
-    // Use standard (no-changelog) cache - shared with portfolio warm cache for fast loads.
-    // Cycle times fall back to lead time when changelog is absent, acceptable for weekly view.
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
-    const uniqueIssues = Array.from(new Map(issues.map((i) => [i.id, i])).values());
+    const [issues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+    const uniqueIssues = Array.from(new Map(filtered.map((i) => [i.id, i])).values());
     const doneIssues = uniqueIssues.filter((i) => isIssueDone(i));
 
     // Generate week buckets using ISO weeks for consistency with analytics

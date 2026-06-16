@@ -8,12 +8,14 @@ import {
   getStoryPoints,
   getCycleTimeDays,
   mapIssueType,
+  getEffectiveIssueType,
   periodToDays,
   type JiraSprint,
   type JiraIssue,
   isJiraConfigured,
 } from "../lib/jira";
 import { requireAuth } from "../middleware/auth";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -53,16 +55,18 @@ interface SprintMetricsResponse {
 
 async function computeSprintMetrics(
   sprint: JiraSprint,
-  sprintIssues: JiraIssue[]
+  sprintIssues: JiraIssue[],
+  allowedIssueTypes: string[]
 ): Promise<SprintMetric> {
-  const doneIssues = sprintIssues.filter((i) => isIssueDone(i));
-  const totalSp = sprintIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
+  const filtered = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+  const doneIssues = filtered.filter((i) => isIssueDone(i));
+  const totalSp = filtered.reduce((sum, i) => sum + getStoryPoints(i), 0);
   const doneSp = doneIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
   const breakdown: SprintMetric["breakdown"] = {
     Story: 0, Bug: 0, Task: 0, Epic: 0, Other: 0,
   };
-      for (const i of sprintIssues) {
+      for (const i of filtered) {
         const mapped = mapIssueType(i.fields.issuetype.name);
         if (mapped in breakdown) {
           breakdown[mapped as keyof typeof breakdown]++;
@@ -71,7 +75,7 @@ async function computeSprintMetrics(
         }
       }
 
-  const reopenedCount = sprintIssues.filter((i) => {
+  const reopenedCount = filtered.filter((i) => {
     const histories = i.changelog?.histories ?? [];
     const doneItems = histories
       .flatMap((h) => h.items)
@@ -97,7 +101,7 @@ async function computeSprintMetrics(
     : null;
 
   const completedIssues = doneIssues.length;
-  const totalIssues = sprintIssues.length;
+  const totalIssues = filtered.length;
   const completionRate = totalSp > 0 ? (doneSp / totalSp) * 100 : totalIssues > 0 ? (completedIssues / totalIssues) * 100 : 0;
 
   return {
@@ -166,10 +170,11 @@ router.get(
       return;
     }
 
+    const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
     const sprintMetrics = await Promise.all(
       filteredSprints.map(async (s) => {
         const issues = await getSprintIssues(s.id);
-        return computeSprintMetrics(s, issues);
+        return computeSprintMetrics(s, issues, allowedIssueTypes);
       })
     );
 

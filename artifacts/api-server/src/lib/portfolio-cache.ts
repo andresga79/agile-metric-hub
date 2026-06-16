@@ -9,6 +9,7 @@ import {
   isIssueDone,
   isIssueInProgress,
   mapIssueType,
+  getEffectiveIssueType,
 } from "./jira";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { logger } from "./logger";
@@ -30,7 +31,8 @@ export interface PortfolioRecalculationStatus {
 }
 
 async function getLightweightPortfolioMetrics(
-  issues: Awaited<ReturnType<typeof getJiraIssuesForProject>>
+  issues: Awaited<ReturnType<typeof getJiraIssuesForProject>>,
+  allowedIssueTypes: string[]
 ) {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - PORTFOLIO_METRICS_PERIOD_DAYS);
@@ -46,7 +48,12 @@ async function getLightweightPortfolioMetrics(
 
   const resolved = resolvedWithDates
     .filter((entry) => entry.resolvedAt && entry.resolvedAt >= startDate)
-    .map((entry) => entry.issue);
+    .map((entry) => entry.issue)
+    .filter((issue) => {
+      if (!allowedIssueTypes || allowedIssueTypes.length === 0) return true;
+      const effective = getEffectiveIssueType(issue);
+      return allowedIssueTypes.includes(effective);
+    });
 
   const leadTimes = (
     await Promise.all(resolved.map((issue) => getLeadTimeDays(issue)))
@@ -88,11 +95,12 @@ async function processProject(
   allowedIssueTypes: string[]
 ) {
   try {
-    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS);
+    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, { includeChangelog: true });
     const issueCount = issues.length;
     const inProgressCount = issues.filter((issue) => isIssueInProgress(issue)).length;
     const { resolvedCount, cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
-      issues
+      issues,
+      allowedIssueTypes
     );
 
     const doneCount = resolvedCount;
@@ -152,7 +160,7 @@ export async function calculateAndCachePortfolio() {
           Promise.race<Record<string, unknown> | null>([
             processProject(p, allowedIssueTypes),
             new Promise<null>((resolve) =>
-              setTimeout(() => resolve(null), 15000)
+              setTimeout(() => resolve(null), 120000)
             ).then(() => {
               return {
                 projectId: p.id,

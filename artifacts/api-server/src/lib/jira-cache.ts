@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { calculateAndCachePortfolio, isPortfolioCacheStale } from "./portfolio-cache";
 
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 let lastSyncedAt: Date | null = null;
 let isSyncing = false;
@@ -94,50 +94,29 @@ export async function warmCache(): Promise<void> {
     if (!isJiraConfigured()) return;
 
     const projects = await listJiraProjects();
-    let aborted = false;
-    const overallTimeout = setTimeout(() => {
-      logger.warn("Warm cache overall timeout reached, proceeding with partial cache");
-      aborted = true;
-      isSyncing = false;
-    }, 180000);
-
-    const batchSize = 3;
-    try {
-      for (let i = 0; i < projects.length; i += batchSize) {
-        if (aborted) break;
-        const batch = projects.slice(i, i + batchSize);
-        await Promise.allSettled(
-          batch.map((project) =>
-            Promise.race([
-              (async () => {
-                try {
-                  await Promise.allSettled([
-                    getRecentlyResolvedIssues(project.id, 30),
-                    getIssuesStatusCounts(project.id, 30),
-                    getProjectBoardType(project.id),
-                    getJiraSprints(project.id),
-                  ]);
-                } catch (_) {
-                  /* individual project error already logged upstream */
-                }
-              })(),
-              new Promise<void>((resolve) =>
-                setTimeout(() => {
-                  logger.warn({ projectId: project.id }, "Warm cache project timeout, skipping");
-                  resolve();
-                }, 30000)
-              ),
-            ])
-          )
-        );
-        logger.info(`Warm cache progress: ${Math.min(i + batchSize, projects.length)}/${projects.length} projects`);
-      }
-      if (!aborted) {
-        lastSyncedAt = new Date();
-        logger.info({ projectCount: projects.length }, "Cache warmed successfully");
-      }
-    } finally {
-      clearTimeout(overallTimeout);
+    const CONCURRENCY = 5;
+    for (let i = 0; i < projects.length; i += CONCURRENCY) {
+      const batch = projects.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map((project) =>
+          Promise.race([
+            Promise.all([
+              getJiraIssuesForProject(project.id, 30).catch(() => null),
+              getJiraIssuesForProject(project.id, 30, { includeChangelog: true }).catch(() => null),
+              getProjectBoardType(project.id).catch(() => null),
+              getJiraSprints(project.id).catch(() => null),
+            ]).then(() => {
+              logger.debug({ projectId: project.id }, "Warm cache done");
+            }),
+            new Promise<void>((resolve) =>
+              setTimeout(() => {
+                logger.warn({ projectId: project.id }, "Warm cache timeout, skipping");
+                resolve();
+              }, 20000)
+            ),
+          ])
+        )
+      );
     }
   } catch (err) {
     logger.error({ err }, "Cache warm failed");
@@ -151,24 +130,17 @@ export function startBackgroundSync(): void {
     const { isJiraConfigured } = await import("./jira");
     if (!isJiraConfigured()) return;
     warmCache();
-
-    // Calculate portfolio cache on startup if stale
-    if (await isPortfolioCacheStale()) {
-      await calculateAndCachePortfolio();
-    }
+    const { calculateAndCachePortfolio } = await import("./portfolio-cache");
+    calculateAndCachePortfolio();
   })();
 
   // Warm Jira cache every 15 minutes
   setInterval(warmCache, 15 * 60 * 1000);
-  logger.info("Background sync started (interval: 15min)");
-
-  // Recalculate portfolio cache every 24 hours
   setInterval(async () => {
-    const { isJiraConfigured } = await import("./jira");
-    if (!isJiraConfigured()) return;
-    await calculateAndCachePortfolio();
-  }, 24 * 60 * 60 * 1000);
-  logger.info("Portfolio cache background job started (interval: 24h)");
+    const { calculateAndCachePortfolio } = await import("./portfolio-cache");
+    calculateAndCachePortfolio();
+  }, 6 * 60 * 60 * 1000);
+  logger.info("Background sync started (jira_cache: 15min, portfolio: 6h)");
 }
 
 export async function clearCache(cacheKey: string): Promise<void> {

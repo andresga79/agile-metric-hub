@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache";
 import {
   getJiraIssuesForProject,
+  getEffectiveIssueType,
   periodToDays,
   isIssueDone,
   isIssueInProgress,
@@ -13,6 +14,7 @@ import {
   getStatusCategoryMap,
   type JiraIssue,
 } from "../lib/jira";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -252,14 +254,16 @@ router.get(
       await clearCache(issuesCacheKey(projectId, periodDays));
     }
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays, {
-      includeChangelog: true,
-    });
+    const [issues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
+      getPortfolioAllowedIssueTypes(),
+    ]);
     const uniqueIssues = Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
+    const portfolioIssues = uniqueIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
-    const metrics = await computePeriodMetrics(uniqueIssues, startDate);
+    const metrics = await computePeriodMetrics(portfolioIssues, startDate);
 
     // --- WIP Aging Report (#2) ---
     const inProgressIssues = uniqueIssues.filter((i) => isIssueInProgress(i));
@@ -368,10 +372,12 @@ router.get(
       const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
       const prevEndDate = new Date(startDate.getTime());
       const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2);
-      const prevFiltered = prevIssues.filter((i) => {
-        const created = new Date(i.fields.created);
-        return created >= prevStartDate && created < prevEndDate;
-      });
+      const prevFiltered = prevIssues
+        .filter((i) => {
+          const created = new Date(i.fields.created);
+          return created >= prevStartDate && created < prevEndDate;
+        })
+        .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
       if (prevFiltered.length > 0) {
         previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate);
       }

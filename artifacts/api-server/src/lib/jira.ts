@@ -35,6 +35,13 @@ export function mapIssueType(typeName: string): string {
   return ISSUE_TYPE_MAP[key] ?? "Other";
 }
 
+export function getEffectiveIssueType(issue: JiraIssue): string {
+  // Detect Jira subtasks explicitly so they can be handled separately from Tasks
+  const subtype = (issue.fields.issuetype as any)?.subtask;
+  if (subtype === true) return "Subtask";
+  return mapIssueType(issue.fields.issuetype?.name ?? "");
+}
+
 export interface QaRejection {
   issueKey: string;
   issueSummary: string;
@@ -71,7 +78,7 @@ export interface JiraIssue {
   fields: {
     summary: string;
     status: { name: string; statusCategory?: { key: string; name?: string } };
-    issuetype: { name: string };
+    issuetype: { name: string; subtask?: boolean };
     priority: { name: string };
     assignee?: { displayName: string; accountId: string; avatarUrls?: { "48x48": string } };
     story_points?: number;
@@ -436,6 +443,7 @@ export interface JiraSprint {
 }
 
 const JIRA_URL = process.env["JIRA_URL"] ?? "";
+const JIRA_TIMEOUT_MS = 10000;
 const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";
 const JIRA_API_TOKEN = process.env["JIRA_API_TOKEN"] ?? "";
 
@@ -514,11 +522,35 @@ export async function getJiraProject(projectId: string): Promise<JiraProject | n
   }
 
   try {
-    return await jiraFetch<JiraProject>(`/project/${projectId}`);
+    return await jiraFetch<JiraProject>(`/project/${encodeURIComponent(projectId)}`);
   } catch (err) {
-    logger.warn({ err, projectId }, "Failed to fetch Jira project");
+    logger.warn({ err, projectId }, "Failed to fetch Jira project by id/key, falling back to project list");
+  }
+
+  try {
+    const projects = await listJiraProjects();
+    return projects.find((p) => p.id === projectId || p.key === projectId) ?? null;
+  } catch (err) {
+    logger.warn({ err, projectId }, "Failed to fetch Jira project from project list");
     return null;
   }
+}
+
+const canonicalProjectIdCache = new Map<string, string>();
+
+export async function getCanonicalProjectId(projectId: string): Promise<string> {
+  if (!isJiraConfigured()) return projectId;
+
+  const cached = canonicalProjectIdCache.get(projectId);
+  if (cached) return cached;
+
+  const projects = await listJiraProjects();
+  const project = projects.find(
+    (p) => p.id === projectId || p.key === projectId
+  );
+  const result = project?.id ?? projectId;
+  canonicalProjectIdCache.set(projectId, result);
+  return result;
 }
 
 /** Detect whether a project is run as Scrum or Kanban by inspecting its boards.
@@ -530,7 +562,7 @@ const MANUAL_BOARD_OVERRIDES: Record<string, ProjectBoardType> = {
   "10003": "scrum",  // OLP - Olimpo: board is "simple" but team uses Scrum
   "OLP": "scrum",
   "10013": "scrum",  // OLI - Olimpo Internacional: board 15 is Scrum
-  "OLI": "scrum",
+  "OLI": "kanban",
 };
 
 const MOCK_BOARD_TYPES: Record<string, ProjectBoardType> = {
@@ -691,9 +723,10 @@ export async function getJiraIssuesForProject(
   }
 
   const includeChangelog = options?.includeChangelog === true;
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
   const cacheKey = includeChangelog
-    ? `${issuesCacheKey(projectId, periodDays)}:changelog`
-    : issuesCacheKey(projectId, periodDays);
+    ? `${issuesCacheKey(canonicalProjectId, periodDays)}:changelog`
+    : issuesCacheKey(canonicalProjectId, periodDays);
 
   return withCache(cacheKey, async () => {
     const since = new Date();
@@ -706,23 +739,23 @@ export async function getJiraIssuesForProject(
     try {
       const allIssues: JiraIssue[] = [];
       const maxResults = 100;
-      const maxPages = 20;
-      let pageToken: string | null = null;
-
-      for (let page = 0; page < maxPages; page++) {
+      // Use startAt pagination and order by resolutiondate first so that
+      // resolved issues in the requested window are returned before recently
+      // updated but unrelated issues. This prevents missing older resolved
+      // items when the response is paginated.
+      let startAt = 0;
+      for (;;) {
         const jql = encodeURIComponent(
-          `project = ${projectId} AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY updated DESC`
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY resolutiondate DESC, updated DESC`
         );
-        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
         const expandParam = includeChangelog ? "&expand=changelog" : "";
-        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${tokenParam}`
+        const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
+          `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
         );
         const pageIssues = result.issues ?? [];
         allIssues.push(...pageIssues);
-        if (result.isLast || pageIssues.length < maxResults) break;
-        pageToken = result.nextPageToken ?? null;
-        if (!pageToken) break;
+        if (pageIssues.length < maxResults) break;
+        startAt += maxResults;
       }
 
       return allIssues;
@@ -741,7 +774,8 @@ export async function getRecentlyResolvedIssues(
     return getMockIssues(projectId);
   }
 
-  return withCache(`resolved:${projectId}:${periodDays}`, async () => {
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  return withCache(`resolved:${canonicalProjectId}:${periodDays}`, async () => {
     const since = new Date();
     since.setDate(since.getDate() - periodDays);
     const sinceStr = since.toISOString().split("T")[0];
@@ -756,7 +790,7 @@ export async function getRecentlyResolvedIssues(
 
       for (;;) {
         const jql = encodeURIComponent(
-          `project = ${projectId} AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC`
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC`
         );
         const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
         const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
@@ -797,7 +831,8 @@ export async function getIssuesStatusCounts(
   normalizedIssueTypes.sort((a, b) => a.localeCompare(b));
   const issueTypeKey = normalizedIssueTypes.length > 0 ? normalizedIssueTypes.join(",") : "all";
 
-  return withCache(`status:${projectId}:${periodDays}:${issueTypeKey}`, async () => {
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  return withCache(`status:${canonicalProjectId}:${periodDays}:${issueTypeKey}`, async () => {
     const since = new Date();
     since.setDate(since.getDate() - periodDays);
     const sinceStr = since.toISOString().split("T")[0];
