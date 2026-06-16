@@ -18,7 +18,6 @@ import {
 } from "../lib/jira";
 import { requireAuth } from "../middleware/auth";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
-import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -317,12 +316,11 @@ router.get(
       return;
     }
 
-    const [allProjects, issues, boardType, sprints, allowedIssueTypes] = await Promise.all([
+    const [allProjects, issues, boardType, sprints] = await Promise.all([
       listJiraProjects(),
-      getJiraIssuesForProject(projectId, periodToDays(period)),
+      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
       getProjectBoardType(projectId),
       getJiraSprints(projectId),
-      getPortfolioAllowedIssueTypes(),
     ]);
 
     const project = allProjects.find(
@@ -333,8 +331,8 @@ router.get(
       return;
     }
 
-    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-    const metrics = await computeMetrics(filtered, period, projectId, boardType, sprints);
+    const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints);
 
     res.json(metrics);
   }
