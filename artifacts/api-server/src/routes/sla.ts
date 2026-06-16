@@ -27,8 +27,8 @@ router.get(
     const projectId = rawId ?? "";
     const period = rawPeriod ?? "1m";
 
-    if (!["1m", "3m", "6m"].includes(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or 6m." });
+    if (!["1m", "3m"].includes(period)) {
+      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
       return;
     }
 

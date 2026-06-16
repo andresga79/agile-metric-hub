@@ -4,11 +4,11 @@ import { AlertTriangle, Clock } from "lucide-react";
 
 interface FlowHealthCardProps {
   projectId: string;
-  period?: "1m" | "3m" | "6m";
+  period?: "1m" | "3m";
   compact?: boolean;
 }
 
-export default function FlowHealthCard({ projectId, period = "1m", compact = false }: FlowHealthCardProps) {
+export default function FlowHealthCard({ projectId, period = "3m", compact = false }: FlowHealthCardProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);

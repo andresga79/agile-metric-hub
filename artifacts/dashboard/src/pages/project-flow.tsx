@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
+import { getAuthToken } from "@/lib/auth";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 export default function ProjectFlow() {
   const { t } = useTranslation();
@@ -14,26 +15,62 @@ export default function ProjectFlow() {
   const [period, setPeriod] = useState<Period>("1m");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const token = getAuthToken();
 
   const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId) {
+      setLoading(false);
+      setData(null);
+      setError(null);
+      return;
+    }
+    if (!token) {
+      setLoading(false);
+      setData(null);
+      setError(t("page.flow.notFound"));
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
     setLoading(true);
-    const token = localStorage.getItem("auth_token");
+    setError(null);
     fetch(`/api/projects/${projectId}/analytics/${period}`, {
+      signal: controller.signal,
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`Analytics request failed: ${r.status}`);
+        }
+        return r.json();
+      })
       .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [projectId, period]);
+      .catch((err) => {
+        console.error(err);
+        setError(t("page.flow.noTransitionData"));
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+}, [projectId, period, token]);
 
   if (loading) return <div>{t('page.flow.loading')}</div>;
   if (!project) return <div>{t('page.flow.notFound')}</div>;
+  if (error) return <div>{error}</div>;
 
   const wipItems = data?.wipAging ?? [];
   const blockedItems = data?.blockedIssues ?? [];
@@ -41,17 +78,25 @@ export default function ProjectFlow() {
   const fetchedAt = data?.fetchedAt ?? null;
 
   const refreshData = async () => {
-    if (!projectId) return;
+    if (!projectId || !token) return;
     setLoading(true);
-    const token = localStorage.getItem("auth_token");
+    setError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       const r = await fetch(`/api/projects/${projectId}/analytics/${period}?refresh=true`, {
+        signal: controller.signal,
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!r.ok) {
+        throw new Error(`Analytics refresh failed: ${r.status}`);
+      }
       setData(await r.json());
     } catch (err) {
       console.error(err);
+      setError(t("page.flow.noTransitionData"));
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -86,7 +131,7 @@ export default function ProjectFlow() {
             {t('page.flow.refresh')}
           </button>
           <div className="flex bg-background border border-border rounded-md p-1">
-            {(["1m", "3m", "6m"] as Period[]).map((p) => (
+            {(["1m", "3m"] as Period[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}

@@ -713,6 +713,12 @@ export async function getSprintIssues(
   }
 }
 
+const JIRA_MAX_LOOKBACK_DAYS = 90;
+
+function capLookbackDays(periodDays: number): number {
+  return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
+}
+
 export async function getJiraIssuesForProject(
   projectId: string,
   periodDays: number,
@@ -723,44 +729,62 @@ export async function getJiraIssuesForProject(
   }
 
   const includeChangelog = options?.includeChangelog === true;
+  const effectivePeriodDays = capLookbackDays(periodDays);
   const canonicalProjectId = await getCanonicalProjectId(projectId);
   const cacheKey = includeChangelog
-    ? `${issuesCacheKey(canonicalProjectId, periodDays)}:changelog`
-    : issuesCacheKey(canonicalProjectId, periodDays);
+    ? `${issuesCacheKey(canonicalProjectId, effectivePeriodDays)}:changelog`
+    : issuesCacheKey(canonicalProjectId, effectivePeriodDays);
 
   return withCache(cacheKey, async () => {
     const since = new Date();
-    since.setDate(since.getDate() - periodDays);
+    since.setDate(since.getDate() - effectivePeriodDays);
     const sinceStr = since.toISOString().split("T")[0];
 
     const fields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
 
-    const allIssues: JiraIssue[] = [];
     const maxResults = 100;
+    const MAX_PAGES = 50;
 
-    let startAt = 0;
-    let pageCount = 0;
-    const MAX_PAGES = 10;
-    for (;;) {
-      if (++pageCount > MAX_PAGES) {
-        logger.warn({ projectId, total: allIssues.length }, "Too many pages, stopping pagination");
-        break;
+    const fetchPagedIssues = async (jqlRaw: string): Promise<JiraIssue[]> => {
+      const issues: JiraIssue[] = [];
+      let startAt = 0;
+      let pageCount = 0;
+      const jql = encodeURIComponent(jqlRaw);
+
+      for (;;) {
+        if (++pageCount > MAX_PAGES) {
+          logger.warn({ projectId, jql: jqlRaw, total: issues.length }, "Too many pages, stopping pagination");
+          break;
+        }
+
+        const expandParam = includeChangelog ? "&expand=changelog" : "";
+        const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
+          `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
+        );
+        const pageIssues = result.issues ?? [];
+        issues.push(...pageIssues);
+        if (pageIssues.length < maxResults) break;
+        startAt += maxResults;
       }
-      const jql = encodeURIComponent(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY resolutiondate DESC, updated DESC`
-      );
-      const expandParam = includeChangelog ? "&expand=changelog" : "";
-      const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
-        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
-      );
-      const pageIssues = result.issues ?? [];
-      allIssues.push(...pageIssues);
-      if (pageIssues.length < maxResults) break;
-      startAt += maxResults;
-    }
 
-    return allIssues;
+      return issues;
+    };
+
+    // Fetch resolved and unresolved streams separately so large active backlogs don't hide resolved issues.
+    const [resolvedIssues, unresolvedIssues] = await Promise.all([
+      fetchPagedIssues(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC, updated DESC`
+      ),
+      fetchPagedIssues(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${sinceStr}" AND resolutiondate is EMPTY ORDER BY updated DESC`
+      ),
+    ]);
+
+    const allIssues = [...resolvedIssues, ...unresolvedIssues];
+    const deduped = Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
+
+    return deduped;
   });
 }
 
@@ -773,9 +797,10 @@ export async function getRecentlyResolvedIssues(
   }
 
   const canonicalProjectId = await getCanonicalProjectId(projectId);
-  return withCache(`resolved:${canonicalProjectId}:${periodDays}`, async () => {
+  const effectivePeriodDays = capLookbackDays(periodDays);
+  return withCache(`resolved:${canonicalProjectId}:${effectivePeriodDays}`, async () => {
     const since = new Date();
-    since.setDate(since.getDate() - periodDays);
+    since.setDate(since.getDate() - effectivePeriodDays);
     const sinceStr = since.toISOString().split("T")[0];
 
     const fields =
@@ -828,11 +853,12 @@ export async function getIssuesStatusCounts(
   const normalizedIssueTypes = (allowedIssueTypes ?? []).map((value) => mapIssueType(value));
   normalizedIssueTypes.sort((a, b) => a.localeCompare(b));
   const issueTypeKey = normalizedIssueTypes.length > 0 ? normalizedIssueTypes.join(",") : "all";
+  const effectivePeriodDays = capLookbackDays(periodDays);
 
   const canonicalProjectId = await getCanonicalProjectId(projectId);
-  return withCache(`status:${canonicalProjectId}:${periodDays}:${issueTypeKey}`, async () => {
+  return withCache(`status:${canonicalProjectId}:${effectivePeriodDays}:${issueTypeKey}`, async () => {
     const since = new Date();
-    since.setDate(since.getDate() - periodDays);
+    since.setDate(since.getDate() - effectivePeriodDays);
     const sinceStr = since.toISOString().split("T")[0];
 
     const counts: StatusCounts = { total: 0, done: 0, inProgress: 0, todo: 0 };
@@ -879,8 +905,7 @@ export function periodToDays(period: string): number {
   switch (period) {
     case "1m": return 30;
     case "3m": return 90;
-    case "6m": return 180;
-    default: return 30;
+    default: return 90;
   }
 }
 

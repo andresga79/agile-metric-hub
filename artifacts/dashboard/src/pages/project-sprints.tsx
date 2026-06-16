@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function pct(value: number): string {
   return `${value.toFixed(1)}%`;
@@ -26,14 +26,15 @@ function sprintDate(value: string | null): string {
 export default function ProjectSprints() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<Period>("3m");
+  const [period, setPeriod] = useState<Period>("1m");
+  const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   const { data, isLoading } = useGetProjectSprintMetrics(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectSprintMetricsQueryKey(projectId!, period) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectSprintMetricsQueryKey(projectId!, period) },
   });
 
   if (isLoading || loadingProject) return <div>{t('page.sprints.loading')}</div>;
@@ -67,7 +68,7 @@ export default function ProjectSprints() {
           <p className="text-sm text-muted-foreground mt-1">{t('page.sprints.subtitle')}</p>
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(["1m", "3m", "6m"] as Period[]).map((p) => (
+          {(["1m", "3m"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

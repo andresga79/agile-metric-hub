@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -37,29 +37,29 @@ export default function ProjectDetail() {
   const [editingTarget, setEditingTarget] = useState<{ metric: string; value: string } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const [exportingChart, setExportingChart] = useState(false);
+  const token = localStorage.getItem("auth_token");
+
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) }
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
   const { data: currentUser } = useGetCurrentUser({
-    query: { queryKey: getGetCurrentUserQueryKey() },
+    query: { queryKey: getGetCurrentUserQueryKey(), enabled: !!token },
   });
   const { data: permissions } = useRolePermissions();
 
   const { data: metrics, isLoading: loadingMetrics } = useGetProjectMetrics(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
   });
 
-  const token = localStorage.getItem("auth_token");
-
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || !token) return;
     fetch(`/api/projects/${projectId}/targets`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then(setTargets)
       .catch(console.error);
-  }, [projectId, period]);
+  }, [projectId, period, token]);
 
   const saveTarget = (metric: string) => {
     if (!editingTarget || !projectId) return;
@@ -234,7 +234,7 @@ export default function ProjectDetail() {
           )}
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(['1m', '3m', '6m'] as Period[]).map((p) => (
+          {(['1m', '3m'] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

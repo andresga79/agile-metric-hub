@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -20,14 +20,15 @@ function formatDurationDays(value: number | null | undefined): string {
 export default function ProjectKanban() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<Period>("3m");
+  const [period, setPeriod] = useState<Period>("1m");
+  const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   const { data, isLoading } = useGetProjectKanbanMetrics(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectKanbanMetricsQueryKey(projectId!, period) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectKanbanMetricsQueryKey(projectId!, period) },
   });
 
   if (isLoading || loadingProject) return <div>{t('page.kanban.loading')}</div>;
@@ -61,7 +62,7 @@ export default function ProjectKanban() {
           <p className="text-sm text-muted-foreground mt-1">{t('page.kanban.subtitle')}</p>
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(["1m", "3m", "6m"] as Period[]).map((p) => (
+          {(["1m", "3m"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

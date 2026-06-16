@@ -13,7 +13,7 @@ import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-const VALID_PERIODS = ["1m", "3m", "6m"] as const;
+const VALID_PERIODS = ["1m", "3m"] as const;
 type Period = (typeof VALID_PERIODS)[number];
 
 function isValidPeriod(p: string): p is Period {
@@ -123,7 +123,7 @@ router.get(
     const period = rawPeriod ?? "1m";
 
     if (!isValidPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or 6m." });
+      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
       return;
     }
 

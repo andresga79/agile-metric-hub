@@ -14,15 +14,15 @@ router.get(
   async (req, res): Promise<void> => {
     const projectId = req.params.projectId ?? "";
     const week = req.query.week as string;
-    const period = (req.query.period as string) ?? "6m";
+    const period = (req.query.period as string) ?? "1m";
 
     if (!week) {
       res.status(400).json({ error: "week query param is required (format: 2026-W03)" });
       return;
     }
 
-    const periodMap: Record<string, number> = { "1m": 30, "3m": 90, "6m": 180 };
-    const days = periodMap[period] ?? 180;
+    const periodMap: Record<string, number> = { "1m": 30, "3m": 90 };
+    const days = periodMap[period] ?? 90;
 
     const issues = await getJiraIssuesForProject(projectId, days);
 

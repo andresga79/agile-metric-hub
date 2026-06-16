@@ -8,8 +8,9 @@ import CfdChart from "@/components/cfd-chart";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { toast } from "@/hooks/use-toast";
+import { getAuthToken } from "@/lib/auth";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 export default function ProjectReport() {
   const { t } = useTranslation();
@@ -20,36 +21,86 @@ export default function ProjectReport() {
   const [cfdData, setCfdData] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const token = getAuthToken();
 
   const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
   const { data: metrics } = useGetProjectMetrics(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectMetricsQueryKey(projectId!, period) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) },
   });
 
   useEffect(() => {
-    if (!projectId) return;
-    const token = localStorage.getItem("auth_token");
-    fetch(`/api/projects/${projectId}/cfd/${period}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((d) => setCfdData(d?.dataPoints ?? []))
-      .catch(console.error);
-    fetch(`/api/projects/${projectId}/members/${period}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(setMembers)
-      .catch(console.error);
-    fetch(`/api/projects/${projectId}/analytics/${period}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((d) => setTimeInStatus(d?.timeInStatus ?? []))
-      .catch(console.error);
-  }, [projectId, period]);
+    if (!projectId) {
+      setLoading(false);
+      setError(null);
+      setCfdData([]);
+      setMembers([]);
+      setTimeInStatus([]);
+      return;
+    }
+    if (!token) {
+      setLoading(false);
+      setError(t("common.loading"));
+      setCfdData([]);
+      setMembers([]);
+      setTimeInStatus([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      fetch(`/api/projects/${projectId}/cfd/${period}`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`CFD request failed: ${r.status}`);
+        return r.json();
+      }),
+      fetch(`/api/projects/${projectId}/members/${period}`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Members request failed: ${r.status}`);
+        return r.json();
+      }),
+      fetch(`/api/projects/${projectId}/analytics/${period}`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Analytics request failed: ${r.status}`);
+        return r.json();
+      }),
+    ])
+      .then(([cfd, memberRows, analytics]) => {
+        setCfdData(cfd?.dataPoints ?? []);
+        setMembers(Array.isArray(memberRows) ? memberRows : []);
+        setTimeInStatus(analytics?.timeInStatus ?? []);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError(t("common.loading"));
+        setCfdData([]);
+        setMembers([]);
+        setTimeInStatus([]);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [projectId, period, token]);
 
   const handleExport = async () => {
     if (!reportRef.current) return;
@@ -92,7 +143,9 @@ export default function ProjectReport() {
     setGenerating(false);
   };
 
-  if (!project) return <div>{t('common.loading')}</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
+  if (!project) return <div>{t('page.team.notFound')}</div>;
+  if (error) return <div>{error}</div>;
 
   const sortedTimeInStatus = [...timeInStatus].sort((a: any, b: any) => b.avgDays - a.avgDays);
   const topMembers = [...(members ?? [])].sort((a: any, b: any) => b.issuesResolved - a.issuesResolved).slice(0, 5);
@@ -112,7 +165,7 @@ export default function ProjectReport() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-background border border-border rounded-md p-1">
-            {(["1m", "3m", "6m"] as Period[]).map((p) => (
+            {(["1m", "3m"] as Period[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}

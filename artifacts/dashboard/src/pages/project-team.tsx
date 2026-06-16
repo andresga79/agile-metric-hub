@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Users } from "lucide-react";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function isWorkingStatus(status: string): boolean {
   const normalized = status.trim().toLowerCase();
@@ -35,16 +35,18 @@ export default function ProjectTeam() {
   const [memberFilter, setMemberFilter] = useState("all");
   const [showAllWorkItems, setShowAllWorkItems] = useState(false);
 
+  const token = localStorage.getItem("auth_token");
+
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) }
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
 
   const { data: members, isLoading: loadingMembers } = useGetProjectMembers(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectMembersQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMembersQueryKey(projectId!, period) }
   });
 
   const { data: issues, isLoading: loadingIssues } = useGetProjectIssues(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectIssuesQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectIssuesQueryKey(projectId!, period) }
   });
 
   const memberWorkByName = useMemo(() => {
@@ -100,7 +102,7 @@ export default function ProjectTeam() {
         </div>
         
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(['1m', '3m', '6m'] as Period[]).map((p) => (
+          {(['1m', '3m'] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

@@ -5,8 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, ShieldAlert, Bug, AlertTriangle, TestTube } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getAuthToken } from "@/lib/auth";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function rateBadge(rate: number, inverse = false) {
   const high = inverse ? rate <= 15 : rate > 30;
@@ -24,15 +25,19 @@ export default function ProjectQaRejected() {
   const [showAllRejected, setShowAllRejected] = useState(false);
   const [showAllBugs, setShowAllBugs] = useState(false);
 
-  const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+  const token = getAuthToken();
+
+  const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
-  const { data, isLoading } = useGetProjectQaRejected(projectId!, period, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQaRejectedQueryKey(projectId!, period) },
+  const { data, isLoading, isError } = useGetProjectQaRejected(projectId!, period, {
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQaRejectedQueryKey(projectId!, period) },
   });
 
-  if (isLoading) return <div>{t('page.qa.loading')}</div>;
+  if (!token) return <div>{t('page.qa.notFound')}</div>;
+  if (loadingProject || isLoading) return <div>{t('page.qa.loading')}</div>;
+  if (isError) return <div>{t('page.qa.noSprintData')}</div>;
   if (!project) return <div>{t('page.qa.notFound')}</div>;
 
   const displayedRejected = showAllRejected
@@ -62,7 +67,7 @@ export default function ProjectQaRejected() {
           </p>
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(["1m", "3m", "6m"] as Period[]).map((p) => (
+          {(["1m", "3m"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

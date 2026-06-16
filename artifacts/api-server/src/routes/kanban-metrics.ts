@@ -83,7 +83,7 @@ router.get(
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
       : req.params.projectId;
-    const period = req.params.period ?? "3m";
+    const period = req.params.period ?? "1m";
 
     const jiraProject = await getJiraProject(projectId);
     if (!jiraProject) {
@@ -98,7 +98,7 @@ router.get(
     }
 
     const periodDays = periodToDays(period);
-    const maxWeeks = period === "1m" ? 4 : period === "3m" ? 13 : 26;
+    const maxWeeks = period === "1m" ? 5 : 13;
 
     const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());

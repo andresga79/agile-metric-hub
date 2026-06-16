@@ -665,7 +665,7 @@ components:
       required: true
       schema:
         type: string
-        enum: ["1m", "3m", "6m"]
+          enum: ["1m", "3m"]
 
   schemas:
     HealthStatus:

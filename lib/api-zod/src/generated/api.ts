@@ -113,7 +113,7 @@ export const GetProjectResponse = zod.object({
  */
 export const GetProjectMetricsParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectMetricsResponse = zod.object({
@@ -168,7 +168,7 @@ export const GetProjectMetricsResponse = zod.object({
  */
 export const GetProjectMembersParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectMembersResponseItem = zod.object({
@@ -188,7 +188,7 @@ export const GetProjectMembersResponse = zod.array(GetProjectMembersResponseItem
  */
 export const GetProjectIssuesParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectIssuesResponseItem = zod.object({
@@ -212,7 +212,7 @@ export const GetProjectIssuesResponse = zod.array(GetProjectIssuesResponseItem)
  */
 export const GetProjectCfdParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectCfdResponse = zod.object({
@@ -303,7 +303,7 @@ export const PostProjectForecastResponse = zod.object({
  */
 export const GetProjectHealthParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectHealthResponse = zod.object({
@@ -322,7 +322,7 @@ export const GetProjectHealthResponse = zod.object({
  */
 export const DownloadProjectIssuesCsvParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 
@@ -333,7 +333,7 @@ export const DownloadProjectIssuesCsvParams = zod.object({
  */
 export const GetProjectQaRejectedParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectQaRejectedResponse = zod.object({
@@ -386,7 +386,7 @@ export const GetProjectQaRejectedResponse = zod.object({
  */
 export const GetProjectKanbanMetricsParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectKanbanMetricsResponse = zod.object({
@@ -422,7 +422,7 @@ export const GetProjectKanbanMetricsResponse = zod.object({
  */
 export const GetProjectSprintMetricsParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m', '6m'])
+  "period": zod.enum(['1m', '3m'])
 })
 
 export const GetProjectSprintMetricsResponse = zod.object({

@@ -35,7 +35,7 @@ router.get(
     const authReq = req as AuthRequest;
     const userId = authReq.user!.userId;
 
-    const [jiraProjects, settings, portfolioMap] = await Promise.all([
+    const [jiraProjects, settings, portfolioRows] = await Promise.all([
       listJiraProjects(),
       db
         .select()
@@ -43,23 +43,34 @@ router.get(
         .where(eq(userProjectSettingsTable.userId, userId)),
       db
         .select()
-        .from(portfolioCacheTable)
-        .then((rows) => new Map(rows.map((r) => [r.projectId, r]))),
+        .from(portfolioCacheTable),
     ]);
+    const portfolioMap = new Map(portfolioRows.map((r) => [r.projectId, r]));
+    const fallbackProjects = portfolioRows.map((r) => ({
+      id: r.projectId,
+      key: r.projectKey,
+      name: r.projectName,
+      description: null,
+      projectTypeKey: "software",
+      avatarUrls: { "48x48": "" },
+      lead: { displayName: null },
+      self: "",
+    }));
+    const sourceProjects = jiraProjects.length > 0 ? jiraProjects : fallbackProjects;
 
     const settingsMap = new Map(
       settings.map((s) => [s.projectId, s.visible])
     );
 
     const boardTypes = await Promise.all(
-      jiraProjects.map(async (p) => {
+      sourceProjects.map(async (p) => {
         const bt = await getProjectBoardType(p.id).catch(() => "simple" as const);
         return [p.id, bt] as const;
       })
     );
     const boardTypeMap = new Map(boardTypes);
 
-    const projects: ProjectWithVisibility[] = jiraProjects.map((p) => {
+    const projects: ProjectWithVisibility[] = sourceProjects.map((p) => {
       const visible = settingsMap.get(p.id) ?? true;
       const cached = portfolioMap.get(p.id);
       const boardType = boardTypeMap.get(p.id) ?? "simple";

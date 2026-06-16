@@ -36,7 +36,7 @@ router.get(
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0] : req.params.projectId;
     const rawPeriod = Array.isArray(req.params.period) ? req.params.period[0] : req.params.period;
-    const period = (rawPeriod ?? "1m") as "1m" | "3m" | "6m";
+    const period = (rawPeriod ?? "1m") as "1m" | "3m";
     const periodDays = periodToDays(period);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);

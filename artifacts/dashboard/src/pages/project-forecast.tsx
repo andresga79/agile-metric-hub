@@ -10,8 +10,10 @@ export default function ProjectForecast() {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
 
+  const token = localStorage.getItem("auth_token");
+
   const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId },
+    query: { enabled: !!projectId && !!token },
   });
 
   const [forecastTarget, setForecastTarget] = useState(30);

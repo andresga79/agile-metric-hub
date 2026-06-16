@@ -11,11 +11,12 @@ import {
   mapIssueType,
   getEffectiveIssueType,
 } from "./jira";
+import { filterVisibleProjects } from "./project-visibility";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { logger } from "./logger";
 import { desc, sql } from "drizzle-orm";
 
-const PORTFOLIO_METRICS_PERIOD_DAYS = 30;
+const PORTFOLIO_METRICS_PERIOD_DAYS = 90;
 let isPortfolioRecalculating = false;
 let portfolioRecalculationStartedAt: Date | null = null;
 let portfolioRecalculationFinishedAt: Date | null = null;
@@ -52,14 +53,9 @@ async function getLightweightPortfolioMetrics(
   );
   const doneCount = allDone.length;
 
-  // Filtered count for portfolio-level metrics (velocity, throughput, cycle time)
-  const resolved = allDone
-    .map((entry) => entry.issue)
-    .filter((issue) => {
-      if (!allowedIssueTypes || allowedIssueTypes.length === 0) return true;
-      const effective = getEffectiveIssueType(issue);
-      return allowedIssueTypes.includes(effective);
-    });
+  // Keep portfolio overview aligned with project detail metrics:
+  // use all resolved issues in the window (no additional issue-type filter).
+  const resolved = allDone.map((entry) => entry.issue);
 
   const leadTimes = (
     await Promise.all(resolved.map((issue) => getLeadTimeDays(issue)))
@@ -153,7 +149,7 @@ export async function calculateAndCachePortfolio() {
 
   try {
     const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
-    const jiraProjects = await listJiraProjects();
+    const jiraProjects = await filterVisibleProjects(await listJiraProjects());
     const portfolio: Array<Record<string, unknown>> = [];
 
     // Keep concurrency low so Jira searches don't trip the upstream 30s abort.

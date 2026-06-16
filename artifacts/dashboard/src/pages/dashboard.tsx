@@ -7,16 +7,18 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MetricTooltip } from "@/components/metric-tooltip";
-import { Activity, Target, Clock, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal } from "lucide-react";
+import { Activity, Target, Clock, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal, Gauge } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { getAuthToken } from "@/lib/auth";
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -26,21 +28,70 @@ function formatDurationDays(value: number | null | undefined): string {
   return `${Math.round((totalMinutes / (24 * 60)) * 10) / 10}d`;
 }
 
+type DimStatus = "ok" | "warn" | "fail";
+
+type HealthDimension = {
+  key: "flow" | "cycle" | "lead" | "delivery";
+  label: string;
+  value: string;
+  ref: string;
+  status: DimStatus;
+};
+
+function worstStatus(dims: HealthDimension[]): "Rojo" | "Amarillo" | "Verde" {
+  if (dims.some((d) => d.status === "fail")) return "Rojo";
+  if (dims.some((d) => d.status === "warn")) return "Amarillo";
+  return "Verde";
+}
+
+function actionFromDims(dims: HealthDimension[]): string {
+  const priority = [
+    ...dims.filter((d) => d.status === "fail"),
+    ...dims.filter((d) => d.status === "warn"),
+  ].map((d) => d.key);
+  if (priority.includes("delivery")) return "Asegurar entrega";
+  if (priority.includes("flow")) return "Reducir carga activa";
+  if (priority.includes("cycle")) return "Reducir cycle time";
+  if (priority.includes("lead")) return "Acortar lead time";
+  return "Monitorear";
+}
+
+function dimStatusIcon(s: DimStatus): string {
+  return s === "ok" ? "✓" : s === "warn" ? "⚠" : "✗";
+}
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSyncedAt: string | null;
+    isSyncing: boolean;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    trigger?: "startup" | "daily" | "manual" | null;
+    lastError?: string | null;
+    processedProjects?: number;
+    totalProjects?: number;
+  } | null>(null);
+  const [syncingNow, setSyncingNow] = useState(false);
   const [methodologyFilter, setMethodologyFilter] = useState<string>("all");
   const [thresholds, setThresholds] = useState<Record<string, { goodValue: number; warningValue: number }>>({});
 
+  const token = getAuthToken();
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
-    query: { queryKey: getGetDashboardSummaryQueryKey() }
+    query: { 
+      queryKey: getGetDashboardSummaryQueryKey(),
+      enabled: !!token,
+    }
   });
   
   const { data: userProjects, isLoading: loadingProjects } = useListUserProjects({
-    query: { queryKey: getListUserProjectsQueryKey() }
+    query: { 
+      queryKey: getListUserProjectsQueryKey(),
+      enabled: !!token,
+    }
   });
   const visibleProjects = userProjects?.filter((p) => p.visible) ?? [];
   const visibleIds = useMemo(() => new Set(visibleProjects.map((p) => p.id)), [visibleProjects]);
@@ -51,6 +102,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
+
+    const fetchSyncStatus = () => {
+      fetch("/api/sync/status", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (r) => { if (!r.ok) return null; const text = await r.text(); return text ? JSON.parse(text) : null; })
+        .then(setSyncStatus)
+        .catch(() => {});
+    };
+
     fetch("/api/portfolio", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -58,12 +119,7 @@ export default function Dashboard() {
       .then(setPortfolioData)
       .catch(() => setPortfolioData([]))
       .finally(() => setPortfolioLoading(false));
-    fetch("/api/sync/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (r) => { if (!r.ok) return null; const text = await r.text(); return text ? JSON.parse(text) : null; })
-      .then(setSyncStatus)
-      .catch(() => {});
+    fetchSyncStatus();
     fetch("/api/admin/metric-thresholds", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -78,7 +134,35 @@ export default function Dashboard() {
         }
       })
       .catch(() => {});
+
+    const interval = window.setInterval(fetchSyncStatus, 10000);
+    return () => window.clearInterval(interval);
   }, []);
+
+  const triggerManualSync = async () => {
+    const token = localStorage.getItem("auth_token");
+    if (!token || syncingNow || syncStatus?.isSyncing) return;
+
+    setSyncingNow(true);
+    try {
+      const response = await fetch("/api/sync/run", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok || response.status === 202) {
+        const nextStatus = await fetch("/api/sync/status", {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(async (r) => {
+          if (!r.ok) return null;
+          const text = await r.text();
+          return text ? JSON.parse(text) : null;
+        });
+        setSyncStatus(nextStatus);
+      }
+    } finally {
+      setSyncingNow(false);
+    }
+  };
 
   const isLoading = loadingSummary || loadingProjects;
 
@@ -133,13 +217,16 @@ export default function Dashboard() {
     return map;
   }, [userProjects]);
 
-  const filteredPortfolio = visiblePortfolio.filter((p) => {
-    if (methodologyFilter === "all") return true;
-    return boardTypeMap.get(p.id) === methodologyFilter;
-  });
+  const filteredPortfolio = visiblePortfolio
+    .filter((p) => {
+      if (methodologyFilter === "all") return true;
+      return boardTypeMap.get(p.id) === methodologyFilter;
+    })
+    .sort((a, b) => b.doneCount - a.doneCount);
 
-  const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.throughput, 0);
+  const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.doneCount, 0);
   const totalWip = filteredPortfolio.reduce((s, p) => s + p.inProgressCount, 0);
+  const portfolioFlowLoad = totalThroughput > 0 ? totalWip / totalThroughput : null;
   const avgCycleP50 = (() => {
     const valid = visiblePortfolio.filter((p) => p.cycleTimeP50 !== null);
     if (valid.length === 0) return null;
@@ -150,6 +237,87 @@ export default function Dashboard() {
     if (valid.length === 0) return null;
     return valid.reduce((s, p) => s + p.leadTimeAvg, 0) / valid.length;
   })();
+
+  const enrichedPortfolio = useMemo(() => {
+    const maxThroughput = Math.max(1, ...filteredPortfolio.map((p) => p.doneCount ?? 0));
+    const cycleRef = Math.max(1, avgCycleP50 ?? 5);
+    const leadRef = Math.max(1, avgLeadTime ?? 7);
+    const cycleThreshold = thresholds["cycleTime"];
+
+    return filteredPortfolio.map((p) => {
+      const throughput = p.doneCount ?? 0;
+      const wip = p.inProgressCount ?? 0;
+      const flowLoad = throughput > 0 ? wip / throughput : wip > 0 ? 5 : 0;
+      const cycle = p.cycleTimeP50 ?? cycleRef;
+      const lead = p.leadTimeAvg ?? leadRef;
+
+      const cycleGood = cycleThreshold?.goodValue ?? cycleRef;
+      const cycleWarn = cycleThreshold?.warningValue ?? cycleRef * 1.4;
+
+      const flowStatus: DimStatus = flowLoad >= 2.0 ? "fail" : flowLoad >= 1.2 ? "warn" : "ok";
+      const cycleStatus: DimStatus = p.cycleTimeP50 === null ? "ok" : cycle > cycleWarn ? "fail" : cycle > cycleGood ? "warn" : "ok";
+      const leadStatus: DimStatus = p.leadTimeAvg === null ? "ok" : lead > leadRef * 1.5 ? "fail" : lead > leadRef * 1.2 ? "warn" : "ok";
+      const deliveryStatus: DimStatus =
+        throughput === 0 && wip >= 3
+          ? "fail"
+          : throughput <= Math.ceil(maxThroughput * 0.15) && wip > 0
+            ? "warn"
+            : "ok";
+
+      const dims: HealthDimension[] = [
+        {
+          key: "flow",
+          label: "Flujo",
+          value: throughput > 0 ? `${flowLoad.toFixed(1)}x` : wip > 0 ? "Sin salida" : "—",
+          ref: "ref: ≤ 1.0x",
+          status: flowStatus,
+        },
+        {
+          key: "cycle",
+          label: "Cycle Time",
+          value: p.cycleTimeP50 !== null ? formatDurationDays(cycle) : "—",
+          ref: `ref: ${formatDurationDays(cycleGood)}`,
+          status: cycleStatus,
+        },
+        {
+          key: "lead",
+          label: "Lead Time",
+          value: p.leadTimeAvg !== null ? formatDurationDays(lead) : "—",
+          ref: `ref: ${formatDurationDays(leadRef)}`,
+          status: leadStatus,
+        },
+        {
+          key: "delivery",
+          label: "Entrega",
+          value: `${throughput} completadas`,
+          ref: `${wip} en progreso`,
+          status: deliveryStatus,
+        },
+      ];
+
+      const semaphor = worstStatus(dims);
+      const suggestedAction = actionFromDims(dims);
+      const attentionPriority =
+        dims.filter((d) => d.status === "fail").length * 100 +
+        dims.filter((d) => d.status === "warn").length * 30 +
+        flowLoad * 10 +
+        wip;
+
+      return {
+        ...p,
+        flowLoad,
+        dims,
+        semaphor,
+        suggestedAction,
+        attentionPriority,
+      };
+    });
+  }, [filteredPortfolio, avgCycleP50, avgLeadTime, thresholds]);
+
+  const topAttention = useMemo(
+    () => [...enrichedPortfolio].sort((a, b) => b.attentionPriority - a.attentionPriority).slice(0, 5),
+    [enrichedPortfolio]
+  );
 
   return (
     <div className="space-y-8">
@@ -172,11 +340,26 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight">{t('page.dashboard.overview')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('page.dashboard.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={triggerManualSync}
+            disabled={syncingNow || syncStatus?.isSyncing}
+            className="h-8"
+          >
+            <RefreshCw size={14} className={(syncingNow || syncStatus?.isSyncing) ? "animate-spin mr-2" : "mr-2"} />
+            Sincronizar ahora
+          </Button>
           <RefreshCw size={14} className={syncStatus?.isSyncing ? "animate-spin" : ""} />
           <span>
             {syncStatus ? `${t('page.dashboard.synced')} ${formatLastSynced(syncStatus.lastSyncedAt)}` : t('page.dashboard.loading')}
           </span>
+          {syncStatus?.isSyncing && (syncStatus.totalProjects ?? 0) > 0 && (
+            <span className="text-muted-foreground">
+              ({syncStatus.processedProjects ?? 0}/{syncStatus.totalProjects ?? 0})
+            </span>
+          )}
         </div>
       </div>
 
@@ -193,21 +376,6 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">{visiblePortfolio.length}</div>
             )}
             <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.visibleProjects')}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.avgVelocity')}<MetricTooltip description={t('tooltip.avgVelocity')} /></CardTitle>
-            <Activity className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20 mb-1" />
-            ) : (
-              <div className="text-2xl font-bold">{summary?.avgVelocity.toFixed(1)}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.pointsPerSprint')}</p>
           </CardContent>
         </Card>
 
@@ -258,6 +426,23 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Flow Load (WIP/Throughput)</CardTitle>
+            <Gauge className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16 mb-1" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {portfolioFlowLoad === null ? "-" : `${portfolioFlowLoad.toFixed(2)}x`}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Carga relativa del sistema (menor es mejor)</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex items-center gap-1 bg-background border border-border rounded-md p-1 w-fit">
@@ -272,6 +457,110 @@ export default function Dashboard() {
             {m === "all" ? "Todos" : m === "scrum" ? "Scrum" : "Kanban"}
           </button>
         ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="bg-card/40 lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Salud por dimension</CardTitle>
+            <CardDescription>Flujo · Cycle Time · Lead Time · Entrega — valor real y referencia por proyecto</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {enrichedPortfolio.length === 0 && (
+              <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">Sin proyectos para evaluar.</div>
+            )}
+            {enrichedPortfolio.slice(0, 6).map((p) => (
+              <div key={p.id} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline">
+                    {p.name}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-medium ${
+                        p.semaphor === "Rojo"
+                          ? "bg-red-500/15 text-red-400"
+                          : p.semaphor === "Amarillo"
+                            ? "bg-yellow-500/15 text-yellow-300"
+                            : "bg-green-500/15 text-green-400"
+                      }`}
+                    >
+                      {p.semaphor}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{p.suggestedAction}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {p.dims.map((d: HealthDimension) => (
+                    <div
+                      key={d.key}
+                      className={`rounded p-2 text-xs border ${
+                        d.status === "fail"
+                          ? "border-red-500/30 bg-red-500/5"
+                          : d.status === "warn"
+                            ? "border-yellow-500/30 bg-yellow-500/5"
+                            : "border-border bg-card/50"
+                      }`}
+                    >
+                      <div className="text-muted-foreground font-medium mb-1">{d.label}</div>
+                      <div className={`font-mono font-semibold ${
+                        d.status === "fail" ? "text-red-400" : d.status === "warn" ? "text-yellow-300" : "text-green-400"
+                      }`}>
+                        {dimStatusIcon(d.status)} {d.value}
+                      </div>
+                      <div className="text-muted-foreground/70 mt-0.5">{d.ref}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/40">
+          <CardHeader>
+            <CardTitle>Top 5 Atencion</CardTitle>
+            <CardDescription>Prioridad por severidad de alertas explicitas</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {topAttention.map((p) => (
+              <div key={p.id} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline">
+                    {p.name}
+                  </Link>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-medium ${
+                      p.semaphor === "Rojo"
+                        ? "bg-red-500/15 text-red-400"
+                        : p.semaphor === "Amarillo"
+                          ? "bg-yellow-500/15 text-yellow-300"
+                          : "bg-green-500/15 text-green-400"
+                    }`}
+                  >
+                    {p.semaphor}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{p.suggestedAction}</div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {p.dims.filter((d: HealthDimension) => d.status !== "ok").map((d: HealthDimension) => (
+                    <span
+                      key={d.key}
+                      className={`rounded px-1.5 py-0.5 text-xs ${
+                        d.status === "fail" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-300"
+                      }`}
+                    >
+                      {dimStatusIcon(d.status)} {d.label}: {d.value}
+                    </span>
+                  ))}
+                  {p.dims.every((d: HealthDimension) => d.status === "ok") && (
+                    <span className="text-xs text-green-400">✓ Todo en orden</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="bg-card/40">
@@ -304,17 +593,19 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.dashboard.project')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.issues')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.completed')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.wip')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.throughput')}</TableHead>
+                    <TableHead className="text-right">WIP actual</TableHead>
+                    <TableHead className="text-right">Throughput (90d)</TableHead>
+                    <TableHead className="text-right">Flow Load</TableHead>
+                    <TableHead className="text-right">Salud</TableHead>
+                    <TableHead>Dimensiones con alerta</TableHead>
+                    <TableHead>Accion sugerida</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.dashboard.leadTime')}</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPortfolio.map((p) => (
+                  {enrichedPortfolio.map((p) => (
                     <TableRow key={p.id} className="border-border hover:bg-accent/50">
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -324,10 +615,42 @@ export default function Dashboard() {
                           </Link>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">{p.issueCount}</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-green-400">{p.doneCount}</TableCell>
                       <TableCell className="text-right font-mono text-xs text-amber-400">{p.inProgressCount}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{p.throughput}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-green-400">{p.doneCount}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {p.doneCount > 0 ? `${(p.inProgressCount / p.doneCount).toFixed(2)}x` : "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-xs">
+                        <span
+                          className={`rounded px-2 py-0.5 font-medium ${
+                            p.semaphor === "Rojo"
+                              ? "bg-red-500/15 text-red-400"
+                              : p.semaphor === "Amarillo"
+                                ? "bg-yellow-500/15 text-yellow-300"
+                                : "bg-green-500/15 text-green-400"
+                          }`}
+                        >
+                          {p.semaphor}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <div className="flex flex-wrap gap-1">
+                          {p.dims.filter((d: HealthDimension) => d.status !== "ok").map((d: HealthDimension) => (
+                            <span
+                              key={d.key}
+                              className={`rounded px-1.5 py-0.5 ${
+                                d.status === "fail" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-300"
+                              }`}
+                            >
+                              {dimStatusIcon(d.status)} {d.label}: {d.value}
+                            </span>
+                          ))}
+                          {p.dims.every((d: HealthDimension) => d.status === "ok") && (
+                            <span className="text-green-400">✓ Todo OK</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{p.suggestedAction}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.cycleTimeP50)}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.leadTimeAvg)}</TableCell>
                       <TableCell>

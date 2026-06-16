@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-suggestions";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 const STATUS_CONFIG = {
   critical: {
@@ -85,9 +85,10 @@ export default function ProjectHealth() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
+  const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   const { suggestions, loading: loadingHealth } = useHealthSuggestions(projectId, period);
@@ -151,7 +152,7 @@ export default function ProjectHealth() {
           <p className="text-sm text-muted-foreground">{t('page.health.subtitle')}</p>
         </div>
         <div className="flex bg-background border border-border rounded-md p-1">
-          {(["1m", "3m", "6m"] as Period[]).map((p) => (
+          {(["1m", "3m"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

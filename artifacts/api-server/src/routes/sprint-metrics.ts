@@ -129,9 +129,9 @@ router.get(
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
       : req.params.projectId;
-    const period = req.params.period ?? "3m";
+    const period = req.params.period ?? "1m";
 
-    const maxSprints = period === "1m" ? 4 : period === "3m" ? 8 : 16;
+    const maxSprints = period === "1m" ? 4 : 8;
     const periodDays = periodToDays(period as any);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);

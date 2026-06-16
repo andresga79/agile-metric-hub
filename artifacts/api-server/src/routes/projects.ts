@@ -17,16 +17,27 @@ router.get("/projects", requireAuth, async (_req, res): Promise<void> => {
     db.select().from(portfolioCacheTable),
   ]);
   const portfolioMap = new Map(portfolioRows.map((r) => [r.projectId, r]));
+  const fallbackProjects = portfolioRows.map((r) => ({
+    id: r.projectId,
+    key: r.projectKey,
+    name: r.projectName,
+    description: null,
+    projectTypeKey: "software",
+    avatarUrls: { "48x48": "" },
+    lead: { displayName: null },
+    self: "",
+  }));
+  const sourceProjects = jiraProjects.length > 0 ? jiraProjects : fallbackProjects;
 
   const boardTypes = await Promise.all(
-    jiraProjects.map(async (p) => {
+    sourceProjects.map(async (p) => {
       const bt = await getProjectBoardType(p.id).catch(() => "simple" as const);
       return [p.id, bt] as const;
     })
   );
   const boardTypeMap = new Map(boardTypes);
 
-  const projects = jiraProjects.map((p) => {
+  const projects = sourceProjects.map((p) => {
     const cached = portfolioMap.get(p.id);
     const boardType = boardTypeMap.get(p.id) ?? "simple";
     return {
@@ -71,31 +82,46 @@ router.get("/projects/:projectId", requireAuth, async (req, res): Promise<void> 
   const jiraProject = allProjects.find(
     (p) => p.id === projectId || p.key === projectId
   );
-  if (!jiraProject) {
+
+  const fallbackProject = cached
+    ? {
+        id: cached.projectId,
+        key: cached.projectKey,
+        name: cached.projectName,
+        description: null,
+        projectTypeKey: "software",
+        avatarUrls: { "48x48": "" },
+        lead: { displayName: null },
+        self: "",
+      }
+    : null;
+
+  const sourceProject = jiraProject ?? fallbackProject;
+  if (!sourceProject) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
 
-  const visible = await isProjectKeyVisible(jiraProject.key);
+  const visible = await isProjectKeyVisible(sourceProject.key);
   if (!visible) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
 
   res.json({
-    id: jiraProject.id,
-    key: jiraProject.key,
-    name: jiraProject.name,
-    description: jiraProject.description ?? null,
-    projectType: jiraProject.projectTypeKey,
+    id: sourceProject.id,
+    key: sourceProject.key,
+    name: sourceProject.name,
+    description: sourceProject.description ?? null,
+    projectType: sourceProject.projectTypeKey,
     boardType,
     methodology: boardType === "scrum" ? "Scrum" : "Kanban",
-    avatarUrl: jiraProject.avatarUrls?.["48x48"] ?? null,
+    avatarUrl: sourceProject.avatarUrls?.["48x48"] ?? null,
     issueCount: cached?.issueCount ?? 0,
     doneCount: cached?.doneCount ?? 0,
     inProgressCount: cached?.inProgressCount ?? 0,
     visible: true,
-    lead: jiraProject.lead?.displayName ?? null,
+    lead: sourceProject.lead?.displayName ?? null,
     url: null,
     usingMockData: !isJiraConfigured(),
   });

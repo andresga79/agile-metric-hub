@@ -7,8 +7,9 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { ArrowLeft, Timer } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { DrillDownModal } from "@/components/drill-down-modal";
+import { getAuthToken } from "@/lib/auth";
 
-type Period = "1m" | "3m" | "6m";
+type Period = "1m" | "3m";
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -28,34 +29,78 @@ export default function ProjectAnalytics() {
   const [data, setData] = useState<any>(null);
   const [slaData, setSlaData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [drillWeek, setDrillWeek] = useState<string | null>(null);
 
+  const token = getAuthToken();
+
   const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId!) },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId) {
+      setLoading(false);
+      setData(null);
+      setSlaData(null);
+      setError(null);
+      return;
+    }
+    if (!token) {
+      setLoading(false);
+      setData(null);
+      setSlaData(null);
+      setError(t("page.analytics.notFound"));
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
     setLoading(true);
-    const token = localStorage.getItem("auth_token");
+    setError(null);
     Promise.all([
       fetch(`/api/projects/${projectId}/analytics/${period}${compare ? "?compareTo=true" : ""}`, {
+        signal: controller.signal,
         headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => r.json()),
+      }).then((r) => {
+        if (!r.ok) {
+          throw new Error(`Analytics request failed: ${r.status}`);
+        }
+        return r.json();
+      }),
       fetch(`/api/projects/${projectId}/sla/${period}`, {
+        signal: controller.signal,
         headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => r.json()),
+      }).then((r) => {
+        if (!r.ok) {
+          throw new Error(`SLA request failed: ${r.status}`);
+        }
+        return r.json();
+      }),
     ])
       .then(([analytics, sla]) => {
         setData(analytics);
         setSlaData(sla);
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [projectId, period, compare]);
+      .catch((err) => {
+        console.error(err);
+        setError(t("page.analytics.noResolved"));
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [projectId, period, compare, token]);
 
   if (loading) return <div>{t('page.analytics.loading')}</div>;
   if (!project) return <div>{t('page.analytics.notFound')}</div>;
+  if (error) return <div>{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -80,7 +125,7 @@ export default function ProjectAnalytics() {
             {compare ? t('page.analytics.comparing') : t('page.analytics.compare')}
           </button>
           <div className="flex bg-background border border-border rounded-md p-1">
-            {(["1m", "3m", "6m"] as Period[]).map((p) => (
+            {(["1m", "3m"] as Period[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
