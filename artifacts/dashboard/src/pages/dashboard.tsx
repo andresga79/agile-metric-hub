@@ -181,31 +181,6 @@ export default function Dashboard() {
     return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const healthColor = (p: any) => {
-    const wipRatio = p.inProgressCount / Math.max(p.throughput, 1);
-    const ctThresh = thresholds["cycleTime"];
-    const wipThresh = thresholds["wipRatio"];
-
-    const wipPct = wipRatio * 100;
-    let cycleStatus: "good" | "warning" | "critical" = "good";
-    let wipStatus: "good" | "warning" | "critical" = "good";
-
-    if (ctThresh && p.cycleTimeP50 !== null) {
-      if (p.cycleTimeP50 <= ctThresh.goodValue) cycleStatus = "good";
-      else if (p.cycleTimeP50 <= ctThresh.warningValue) cycleStatus = "warning";
-      else cycleStatus = "critical";
-    }
-    if (wipThresh) {
-      if (wipPct <= wipThresh.goodValue) wipStatus = "good";
-      else if (wipPct <= wipThresh.warningValue) wipStatus = "warning";
-      else wipStatus = "critical";
-    }
-
-    if (cycleStatus === "critical" || wipStatus === "critical") return "bg-red-500";
-    if (cycleStatus === "warning" || wipStatus === "warning") return "bg-yellow-500";
-    return "bg-green-500";
-  };
-
   const boardTypeMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of userProjects ?? []) {
@@ -484,68 +459,75 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.dashboard.project')}</TableHead>
-                    <TableHead className="text-right">WIP actual</TableHead>
-                    <TableHead className="text-right">Throughput (90d)</TableHead>
-                    <TableHead className="text-right">Flow Load</TableHead>
-                    <TableHead className="text-right">Salud</TableHead>
-                    <TableHead>Dimensiones con alerta</TableHead>
+                    <TableHead className="text-right">
+                      <MetricTooltip description="WIP en progreso / Issues completadas (90d). Menor = flujo mas sano.">Flow Load</MetricTooltip>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <MetricTooltip description={t('tooltip.avgCycleTime')}>{t('page.dashboard.cycleTime')}</MetricTooltip>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <MetricTooltip description="Tiempo promedio desde creacion hasta completado.">{t('page.dashboard.leadTime')}</MetricTooltip>
+                    </TableHead>
+                    <TableHead className="text-right">Entrega (90d)</TableHead>
                     <TableHead>Accion sugerida</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.cycleTime')}</TableHead>
-                    <TableHead className="text-right">{t('page.dashboard.leadTime')}</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {enrichedPortfolio.map((p) => (
+                  {enrichedPortfolio.map((p) => {
+                    const flowDim = p.dims.find((d: HealthDimension) => d.key === "flow");
+                    const cycleDim = p.dims.find((d: HealthDimension) => d.key === "cycle");
+                    const leadDim = p.dims.find((d: HealthDimension) => d.key === "lead");
+                    const deliveryDim = p.dims.find((d: HealthDimension) => d.key === "delivery");
+                    return (
                     <TableRow key={p.id} className="border-border hover:bg-accent/50">
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${healthColor(p)}`} />
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-xs font-medium shrink-0 ${
+                              p.semaphor === "Rojo"
+                                ? "bg-red-500/15 text-red-400"
+                                : p.semaphor === "Amarillo"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-yellow-500/15 dark:text-yellow-300"
+                                  : "bg-green-500/15 text-green-400"
+                            }`}
+                          >
+                            {p.semaphor === "Rojo" ? "✗" : p.semaphor === "Amarillo" ? "⚠" : "✓"}
+                          </span>
                           <Link href={`/projects/${p.id}`} className="text-primary hover:underline font-medium">
                             {p.name}
                           </Link>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-amber-400">{p.inProgressCount}</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-green-400">{p.doneCount}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {p.doneCount > 0 ? `${(p.inProgressCount / p.doneCount).toFixed(2)}x` : "-"}
+                      <TableCell className={`text-right font-mono text-xs ${
+                        flowDim?.status === "fail" ? "text-red-400" : flowDim?.status === "warn" ? "text-amber-600 dark:text-yellow-300" : "text-muted-foreground"
+                      }`}>
+                        {flowDim?.value ?? "—"}
+                        <div className="text-muted-foreground/60 font-sans">{p.inProgressCount} / {p.doneCount}</div>
                       </TableCell>
-                      <TableCell className="text-right text-xs">
-                        <span
-                          className={`rounded px-2 py-0.5 font-medium ${
-                            p.semaphor === "Rojo"
-                              ? "bg-red-500/15 text-red-400"
-                              : p.semaphor === "Amarillo"
-                                ? "bg-amber-100 text-amber-800 dark:bg-yellow-500/15 dark:text-yellow-300"
-                                : "bg-green-500/15 text-green-400"
-                          }`}
-                        >
-                          {p.semaphor}
-                        </span>
+                      <TableCell className={`text-right font-mono text-xs ${
+                        cycleDim?.status === "fail" ? "text-red-400" : cycleDim?.status === "warn" ? "text-amber-600 dark:text-yellow-300" : "text-muted-foreground"
+                      }`}>
+                        {formatDurationDays(p.cycleTimeP50)}
+                        {cycleDim && cycleDim.status !== "ok" && (
+                          <div className="text-muted-foreground/60 font-sans">{cycleDim.ref}</div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-xs">
-                        <div className="flex flex-wrap gap-1">
-                          {p.dims.filter((d: HealthDimension) => d.status !== "ok").map((d: HealthDimension) => (
-                            <span
-                              key={d.key}
-                              className={`rounded px-1.5 py-0.5 ${
-                                d.status === "fail"
-                                  ? "bg-red-500/10 text-red-400"
-                                  : "bg-amber-100 text-amber-800 dark:bg-yellow-500/10 dark:text-yellow-300"
-                              }`}
-                            >
-                              {dimStatusIcon(d.status)} {d.label}: {d.value}
-                            </span>
-                          ))}
-                          {p.dims.every((d: HealthDimension) => d.status === "ok") && (
-                            <span className="text-green-400">✓ Todo OK</span>
-                          )}
-                        </div>
+                      <TableCell className={`text-right font-mono text-xs ${
+                        leadDim?.status === "fail" ? "text-red-400" : leadDim?.status === "warn" ? "text-amber-600 dark:text-yellow-300" : "text-muted-foreground"
+                      }`}>
+                        {formatDurationDays(p.leadTimeAvg)}
+                        {leadDim && leadDim.status !== "ok" && (
+                          <div className="text-muted-foreground/60 font-sans">{leadDim.ref}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono text-xs ${
+                        deliveryDim?.status === "fail" ? "text-red-400" : deliveryDim?.status === "warn" ? "text-amber-600 dark:text-yellow-300" : "text-green-400"
+                      }`}>
+                        {p.doneCount} completadas
+                        <div className="text-muted-foreground/60 font-sans">{p.inProgressCount} en curso</div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{p.suggestedAction}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.cycleTimeP50)}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{formatDurationDays(p.leadTimeAvg)}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors">
@@ -568,7 +550,8 @@ export default function Dashboard() {
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
