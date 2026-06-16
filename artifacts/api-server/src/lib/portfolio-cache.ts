@@ -95,10 +95,14 @@ async function getLightweightPortfolioMetrics(
 
 async function processProject(
   p: { id: string; key: string; name: string },
-  allowedIssueTypes: string[]
+  allowedIssueTypes: string[],
+  options?: { forceRefresh?: boolean }
 ) {
   try {
-    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, { includeChangelog: true });
+    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, {
+      includeChangelog: true,
+      forceRefresh: options?.forceRefresh,
+    });
     const issueCount = issues.length;
     const inProgressCount = issues.filter((issue) => isIssueInProgress(issue)).length;
     const { doneCount, resolvedCount, cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
@@ -135,7 +139,7 @@ async function processProject(
   }
 }
 
-export async function calculateAndCachePortfolio() {
+export async function calculateAndCachePortfolio(options?: { forceRefresh?: boolean }) {
   if (isPortfolioRecalculating) {
     logger.info("Portfolio cache calculation already running, skipping duplicate trigger");
     return;
@@ -149,7 +153,9 @@ export async function calculateAndCachePortfolio() {
 
   try {
     const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
-    const jiraProjects = await filterVisibleProjects(await listJiraProjects());
+    const jiraProjects = await filterVisibleProjects(
+      await listJiraProjects({ forceRefresh: options?.forceRefresh })
+    );
     const portfolio: Array<Record<string, unknown>> = [];
 
     // Keep concurrency low so Jira searches don't trip the upstream 30s abort.
@@ -159,7 +165,7 @@ export async function calculateAndCachePortfolio() {
       const results = await Promise.allSettled(
         batch.map((p) =>
           Promise.race<Record<string, unknown> | null>([
-            processProject(p, allowedIssueTypes),
+            processProject(p, allowedIssueTypes, options),
               new Promise<null>((resolve) =>
                 setTimeout(() => resolve(null), 120000)
               ).then(() => {
@@ -198,6 +204,8 @@ export async function calculateAndCachePortfolio() {
         .onConflictDoUpdate({
           target: portfolioCacheTable.projectId,
           set: {
+            projectKey: item.projectKey as string,
+            projectName: item.projectName as string,
             issueCount: item.issueCount as number,
             doneCount: item.doneCount as number,
             inProgressCount: item.inProgressCount as number,

@@ -498,7 +498,7 @@ async function jiraAgileFetch<T>(url: string): Promise<T> {
   }
 }
 
-export async function listJiraProjects(): Promise<JiraProject[]> {
+export async function listJiraProjects(options?: { forceRefresh?: boolean }): Promise<JiraProject[]> {
   if (!isJiraConfigured()) {
     return getMockProjects();
   }
@@ -513,7 +513,7 @@ export async function listJiraProjects(): Promise<JiraProject[]> {
       logger.warn({ err }, "Failed to fetch Jira projects, using mock data");
       return getMockProjects();
     }
-  });
+  }, options);
 }
 
 export async function getJiraProject(projectId: string): Promise<JiraProject | null> {
@@ -573,7 +573,8 @@ const MOCK_BOARD_TYPES: Record<string, ProjectBoardType> = {
 };
 
 export async function getProjectBoardType(
-  projectId: string
+  projectId: string,
+  options?: { forceRefresh?: boolean }
 ): Promise<ProjectBoardType> {
   if (!isJiraConfigured()) return MOCK_BOARD_TYPES[projectId] ?? "scrum";
 
@@ -608,7 +609,7 @@ export async function getProjectBoardType(
       logger.warn({ err, projectId }, "Failed to detect board type");
       return "simple";
     }
-  });
+  }, options);
 }
 
 export async function getBoardId(
@@ -642,7 +643,8 @@ export async function getBoardId(
 
 export async function getJiraSprints(
   projectId: string,
-  maxResults: number = 50
+  maxResults: number = 50,
+  options?: { forceRefresh?: boolean }
 ): Promise<JiraSprint[]> {
   if (!isJiraConfigured()) return [];
 
@@ -682,7 +684,7 @@ export async function getJiraSprints(
       logger.warn({ err, projectId }, "Failed to fetch sprints");
       return [];
     }
-  });
+  }, options);
 }
 
 /** Fetch all issues assigned to a specific sprint via JQL `sprint = {sprintId}`. */
@@ -722,7 +724,7 @@ function capLookbackDays(periodDays: number): number {
 export async function getJiraIssuesForProject(
   projectId: string,
   periodDays: number,
-  options?: { includeChangelog?: boolean }
+  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
 ): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) {
     return getMockIssues(projectId);
@@ -785,7 +787,7 @@ export async function getJiraIssuesForProject(
     const deduped = Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
 
     return deduped;
-  });
+  }, { forceRefresh: options?.forceRefresh });
 }
 
 export async function getRecentlyResolvedIssues(

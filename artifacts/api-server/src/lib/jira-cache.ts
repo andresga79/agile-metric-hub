@@ -22,8 +22,10 @@ let lastSyncStartedAt: Date | null = null;
 let lastSyncFinishedAt: Date | null = null;
 let lastSyncError: string | null = null;
 let lastSyncTrigger: "startup" | "daily" | "manual" | null = null;
+let lastSyncOutcome: "success" | "partial" | "failed" | null = null;
 let syncProcessedProjects = 0;
 let syncTotalProjects = 0;
+let syncFailedProjects = 0;
 
 type SyncTrigger = "startup" | "daily" | "manual";
 
@@ -33,9 +35,11 @@ export interface SyncStatus {
   startedAt: string | null;
   finishedAt: string | null;
   trigger: SyncTrigger | null;
+  outcome: "success" | "partial" | "failed" | null;
   lastError: string | null;
   processedProjects: number;
   totalProjects: number;
+  failedProjects: number;
 }
 
 export function getLastSyncedAt(): Date | null {
@@ -53,9 +57,11 @@ export function getSyncStatus(): SyncStatus {
     startedAt: lastSyncStartedAt ? lastSyncStartedAt.toISOString() : null,
     finishedAt: lastSyncFinishedAt ? lastSyncFinishedAt.toISOString() : null,
     trigger: lastSyncTrigger,
+    outcome: lastSyncOutcome,
     lastError: lastSyncError,
     processedProjects: syncProcessedProjects,
     totalProjects: syncTotalProjects,
+    failedProjects: syncFailedProjects,
   };
 }
 
@@ -99,6 +105,7 @@ async function setCache<T>(cacheKey: string, data: T): Promise<void> {
 export async function withCache<T>(
   cacheKey: string,
   fetchFn: () => Promise<T>,
+  options?: { forceRefresh?: boolean }
 ): Promise<T> {
   const { isJiraConfigured } = await import("./jira");
   if (!isJiraConfigured()) {
@@ -106,10 +113,14 @@ export async function withCache<T>(
   }
 
   const scopedKey = scopedCacheKey(cacheKey);
-  const cached = await getCached<T>(scopedKey);
-  if (cached !== null) {
-    logger.debug({ cacheKey: scopedKey }, "Cache hit");
-    return cached;
+  if (!options?.forceRefresh) {
+    const cached = await getCached<T>(scopedKey);
+    if (cached !== null) {
+      logger.debug({ cacheKey: scopedKey }, "Cache hit");
+      return cached;
+    }
+  } else {
+    logger.info({ cacheKey: scopedKey }, "Force refresh enabled, skipping cache read");
   }
 
   logger.debug({ cacheKey: scopedKey }, "Cache miss, fetching from Jira");
@@ -130,13 +141,15 @@ export function sprintsCacheKey(projectId: string): string {
   return `sprints:${projectId}`;
 }
 
-async function warmVisibleProjectsCache(): Promise<void> {
+async function warmVisibleProjectsCache(forceRefresh: boolean = false): Promise<void> {
   try {
     const { isJiraConfigured, listJiraProjects, getProjectBoardType, getJiraSprints, getJiraIssuesForProject } = await import("./jira");
     const { filterVisibleProjects } = await import("./project-visibility");
     if (!isJiraConfigured()) return;
 
-    const projects = await filterVisibleProjects(await listJiraProjects());
+    const projects = await filterVisibleProjects(
+      await listJiraProjects({ forceRefresh })
+    );
     syncTotalProjects = projects.length;
     syncProcessedProjects = 0;
 
@@ -147,10 +160,10 @@ async function warmVisibleProjectsCache(): Promise<void> {
       await Promise.all(
         batch.map(async (project) => {
           const warmPromise = Promise.all([
-            getJiraIssuesForProject(project.id, 90).catch(() => null),
-            getJiraIssuesForProject(project.id, 90, { includeChangelog: true }).catch(() => null),
-            getProjectBoardType(project.id).catch(() => null),
-            getJiraSprints(project.id).catch(() => null),
+            getJiraIssuesForProject(project.id, 90, { forceRefresh }).catch(() => null),
+            getJiraIssuesForProject(project.id, 90, { includeChangelog: true, forceRefresh }).catch(() => null),
+            getProjectBoardType(project.id, { forceRefresh }).catch(() => null),
+            getJiraSprints(project.id, 50, { forceRefresh }).catch(() => null),
           ]).then(() => "ok" as const);
 
           const timeoutPromise = new Promise<"timeout">((resolve) =>
@@ -164,9 +177,23 @@ async function warmVisibleProjectsCache(): Promise<void> {
 
           if (result === "timeout") {
             logger.warn({ projectId: project.id }, "Warm cache timeout, skipping");
+            syncFailedProjects += 1;
           } else {
             logger.debug({ projectId: project.id }, "Warm cache done");
           }
+
+          // Mark as failed if any upstream fetch failed and was swallowed in Promise.all catches.
+          // We infer this by checking core cache keys after warm attempt.
+          const [issuesTs, sprintsTs, boardTs] = await Promise.all([
+            getCacheTimestamp(issuesCacheKey(project.id, 90)).catch(() => null),
+            getCacheTimestamp(sprintsCacheKey(project.id)).catch(() => null),
+            getCacheTimestamp(`boardType:${project.id}`).catch(() => null),
+          ]);
+          if (result !== "timeout" && (!issuesTs || !sprintsTs || !boardTs)) {
+            syncFailedProjects += 1;
+            logger.warn({ projectId: project.id }, "Warm cache partial data for project");
+          }
+
           syncProcessedProjects += 1;
         })
       );
@@ -180,7 +207,7 @@ export async function warmCache(): Promise<void> {
   if (isSyncing) return;
   isSyncing = true;
   try {
-    await warmVisibleProjectsCache();
+    await warmVisibleProjectsCache(false);
     lastSyncedAt = new Date();
   } finally {
     isSyncing = false;
@@ -188,17 +215,24 @@ export async function warmCache(): Promise<void> {
 }
 
 async function executeSync(trigger: SyncTrigger): Promise<void> {
+  const forceRefresh = trigger === "manual";
   lastSyncStartedAt = new Date();
   lastSyncFinishedAt = null;
   lastSyncError = null;
   lastSyncTrigger = trigger;
+  lastSyncOutcome = null;
 
   try {
-    await warmVisibleProjectsCache();
-    await calculateAndCachePortfolio();
+    await warmVisibleProjectsCache(forceRefresh);
+    await calculateAndCachePortfolio({ forceRefresh });
     lastSyncedAt = new Date();
-    logger.info({ trigger, projects: syncTotalProjects }, "Sync completed");
+    lastSyncOutcome = syncFailedProjects > 0 ? "partial" : "success";
+    logger.info(
+      { trigger, projects: syncTotalProjects, failedProjects: syncFailedProjects, forceRefresh, outcome: lastSyncOutcome },
+      "Sync completed"
+    );
   } catch (err) {
+    lastSyncOutcome = "failed";
     lastSyncError = err instanceof Error ? err.message : String(err);
     logger.error({ err, trigger }, "Sync failed");
   } finally {
@@ -230,6 +264,7 @@ export async function triggerSyncNow(
   isSyncing = true;
   syncProcessedProjects = 0;
   syncTotalProjects = 0;
+  syncFailedProjects = 0;
 
   setImmediate(() => {
     void executeSync(trigger);
