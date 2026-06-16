@@ -561,7 +561,7 @@ export async function getCanonicalProjectId(projectId: string): Promise<string> 
 const MANUAL_BOARD_OVERRIDES: Record<string, ProjectBoardType> = {
   "10003": "scrum",  // OLP - Olimpo: board is "simple" but team uses Scrum
   "OLP": "scrum",
-  "10013": "scrum",  // OLI - Olimpo Internacional: board 15 is Scrum
+  "10013": "kanban",  // OLI - Olimpo Internacional: board 10 is Kanban
   "OLI": "kanban",
 };
 
@@ -736,33 +736,31 @@ export async function getJiraIssuesForProject(
     const fields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
 
-    try {
-      const allIssues: JiraIssue[] = [];
-      const maxResults = 100;
-      // Use startAt pagination and order by resolutiondate first so that
-      // resolved issues in the requested window are returned before recently
-      // updated but unrelated issues. This prevents missing older resolved
-      // items when the response is paginated.
-      let startAt = 0;
-      for (;;) {
-        const jql = encodeURIComponent(
-          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY resolutiondate DESC, updated DESC`
-        );
-        const expandParam = includeChangelog ? "&expand=changelog" : "";
-        const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
-        );
-        const pageIssues = result.issues ?? [];
-        allIssues.push(...pageIssues);
-        if (pageIssues.length < maxResults) break;
-        startAt += maxResults;
-      }
+    const allIssues: JiraIssue[] = [];
+    const maxResults = 100;
 
-      return allIssues;
-    } catch (err) {
-      logger.warn({ err, projectId }, "Failed to fetch Jira issues, using mock data");
-      return getMockIssues(projectId);
+    let startAt = 0;
+    let pageCount = 0;
+    const MAX_PAGES = 10;
+    for (;;) {
+      if (++pageCount > MAX_PAGES) {
+        logger.warn({ projectId, total: allIssues.length }, "Too many pages, stopping pagination");
+        break;
+      }
+      const jql = encodeURIComponent(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND (created >= "${sinceStr}" OR resolutiondate >= "${sinceStr}") ORDER BY resolutiondate DESC, updated DESC`
+      );
+      const expandParam = includeChangelog ? "&expand=changelog" : "";
+      const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
+        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
+      );
+      const pageIssues = result.issues ?? [];
+      allIssues.push(...pageIssues);
+      if (pageIssues.length < maxResults) break;
+      startAt += maxResults;
     }
+
+    return allIssues;
   });
 }
 

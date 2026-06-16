@@ -474,7 +474,8 @@ router.get(
     const perProject = await Promise.all(
       visibleProjects.map(async (project) => {
         const issues = await getJiraIssuesForProject(project.id, days);
-        const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+        const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+        const filtered = unique.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
         return {
           project,
           inProgressIssues: filtered.filter((issue) => isIssueInProgress(issue)),

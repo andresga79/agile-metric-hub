@@ -255,15 +255,21 @@ router.get(
     }
 
     const [issues, allowedIssueTypes] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
+        logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
+        return [] as JiraIssue[];
+      }),
       getPortfolioAllowedIssueTypes(),
     ]);
-    const uniqueIssues = Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
-    const portfolioIssues = uniqueIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
+    // Issue type filter only applies to portfolio-level metrics (throughput, cycle time, etc.)
+    // WIP aging, blocked time, and time in status use ALL issues regardless of type
+    const portfolioIssues = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const metrics = await computePeriodMetrics(portfolioIssues, startDate);
+
+    // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
+    const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
 
     // --- WIP Aging Report (#2) ---
     const inProgressIssues = uniqueIssues.filter((i) => isIssueInProgress(i));
@@ -371,7 +377,7 @@ router.get(
     if (compareTo) {
       const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
       const prevEndDate = new Date(startDate.getTime());
-      const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2);
+      const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2).catch(() => [] as JiraIssue[]);
       const prevFiltered = prevIssues
         .filter((i) => {
           const created = new Date(i.fields.created);
