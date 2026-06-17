@@ -107,11 +107,36 @@ export default function ProjectDetail() {
 
   const sectionLinks = getSectionLinks(currentUser?.role, project.id, permissions ?? [], project.boardType);
 
-  const primaryTabSections = ['sprints', 'kanban', 'flow', 'health', 'forecast'];
-  const secondaryTabSections = ['team', 'analytics', 'report', 'qa-rejected'];
+  // Decision-oriented order:
+  // 1) Summary (fixed tab), 2) Health, 3) Flow, 4) Forecast,
+  // 5) Execution (Sprints or Kanban), 6) Team, 7) QA Rejected, 8) Analytics, 9) Report
+  const orderedSections = [
+    'health',
+    'flow',
+    'forecast',
+    'sprints',
+    'kanban',
+    'team',
+    'qa-rejected',
+    'analytics',
+    'report',
+  ] as const;
 
-  const primaryLinks = sectionLinks.filter(l => primaryTabSections.includes(l.section));
-  const secondaryLinks = sectionLinks.filter(l => secondaryTabSections.includes(l.section));
+  const orderIndex = new Map<string, number>(
+    orderedSections.map((section, index) => [section, index])
+  );
+
+  const orderedLinks = [...sectionLinks].sort((left, right) => {
+    const leftIdx = orderIndex.get(left.section) ?? Number.MAX_SAFE_INTEGER;
+    const rightIdx = orderIndex.get(right.section) ?? Number.MAX_SAFE_INTEGER;
+    return leftIdx - rightIdx;
+  });
+
+  const primaryTabSections = ['health', 'flow', 'forecast', 'sprints', 'kanban'];
+  const secondaryTabSections = ['team', 'qa-rejected', 'analytics', 'report'];
+
+  const primaryLinks = orderedLinks.filter(l => primaryTabSections.includes(l.section));
+  const secondaryLinks = orderedLinks.filter(l => secondaryTabSections.includes(l.section));
 
   const tabIconMap: Record<string, React.ReactNode> = {
     sprints: <BarChart3 size={16} />,

@@ -2,15 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { getAuthToken } from "@/lib/auth";
 
 export const SECTION_NAMES = [
-  "team",
   "health",
-  "analytics",
   "flow",
   "forecast",
-  "report",
-  "qa-rejected",
   "sprints",
   "kanban",
+  "team",
+  "qa-rejected",
+  "analytics",
+  "report",
   "targets",
 ] as const;
 
@@ -82,18 +82,18 @@ export function getSectionLinks(
   boardType?: string,
 ): { href: string; label: string; section: ProjectSection }[] {
   const links = [
-    { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/health`, label: "Health", section: "health" as ProjectSection },
-    { href: `/projects/${projectId}/analytics`, label: "Analytics", section: "analytics" as ProjectSection },
     { href: `/projects/${projectId}/flow`, label: "Flow", section: "flow" as ProjectSection },
     { href: `/projects/${projectId}/forecast`, label: "Forecast", section: "forecast" as ProjectSection },
-    { href: `/projects/${projectId}/report`, label: "Report", section: "report" as ProjectSection },
     {
       href: boardType === "scrum" ? `/projects/${projectId}/sprints` : `/projects/${projectId}/kanban`,
       label: boardType === "scrum" ? "Sprints" : "Kanban Weekly",
       section: boardType === "scrum" ? "sprints" as ProjectSection : "kanban" as ProjectSection,
     },
+    { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/qa-rejected`, label: "QA Rejected", section: "qa-rejected" as ProjectSection },
+    { href: `/projects/${projectId}/analytics`, label: "Analytics", section: "analytics" as ProjectSection },
+    { href: `/projects/${projectId}/report`, label: "Report", section: "report" as ProjectSection },
   ];
   return links.filter((l) => canAccessSection(role, l.section, permissions));
 }
