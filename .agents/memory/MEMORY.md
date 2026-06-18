@@ -1,1 +1,2 @@
 - [Agile Metrics Dashboard](agile-metrics-dashboard.md) — architecture, auth flow, mock data fallback, and period-as-path-param decision
+- [Project Agent Handbook](project-agent-handbook.md) — full project documentation for agents: architecture, stack, runbook, data flow, and conventions
