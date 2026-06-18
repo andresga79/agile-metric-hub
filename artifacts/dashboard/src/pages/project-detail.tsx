@@ -9,7 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine, Download } from "lucide-react";
+import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine, Download, Ban } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
 import {
@@ -273,7 +273,7 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           metricKey="leadTime"
           info={metricInfo("leadTime")}
@@ -310,6 +310,8 @@ export default function ProjectDetail() {
           percentiles={null}
           sparklineData={metrics?.velocityByWeek}
         />
+
+        <BlockedKpiCard projectId={projectId!} period={period} />
       </div>
 
       <Card className="bg-card/40">
@@ -353,6 +355,80 @@ export default function ProjectDetail() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function BlockedKpiCard({ projectId, period }: { projectId: string; period: string }) {
+  const { t } = useTranslation();
+  const [data, setData] = useState<{ activeBlocked: number; avgDays: number; wipPercent: number | null } | null>(null);
+  const token = localStorage.getItem("auth_token");
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    fetch(`/api/projects/${projectId}/analytics/${period}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const blocked: { isCurrentlyBlocked: boolean; totalDays: number }[] = Array.isArray(json.blockedIssues) ? json.blockedIssues : [];
+        const active = blocked.filter((b) => b.isCurrentlyBlocked);
+        const activeBlocked = active.length;
+        const avgDays = active.length > 0 ? active.reduce((s, b) => s + b.totalDays, 0) / active.length : 0;
+        const wipCount: number | null = Array.isArray(json.wipAging) && json.wipAging.length > 0 ? json.wipAging.length : null;
+        const wipPercent = wipCount !== null && wipCount > 0 ? Math.round((activeBlocked / wipCount) * 100) : null;
+        setData({ activeBlocked, avgDays, wipPercent });
+      })
+      .catch(console.error);
+  }, [projectId, period, token]);
+
+  const status: "good" | "warning" | "critical" =
+    data === null
+      ? "good"
+      : data.activeBlocked >= 5 || (data.wipPercent !== null && data.wipPercent > 20)
+      ? "critical"
+      : data.activeBlocked >= 2 || (data.wipPercent !== null && data.wipPercent >= 10)
+      ? "warning"
+      : "good";
+
+  const statusConfig = {
+    good:     { border: "border-green-500/20",  badge: "bg-green-500/20 text-green-400",  label: t("page.detail.blocked.statusGood") },
+    warning:  { border: "border-amber-500/20",  badge: "bg-amber-500/20 text-amber-400",  label: t("page.detail.blocked.statusWarning") },
+    critical: { border: "border-red-500/20",    badge: "bg-red-500/20 text-red-400",      label: t("page.detail.blocked.statusCritical") },
+  };
+  const cfg = statusConfig[status];
+
+  return (
+    <Link href={`/projects/${projectId}/health`}>
+      <Card className={`bg-card/40 border ${cfg.border} transition-opacity hover:opacity-80 cursor-pointer h-full`}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("page.detail.blocked.title")}
+            </CardTitle>
+            <Ban size={14} className="text-muted-foreground" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {data === null ? (
+            <div className="h-8 w-12 bg-muted animate-pulse rounded mb-2" />
+          ) : (
+            <>
+              <div className="text-2xl font-bold">{data.activeBlocked}</div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${cfg.badge}`}>{cfg.label}</span>
+                {data.wipPercent !== null && (
+                  <span className="text-xs text-muted-foreground">{data.wipPercent}% {t("page.detail.blocked.ofWip")}</span>
+                )}
+                {data.activeBlocked > 0 && (
+                  <span className="text-xs text-muted-foreground">· {data.avgDays.toFixed(1)}d {t("page.detail.blocked.avgAge")}</span>
+                )}
+              </div>
+            </>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">{t("page.detail.blocked.subtitle")}</p>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 

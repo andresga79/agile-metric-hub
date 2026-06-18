@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
-import { useGetProject, postProjectForecast, type ForecastResponse } from "@workspace/api-client-react";
+import { useGetProject, getGetProjectQueryKey, postProjectForecast, type ForecastResponse } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ForecastChart } from "@/components/forecast-chart";
 import { ArrowLeft, Calendar } from "lucide-react";
@@ -13,7 +13,7 @@ export default function ProjectForecast() {
   const token = localStorage.getItem("auth_token");
 
   const { data: project } = useGetProject(projectId!, {
-    query: { enabled: !!projectId && !!token },
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
 
   const [forecastTarget, setForecastTarget] = useState(30);

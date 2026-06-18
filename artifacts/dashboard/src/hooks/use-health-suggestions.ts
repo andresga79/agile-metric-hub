@@ -69,7 +69,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         }
 
         const isLowerBetter = (metric: string) =>
-          ["cycleTime", "leadTime", "cfr", "wipRatio"].includes(metric);
+          ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"].includes(metric);
 
         const evalMetric = (
           area: string,

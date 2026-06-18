@@ -358,7 +358,11 @@ export default function Dashboard() {
             {isLoading ? (
               <Skeleton className="h-8 w-20 mb-1" />
             ) : (
-              <div className="text-2xl font-bold">{summary?.avgCycleTimeDisplay ?? formatDurationDays(summary?.avgCycleTime)}</div>
+              <div className="text-2xl font-bold">
+                {summary?.avgCycleTime !== undefined && summary?.avgCycleTime !== null
+                  ? formatDurationDays(summary.avgCycleTime)
+                  : "-"}
+              </div>
             )}
             <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.startToFinish')}</p>
           </CardContent>
