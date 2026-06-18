@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache";
 import {
   getJiraIssuesForProject,
+  getFlaggedJiraIssuesForProject,
   getEffectiveIssueType,
   periodToDays,
   isIssueDone,
@@ -33,6 +34,35 @@ function getStartDate(periodDays: number): Date {
 
 function isBlockedStatus(name: string): boolean {
   return /block|impediment|bloqueado|obstáculo/i.test(name.trim());
+}
+
+function isBlockedFlagValue(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /block|impediment|bloqueado|obstáculo/i.test(value.trim());
+}
+
+function isFlaggedTransition(item: { field: string; fieldId?: string }): boolean {
+  const fieldName = item.field.trim().toLowerCase();
+  const fieldId = item.fieldId?.trim().toLowerCase() ?? "";
+  return fieldId === "customfield_10021" || fieldName === "flagged" || fieldName === "marca";
+}
+
+function isIssueCurrentlyFlagged(issue: JiraIssue): boolean {
+  const flagged = issue.fields.customfield_10021;
+  if (!Array.isArray(flagged)) return false;
+  return flagged.some((entry) => isBlockedFlagValue(entry?.value ?? null));
+}
+
+function isBlockedEligibleIssueType(issue: JiraIssue): boolean {
+  const rawType = issue.fields.issuetype.name?.trim().toLowerCase() ?? "";
+  return (
+    rawType === "hu" ||
+    rawType === "historia" ||
+    rawType === "historia de usuario" ||
+    rawType === "story" ||
+    rawType === "tarea" ||
+    rawType === "task"
+  );
 }
 
 function getISOWeek(date: Date): string {
@@ -252,11 +282,26 @@ router.get(
 
     if (req.query.refresh === "true") {
       await clearCache(issuesCacheKey(projectId, periodDays));
+      await clearCache(`${issuesCacheKey(projectId, periodDays)}:changelog`);
+      await clearCache(issuesCacheKey(projectId, 90));
+      await clearCache(`${issuesCacheKey(projectId, 90)}:changelog`);
+      await clearCache(`issues:${projectId}:flagged`);
+      await clearCache(`issues:${projectId}:flagged:changelog`);
     }
 
-    const [issues, allowedIssueTypes] = await Promise.all([
+    const [issues, blockedScopeIssues, flaggedIssues, allowedIssueTypes] = await Promise.all([
       getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
         logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
+        return [] as JiraIssue[];
+      }),
+      // Blocked analysis needs a wider horizon so currently blocked items
+      // are still visible even if they were created before the selected period.
+      getJiraIssuesForProject(projectId, 90, { includeChangelog: true }).catch((err) => {
+        logger.warn({ err, projectId }, "Failed to fetch Jira issues for blocked analysis, returning empty");
+        return [] as JiraIssue[];
+      }),
+      getFlaggedJiraIssuesForProject(projectId, { includeChangelog: true }).catch((err) => {
+        logger.warn({ err, projectId }, "Failed to fetch flagged Jira issues for blocked analysis, returning empty");
         return [] as JiraIssue[];
       }),
       getPortfolioAllowedIssueTypes(),
@@ -265,6 +310,9 @@ router.get(
 
     // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    const blockedSourceIssues = Array.from(
+      new Map([...blockedScopeIssues, ...flaggedIssues].map((i) => [i.key, i])).values()
+    );
 
     // Issue type filter only applies to portfolio-level comparison.
     // On the project detail page, ALL issue types are included for metrics.
@@ -322,30 +370,65 @@ router.get(
 
     // --- Blocked Time Analysis (#7) ---
     const blockedData = await Promise.all(
-      uniqueIssues.map(async (i) => {
+      blockedSourceIssues.map(async (i) => {
+        if (!isBlockedEligibleIssueType(i)) {
+          return {
+            key: i.key,
+            summary: i.fields.summary,
+            issueType: i.fields.issuetype.name,
+            priority: i.fields.priority.name,
+            totalDays: 0,
+            isCurrentlyBlocked: false,
+            currentStatus: i.fields.status.name,
+          };
+        }
+
         const histories = i.changelog?.histories ?? [];
+        const createdMs = new Date(i.fields.created).getTime();
         let totalBlockedMs = 0;
-        let blockedStart: number | null = null;
+        let intervalStart: number | null = null;
+        let blockedByStatus = false;
+        let blockedByFlag = false;
 
         const sortedHistories = [...histories]
-          .filter((h) => h.items.some((it) => it.field === "status"))
+          .filter((h) => h.items.some((it) => it.field === "status" || isFlaggedTransition(it)))
           .sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
 
         for (const h of sortedHistories) {
-          const transition = h.items.find((it) => it.field === "status");
-          if (!transition) continue;
           const transitionTime = new Date(h.created).getTime();
+          const wasBlocked = blockedByStatus || blockedByFlag;
 
-          if (transition.toString && isBlockedStatus(transition.toString)) {
-            blockedStart = transitionTime;
-          } else if (blockedStart !== null) {
-            totalBlockedMs += transitionTime - blockedStart;
-            blockedStart = null;
+          const statusTransition = h.items.find((it) => it.field === "status");
+          if (statusTransition?.toString) {
+            blockedByStatus = isBlockedStatus(statusTransition.toString);
+          }
+
+          const flaggedTransition = h.items.find((it) => isFlaggedTransition(it));
+          if (flaggedTransition) {
+            blockedByFlag = isBlockedFlagValue(flaggedTransition.toString ?? null);
+          }
+
+          const isBlockedNow = blockedByStatus || blockedByFlag;
+          if (!wasBlocked && isBlockedNow) {
+            intervalStart = transitionTime;
+          } else if (wasBlocked && !isBlockedNow && intervalStart !== null) {
+            totalBlockedMs += transitionTime - intervalStart;
+            intervalStart = null;
           }
         }
 
-        if (blockedStart !== null) {
-          totalBlockedMs += Date.now() - blockedStart;
+        const currentlyBlockedByStatus = isBlockedStatus(i.fields.status.name);
+        const currentlyBlockedByFlag = isIssueCurrentlyFlagged(i);
+        const isCurrentlyBlocked = currentlyBlockedByStatus || currentlyBlockedByFlag;
+
+        if (isCurrentlyBlocked && intervalStart === null) {
+          // If the issue is currently blocked but we did not observe a transition
+          // in the fetched history, approximate from creation time.
+          intervalStart = createdMs;
+        }
+
+        if (isCurrentlyBlocked && intervalStart !== null) {
+          totalBlockedMs += Date.now() - intervalStart;
         }
 
         const totalDays = Math.round((totalBlockedMs / (1000 * 60 * 60 * 24)) * 10) / 10;
@@ -355,14 +438,14 @@ router.get(
           issueType: i.fields.issuetype.name,
           priority: i.fields.priority.name,
           totalDays,
-          isCurrentlyBlocked: blockedStart !== null,
+          isCurrentlyBlocked,
           currentStatus: i.fields.status.name,
         };
       })
     );
 
     const blockedIssues = blockedData
-      .filter((b) => b.totalDays > 0)
+      .filter((b) => b.totalDays > 0 || b.isCurrentlyBlocked)
       .sort((a, b) => {
         if (a.isCurrentlyBlocked !== b.isCurrentlyBlocked) return a.isCurrentlyBlocked ? -1 : 1;
         return b.totalDays - a.totalDays;

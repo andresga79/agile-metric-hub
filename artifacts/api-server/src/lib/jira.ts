@@ -85,6 +85,7 @@ export interface JiraIssue {
     customfield_10016?: number;
     customfield_10028?: number;
     customfield_10072?: number;
+    customfield_10021?: Array<{ value?: string; id?: string; self?: string }> | null;
     created: string;
     resolutiondate?: string;
     timespent?: number;
@@ -93,7 +94,7 @@ export interface JiraIssue {
   changelog?: {
     histories: {
       created: string;
-      items: { field: string; fromString?: string | null; toString?: string | null }[];
+      items: { field: string; fieldId?: string; fromString?: string | null; toString?: string | null }[];
     }[];
   };
   issuelinks?: {
@@ -743,7 +744,7 @@ export async function getJiraIssuesForProject(
     const sinceStr = since.toISOString().split("T")[0];
 
     const fields =
-      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
 
     const maxResults = 100;
     const MAX_PAGES = 50;
@@ -787,6 +788,53 @@ export async function getJiraIssuesForProject(
     const deduped = Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
 
     return deduped;
+  }, { forceRefresh: options?.forceRefresh });
+}
+
+export async function getFlaggedJiraIssuesForProject(
+  projectId: string,
+  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return [];
+  }
+
+  const includeChangelog = options?.includeChangelog === true;
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  const cacheKeyBase = `issues:${canonicalProjectId}:flagged`;
+  const cacheKey = includeChangelog ? `${cacheKeyBase}:changelog` : cacheKeyBase;
+
+  return withCache(cacheKey, async () => {
+    const fields =
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+
+    const maxResults = 100;
+    const MAX_PAGES = 50;
+    const issues: JiraIssue[] = [];
+    let startAt = 0;
+    let pageCount = 0;
+    const jql = encodeURIComponent(
+      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND Flagged is not EMPTY ORDER BY updated DESC`
+    );
+
+    for (;;) {
+      if (++pageCount > MAX_PAGES) {
+        logger.warn({ projectId, total: issues.length }, "Too many pages while fetching flagged issues");
+        break;
+      }
+
+      const expandParam = includeChangelog ? "&expand=changelog" : "";
+      const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
+        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
+      );
+
+      const pageIssues = result.issues ?? [];
+      issues.push(...pageIssues);
+      if (pageIssues.length < maxResults) break;
+      startAt += maxResults;
+    }
+
+    return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
   }, { forceRefresh: options?.forceRefresh });
 }
 
