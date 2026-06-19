@@ -172,10 +172,13 @@ router.get(
     const periodDays = periodToDays(period);
 
     const [issues, sprints, qaStatusSet, devStatusSet] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays),
+      getJiraIssuesForProject(projectId, periodDays, {
+        includeChangelog: true,
+        includeIssueLinks: true,
+      }),
       getJiraSprints(projectId),
       getQaStatusSet(),
-      getDevReturnStatusSet(),
+      getDevReturnStatusSet(projectId),
     ]);
 
     // --- Rejection detection (existing) ---
@@ -291,7 +294,7 @@ router.get(
       .sort((a, b) => a.sprintName.localeCompare(b.sprintName));
 
     const qaNames = await getQaStatuses();
-    const devNames = await getDevReturnStatuses();
+    const devNames = await getDevReturnStatuses(projectId);
 
     res.json({
       projectId,

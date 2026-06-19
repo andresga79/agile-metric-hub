@@ -226,15 +226,37 @@ const DEV_RETURN_BLOCKLIST_PATTERNS = [
   /validaci/i,
 ];
 
-/** Statuses in "new" or "indeterminate" categories that ARE QA-related AND
- *  NOT in the blocklist are valid "return to dev" targets. */
-export async function getDevReturnStatuses(): Promise<string[]> {
+// Projects where QA returns are considered valid when moving back to backlog OR
+// to a "ready" status (e.g. "Ready for DEV"). Supports project id or key.
+const DEV_RETURN_ALLOW_READY_PROJECTS = new Set([
+  "10848",
+  "DCX",
+]);
+
+function allowsReadyReturnStatus(projectId?: string): boolean {
+  if (!projectId) return false;
+  return DEV_RETURN_ALLOW_READY_PROJECTS.has(projectId.trim().toUpperCase());
+}
+
+/** Statuses in the "new" category (backlog / to-do) are valid "return from
+ *  QA" targets. Some projects also allow explicit "ready" targets.
+ *
+ *  Important: this still excludes generic in-progress states, so QA -> In
+ *  Progress is not counted as backlog rejection noise. */
+export async function getDevReturnStatuses(projectId?: string): Promise<string[]> {
   const statuses = await fetchAllStatuses();
+  const allowReady = allowsReadyReturnStatus(projectId);
   return deduplicateCaseInsensitive(
     statuses
       .filter((s) => {
+        const statusName = s.name.trim();
         const cat = s.statusCategory?.key;
-        if (cat !== "new" && cat !== "indeterminate") return false;
+        const isBacklogTarget = cat === "new";
+        const isReadyTarget =
+          allowReady &&
+          /(^|\s)(ready|listo)(\s|$)/i.test(statusName) &&
+          (cat === "new" || cat === "indeterminate");
+        if (!isBacklogTarget && !isReadyTarget) return false;
         if (isQaStatus(s.name)) return false;
         return !DEV_RETURN_BLOCKLIST_PATTERNS.some((p) => p.test(s.name));
       })
@@ -248,8 +270,8 @@ export async function getQaStatusSet(): Promise<Set<string>> {
   return new Set(names.map((n) => n.toLowerCase()));
 }
 
-export async function getDevReturnStatusSet(): Promise<Set<string>> {
-  const names = await getDevReturnStatuses();
+export async function getDevReturnStatusSet(projectId?: string): Promise<Set<string>> {
+  const names = await getDevReturnStatuses(projectId);
   return new Set(names.map((n) => n.toLowerCase()));
 }
 
@@ -489,6 +511,19 @@ async function jiraAgileFetch<T>(url: string): Promise<T> {
 
     if (!response.ok) {
       const text = await response.text();
+      const lowerBody = text.toLowerCase();
+      const sprintBoardUnsupported =
+        response.status === 400 &&
+        /\/board\/\d+\/sprint/.test(url) &&
+        (lowerBody.includes("no admite sprints") ||
+          lowerBody.includes("does not support sprints") ||
+          lowerBody.includes("tablero no admite sprints"));
+
+      if (sprintBoardUnsupported) {
+        logger.info({ status: response.status, url, body: text }, "Jira board does not support sprints");
+        throw new Error("Jira board does not support sprints");
+      }
+
       logger.warn({ status: response.status, url, body: text }, "Jira Agile API error");
       throw new Error(`Jira Agile API error: ${response.status} ${response.statusText}`);
     }
@@ -650,8 +685,9 @@ export async function getJiraSprints(
   if (!isJiraConfigured()) return [];
 
   return withCache(sprintsCacheKey(projectId), async () => {
+    let boardId: number | null = null;
     try {
-      const boardId = await getBoardId(projectId);
+      boardId = await getBoardId(projectId);
       if (!boardId) return [];
 
       // Fetch all sprints with pagination
@@ -682,6 +718,11 @@ export async function getJiraSprints(
         return bEnd - aEnd;
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message.toLowerCase() : "";
+      if (message.includes("does not support sprints") || message.includes("no admite sprints")) {
+        logger.info({ projectId, boardId }, "Skipping sprint fetch for board without sprint support");
+        return [];
+      }
       logger.warn({ err, projectId }, "Failed to fetch sprints");
       return [];
     }
@@ -725,17 +766,18 @@ function capLookbackDays(periodDays: number): number {
 export async function getJiraIssuesForProject(
   projectId: string,
   periodDays: number,
-  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
+  options?: { includeChangelog?: boolean; includeIssueLinks?: boolean; forceRefresh?: boolean }
 ): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) {
     return getMockIssues(projectId);
   }
 
   const includeChangelog = options?.includeChangelog === true;
+  const includeIssueLinks = options?.includeIssueLinks === true;
   const effectivePeriodDays = capLookbackDays(periodDays);
   const canonicalProjectId = await getCanonicalProjectId(projectId);
   const cacheKey = includeChangelog
-    ? `${issuesCacheKey(canonicalProjectId, effectivePeriodDays)}:changelog`
+    ? `${issuesCacheKey(canonicalProjectId, effectivePeriodDays)}:changelog${includeIssueLinks ? ":links" : ""}`
     : issuesCacheKey(canonicalProjectId, effectivePeriodDays);
 
   return withCache(cacheKey, async () => {
@@ -743,8 +785,9 @@ export async function getJiraIssuesForProject(
     since.setDate(since.getDate() - effectivePeriodDays);
     const sinceStr = since.toISOString().split("T")[0];
 
-    const fields =
+    const baseFields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+    const fields = includeIssueLinks ? `${baseFields},issuelinks` : baseFields;
 
     const maxResults = 100;
     const MAX_PAGES = 50;
