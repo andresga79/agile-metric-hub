@@ -9,9 +9,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, PencilLine, Download, Ban } from "lucide-react";
+import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, Download, Ban } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getSectionLinks, useRolePermissions, canEditSection } from "@/lib/project-section-permissions";
+import { getSectionLinks, useRolePermissions } from "@/lib/project-section-permissions";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,6 +20,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type Period = "1m" | "3m";
+
+type MetricThreshold = { good: number; warning: number };
+type ThresholdStatus = "good" | "warning" | "critical" | null;
+
+const DEFAULT_THRESHOLDS: Record<string, MetricThreshold> = {
+  cycleTime: { good: 15, warning: 25 },
+  leadTime: { good: 20, warning: 35 },
+};
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -34,7 +42,7 @@ export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
   const [targets, setTargets] = useState<any[]>([]);
-  const [editingTarget, setEditingTarget] = useState<{ metric: string; value: string } | null>(null);
+  const [thresholds, setThresholds] = useState<Record<string, MetricThreshold>>(DEFAULT_THRESHOLDS);
   const chartRef = useRef<HTMLDivElement>(null);
   const [exportingChart, setExportingChart] = useState(false);
   const token = localStorage.getItem("auth_token");
@@ -61,28 +69,26 @@ export default function ProjectDetail() {
       .catch(console.error);
   }, [projectId, period, token]);
 
-  const saveTarget = (metric: string) => {
-    if (!editingTarget || !projectId) return;
-    fetch(`/api/projects/${projectId}/targets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ metric, targetValue: Number(editingTarget.value), period }),
+  useEffect(() => {
+    if (!token) return;
+    fetch("/api/admin/metric-thresholds", {
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((t) => {
-        setTargets((prev) => {
-          const idx = prev.findIndex((x) => x.metric === metric && x.period === period);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = t;
-            return next;
-          }
-          return [...prev, t];
-        });
-        setEditingTarget(null);
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        const merged: Record<string, MetricThreshold> = { ...DEFAULT_THRESHOLDS };
+        for (const row of rows) {
+          if (!row?.metric || row.goodValue === undefined || row.warningValue === undefined) continue;
+          merged[row.metric] = {
+            good: Number(row.goodValue),
+            warning: Number(row.warningValue),
+          };
+        }
+        setThresholds(merged);
       })
       .catch(console.error);
-  };
+  }, [token]);
 
   const getTarget = (metric: string) => targets.find((t) => t.metric === metric && t.period === period);
 
@@ -161,17 +167,28 @@ export default function ProjectDetail() {
     const targetEntry = getTarget(metric);
     const targetVal = targetEntry ? Number(targetEntry.targetValue) : null;
     const isLowerBetter = metric === "leadTime" || metric === "cycleTime";
+    const threshold = thresholds[metric];
     const onTrack = targetVal !== null && actual !== undefined && actual !== null
       ? isLowerBetter ? actual <= targetVal : actual >= targetVal
       : null;
-    const isEditing = editingTarget?.metric === metric;
+    const thresholdStatus: ThresholdStatus = (metric === "leadTime" || metric === "cycleTime") && threshold && actual !== undefined && actual !== null
+      ? actual <= threshold.good
+        ? "good"
+        : actual <= threshold.warning
+        ? "warning"
+        : "critical"
+      : null;
     const label = metric === "leadTime" ? t('page.detail.leadTime')
       : metric === "cycleTime" ? t('page.detail.cycleTime')
       : metric === "throughput" ? t('page.detail.throughput')
       : t('page.detail.velocity');
     const unit = metric === "leadTime" || metric === "cycleTime" ? "d" : "";
-    const canEdit = canEditSection(currentUser?.role, "targets", permissions ?? []);
-    return { actual, targetVal, onTrack, isEditing, label, unit, canEdit };
+    return { actual, targetVal, onTrack, thresholdStatus, label, unit };
+  };
+
+  const getThresholdValue = (metric: "leadTime" | "cycleTime") => {
+    const threshold = thresholds[metric];
+    return threshold?.good ?? null;
   };
 
   const renderTrend = (value: number | undefined, metricKey?: string, currentValue?: number | null, lowerBetter?: boolean) => {
@@ -278,11 +295,7 @@ export default function ProjectDetail() {
           metricKey="leadTime"
           info={metricInfo("leadTime")}
           trend={null}
-          editingValue={editingTarget?.metric === "leadTime" ? editingTarget.value : ""}
-          onEdit={() => setEditingTarget({ metric: "leadTime", value: String(getTarget("leadTime")?.targetValue ?? "") })}
-          onSave={() => saveTarget("leadTime")}
-          onCancel={() => setEditingTarget(null)}
-          onValueChange={(v) => setEditingTarget({ metric: "leadTime", value: v })}
+          thresholdValue={getThresholdValue("leadTime")}
           percentiles={metrics?.leadTimePercentiles ?? null}
         />
 
@@ -290,11 +303,7 @@ export default function ProjectDetail() {
           metricKey="cycleTime"
           info={metricInfo("cycleTime")}
           trend={null}
-          editingValue={editingTarget?.metric === "cycleTime" ? editingTarget.value : ""}
-          onEdit={() => setEditingTarget({ metric: "cycleTime", value: String(getTarget("cycleTime")?.targetValue ?? "") })}
-          onSave={() => saveTarget("cycleTime")}
-          onCancel={() => setEditingTarget(null)}
-          onValueChange={(v) => setEditingTarget({ metric: "cycleTime", value: v })}
+          thresholdValue={getThresholdValue("cycleTime")}
           percentiles={metrics?.cycleTimePercentiles ?? null}
         />
 
@@ -302,11 +311,6 @@ export default function ProjectDetail() {
           metricKey="throughput"
           info={metricInfo("throughput")}
           trend={renderTrend(metrics?.throughputTrend, 'metric.throughput', metrics?.throughput, false)}
-          editingValue={editingTarget?.metric === "throughput" ? editingTarget.value : ""}
-          onEdit={() => setEditingTarget({ metric: "throughput", value: String(getTarget("throughput")?.targetValue ?? "") })}
-          onSave={() => saveTarget("throughput")}
-          onCancel={() => setEditingTarget(null)}
-          onValueChange={(v) => setEditingTarget({ metric: "throughput", value: v })}
           percentiles={null}
           sparklineData={metrics?.velocityByWeek}
         />
@@ -399,7 +403,7 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
 
   return (
     <Link href={`/projects/${projectId}/health`}>
-      <Card className={`bg-card/40 border ${cfg.border} transition-opacity hover:opacity-80 cursor-pointer h-full`}>
+      <Card className={`bg-card/40 border ${cfg.border} transition-opacity hover:opacity-80 cursor-pointer h-full flex flex-col`}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -408,7 +412,7 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
             <Ban size={14} className="text-muted-foreground" />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1 flex flex-col">
           {data === null ? (
             <div className="h-8 w-12 bg-muted animate-pulse rounded mb-2" />
           ) : (
@@ -425,7 +429,7 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
               </div>
             </>
           )}
-          <p className="text-xs text-muted-foreground mt-1">{t("page.detail.blocked.subtitle")}</p>
+          <p className="text-xs text-muted-foreground mt-auto">{t("page.detail.blocked.subtitle")}</p>
         </CardContent>
       </Card>
     </Link>
@@ -438,106 +442,95 @@ function MetricCard({
   trend,
   percentiles,
   sparklineData,
-  editingValue,
-  onEdit,
-  onSave,
-  onCancel,
-  onValueChange,
+  thresholdValue,
 }: {
   metricKey: string;
-  info: { actual: number | undefined | null; targetVal: number | null; onTrack: boolean | null; isEditing: boolean; label: string; unit: string; canEdit: boolean };
+  info: { actual: number | undefined | null; targetVal: number | null; onTrack: boolean | null; thresholdStatus: ThresholdStatus; label: string; unit: string };
   trend: React.ReactNode;
   percentiles: { p50: number; p75: number; p85: number; p95: number } | null;
   sparklineData?: { week: string; value: number }[];
-  editingValue: string;
-  onEdit: () => void;
-  onSave: () => void;
-  onCancel: () => void;
-  onValueChange: (v: string) => void;
+  thresholdValue?: number | null;
 }) {
   const { t } = useTranslation();
 
   return (
-    <Card className="bg-card/40">
+    <Card className="bg-card/40 h-full flex flex-col">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{info.label}</CardTitle>
-          {info.canEdit && !info.isEditing && (
-            <button onClick={onEdit} className="text-muted-foreground hover:text-foreground transition-colors">
-              <PencilLine size={14} />
-            </button>
-          )}
-        </div>
+        <CardTitle className="text-sm font-medium text-muted-foreground">{info.label}</CardTitle>
       </CardHeader>
-      <CardContent>
-        {info.isEditing ? (
-          <div className="flex gap-2 items-center">
-            <input
-              type="number"
-              step="0.1"
-              value={editingValue}
-              onChange={(e) => onValueChange(e.target.value)}
-              className="w-24 bg-background border border-border rounded px-2 py-1 text-sm"
-              placeholder={t('page.detail.targetValue')}
-              autoFocus
-            />
-            <button onClick={onSave} className="bg-primary text-primary-foreground px-2 py-1 rounded text-xs">{t('page.detail.save')}</button>
-            <button onClick={onCancel} className="text-xs text-muted-foreground hover:underline">{t('page.detail.cancel')}</button>
+      <CardContent className="flex-1 flex flex-col">
+        {((metricKey === "leadTime" || metricKey === "cycleTime") && info.thresholdStatus !== null) ? (
+          <div className="mb-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                info.thresholdStatus === "good"
+                  ? "bg-green-500/15 text-green-400"
+                  : info.thresholdStatus === "warning"
+                  ? "bg-amber-500/15 text-amber-400"
+                  : "bg-red-500/15 text-red-400"
+              }`}
+            >
+              {info.thresholdStatus === "good"
+                ? t('page.detail.thresholdHealthy')
+                : info.thresholdStatus === "warning"
+                ? t('page.detail.thresholdWarning')
+                : t('page.detail.thresholdCritical')}
+            </span>
           </div>
-        ) : (
-          <>
-            <div className="text-3xl font-bold">
-              {info.actual !== undefined && info.actual !== null ? `${Number(info.actual).toFixed(1)}` : "—"}
-              <span className="text-sm font-normal text-muted-foreground ml-1">{info.unit}</span>
+        ) : null}
+        <div className="text-3xl font-bold">
+          {info.actual !== undefined && info.actual !== null ? `${Number(info.actual).toFixed(1)}` : "—"}
+          <span className="text-sm font-normal text-muted-foreground ml-1">{info.unit}</span>
+        </div>
+        {trend && <div className="mt-1">{trend}</div>}
+        {(metricKey === "leadTime" || metricKey === "cycleTime") && percentiles && thresholdValue && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong> · P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong> · Meta <strong className="text-foreground">{thresholdValue}d</strong>
+          </div>
+        )}
+        {percentiles && (metricKey !== "leadTime" && metricKey !== "cycleTime") && (
+          <div className="flex gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
+            <span>P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong></span>
+            <span>P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong></span>
+          </div>
+        )}
+        {metricKey !== "leadTime" && metricKey !== "cycleTime" && info.targetVal !== null && info.actual !== null && info.actual !== undefined && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            {t('page.detail.target')} {info.targetVal}{info.unit}
+          </div>
+        )}
+        {metricKey !== "leadTime" && metricKey !== "cycleTime" && info.targetVal !== null && info.onTrack !== null && info.actual !== null && info.actual !== undefined && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[11px] mb-1">
+              <span className={info.onTrack ? "text-green-400" : "text-red-400"}>
+                {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
+              </span>
+              <span className="text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
             </div>
-            {metricKey === "leadTime" || metricKey === "cycleTime" ? (
-              <p className="text-xs text-muted-foreground mt-1">
-                {metricKey === "leadTime" ? t('page.detail.leadTimeDesc') : t('page.detail.cycleTimeDesc')}
-              </p>
-            ) : null}
-            {trend && <div className="mt-1">{trend}</div>}
-            {percentiles && (
-              <div className="flex gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
-                <span>P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong></span>
-                <span>P75 <strong className="text-foreground">{formatDurationDays(percentiles.p75)}</strong></span>
-                <span>P85 <strong className="text-foreground">{formatDurationDays(percentiles.p85)}</strong></span>
-                <span>P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong></span>
-              </div>
-            )}
-            {info.targetVal !== null && info.onTrack !== null && info.actual !== null && info.actual !== undefined && (
-              <div className="mt-2">
-                <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className={info.onTrack ? "text-green-400" : "text-red-400"}>
-                    {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
-                  </span>
-                  <span className="text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
-                </div>
-                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      info.onTrack ? "bg-green-500" : "bg-red-500"
-                    }`}
-                    style={{ width: `${Math.min((Number(info.actual) / info.targetVal) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            {sparklineData && sparklineData.length > 1 && (
-              <div className="h-10 mt-3 -mx-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={sparklineData}>
-                    <defs>
-                      <linearGradient id={`sparkline-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={1.5} fillOpacity={1} fill={`url(#sparkline-${metricKey})`} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </>
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  info.onTrack ? "bg-green-500" : "bg-red-500"
+                }`}
+                style={{ width: `${Math.min((Number(info.actual) / info.targetVal) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {sparklineData && sparklineData.length > 1 && (
+          <div className="h-10 mt-auto -mx-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sparklineData}>
+                <defs>
+                  <linearGradient id={`sparkline-${metricKey}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={1.5} fillOpacity={1} fill={`url(#sparkline-${metricKey})`} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </CardContent>
     </Card>
