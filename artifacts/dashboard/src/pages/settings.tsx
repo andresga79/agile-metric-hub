@@ -1,23 +1,18 @@
 import { useTranslation } from "react-i18next";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   useListUserProjects,
   getListUserProjectsQueryKey,
-  useUpdateProjectVisibility,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Search, Eye, EyeOff } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 
 export default function Settings() {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
   const { data: projects, isLoading } = useListUserProjects({
     query: { queryKey: getListUserProjectsQueryKey() },
   });
-
-  const updateMutation = useUpdateProjectVisibility();
 
   const [search, setSearch] = useState("");
 
@@ -30,22 +25,6 @@ export default function Settings() {
     );
   }, [projects, search]);
 
-  const toggleProject = useCallback(
-    (projectId: string, currentVisible: boolean) => {
-      updateMutation.mutate(
-        { data: [{ projectId, visible: !currentVisible }] },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({
-              queryKey: getListUserProjectsQueryKey(),
-            });
-          },
-        }
-      );
-    },
-    [updateMutation, queryClient]
-  );
-
   const visibleCount = projects?.filter((p) => p.visible).length ?? 0;
   const totalCount = projects?.length ?? 0;
 
@@ -56,7 +35,7 @@ export default function Settings() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t('page.settings.title')}</h1>
         <p className="text-muted-foreground mt-1">
-          {t('page.settings.subtitle')}
+          La visibilidad global de proyectos se gestiona desde la sección de Admin.
         </p>
       </div>
 
@@ -86,17 +65,16 @@ export default function Settings() {
                 key={project.id}
                 className="flex items-center gap-4 px-6 py-4 hover:bg-accent/30 transition-colors"
               >
-                <button
-                  onClick={() => toggleProject(project.id, project.visible)}
+                <div
                   className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-colors shrink-0 ${
                     project.visible
                       ? "border-primary/50 bg-primary/10 text-primary"
                       : "border-border text-muted-foreground"
                   }`}
-                  title={project.visible ? t('page.settings.hide') : t('page.settings.show')}
+                  title={project.visible ? t('page.settings.show') : t('page.settings.hide')}
                 >
                   {project.visible ? <Eye size={18} /> : <EyeOff size={18} />}
-                </button>
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded">

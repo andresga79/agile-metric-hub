@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetCurrentUser, getGetCurrentUserQueryKey, ApiError } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/auth";
-import { LogOut, LayoutDashboard, Settings as SettingsIcon, Menu, X, ShieldAlert, RefreshCw, Sun, Moon } from "lucide-react";
+import { LogOut, LayoutDashboard, Menu, X, ShieldAlert, RefreshCw, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -80,21 +80,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {t('nav.dashboard')}
       </Link>
 
-      <hr className="my-3 border-border" />
-
-      <p className="px-3 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        {t('nav.configuration')}
-      </p>
-      <Link
-        href="/settings"
-        onClick={() => setSidebarOpen(false)}
-        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm font-medium"
-      >
-        <SettingsIcon size={18} />
-        {t('nav.settings')}
-      </Link>
-
       {user?.role === "admin" && (
+        <>
+        <hr className="my-3 border-border" />
+
+        <p className="px-3 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {t('nav.configuration')}
+        </p>
         <Link
           href="/admin"
           onClick={() => setSidebarOpen(false)}
@@ -103,6 +95,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <ShieldAlert size={18} />
           {t('nav.admin')}
         </Link>
+        </>
       )}
     </nav>
   );

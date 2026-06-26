@@ -10,7 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, Trash2, Shield, ShieldAlert, Save, Activity } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Shield, ShieldAlert, Save, Activity, Eye, EyeOff } from "lucide-react";
 import { useRolePermissions, type PermissionEntry } from "@/lib/project-section-permissions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,6 +33,15 @@ interface PortfolioRecalculationStatus {
   cachedProjects: number;
   lastError: string | null;
 }
+
+interface AdminProjectVisibilityRow {
+  projectId: string;
+  projectKey: string;
+  name: string;
+  visible: boolean;
+}
+
+type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
 const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"];
 const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency"];
@@ -82,6 +91,10 @@ export default function Admin() {
   const [newIssueType, setNewIssueType] = useState("");
   const [issueTypeError, setIssueTypeError] = useState<string | null>(null);
   const [recalculationStatus, setRecalculationStatus] = useState<PortfolioRecalculationStatus | null>(null);
+  const [adminSection, setAdminSection] = useState<AdminSection>("admin");
+  const [projectVisibility, setProjectVisibility] = useState<AdminProjectVisibilityRow[]>([]);
+  const [projectVisibilityDirty, setProjectVisibilityDirty] = useState(false);
+  const [savingProjectVisibility, setSavingProjectVisibility] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -130,6 +143,20 @@ export default function Admin() {
 
     fetchPortfolioRecalculationStatus();
   }, [fetchPortfolioRecalculationStatus]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    fetch("/api/admin/project-visibility", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data?.projects)) {
+          setProjectVisibility(data.projects);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!recalculationStatus?.running) return;
@@ -251,6 +278,54 @@ export default function Admin() {
     }
   };
 
+  const toggleProjectVisibility = (projectKey: string) => {
+    setProjectVisibility((prev) =>
+      prev.map((p) => (p.projectKey === projectKey ? { ...p, visible: !p.visible } : p))
+    );
+    setProjectVisibilityDirty(true);
+  };
+
+  const saveProjectVisibility = async () => {
+    const token = localStorage.getItem("auth_token");
+    setSavingProjectVisibility(true);
+
+    try {
+      const response = await fetch("/api/admin/project-visibility", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          projects: projectVisibility.map((p) => ({
+            projectKey: p.projectKey,
+            visible: p.visible,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        toast({
+          title: "No se pudo guardar",
+          description: "Error al actualizar la visibilidad de proyectos.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setProjectVisibilityDirty(false);
+      toast({
+        title: "Visibilidad actualizada",
+        description: "La visibilidad global de proyectos fue guardada.",
+      });
+    } catch {
+      toast({
+        title: "Error de red",
+        description: "No se pudo guardar la visibilidad de proyectos.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingProjectVisibility(false);
+    }
+  };
+
   useEffect(() => {
     if (permissions) setLocalPerms(permissions);
   }, [permissions]);
@@ -351,15 +426,41 @@ export default function Admin() {
           <h1 className="text-2xl font-bold tracking-tight">{t('page.admin.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('page.admin.subtitle')}</p>
         </div>
-        <button
-          onClick={() => { setShowForm(!showForm); setEditingUser(null); setForm({ username: "", email: "", password: "", role: "member" }); }}
-          className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors"
-        >
-          <UserPlus size={14} />
-          {showForm ? t('page.admin.cancel') : t('page.admin.addUser')}
-        </button>
+        {adminSection === "admin" && (
+          <button
+            onClick={() => { setShowForm(!showForm); setEditingUser(null); setForm({ username: "", email: "", password: "", role: "member" }); }}
+            className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors"
+          >
+            <UserPlus size={14} />
+            {showForm ? t('page.admin.cancel') : t('page.admin.addUser')}
+          </button>
+        )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          ["admin", "Admin"],
+          ["roles", "Roles"],
+          ["health", "Health"],
+          ["types", "Tipos"],
+          ["visibility", "Visibilidad"],
+        ] as [AdminSection, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setAdminSection(key)}
+            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              adminSection === key
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {adminSection === "admin" && (
+        <>
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="bg-card/40">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -504,7 +605,10 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
 
+      {adminSection === "roles" && (
       <Card className="bg-card/40">
         <CardHeader>
           <CardTitle className="text-lg">{t('page.admin.rolePermissions')}</CardTitle>
@@ -560,7 +664,9 @@ export default function Admin() {
           <p className="text-xs text-muted-foreground mt-2">{t('page.admin.adminFullAccess')}</p>
         </CardContent>
       </Card>
+      )}
 
+      {adminSection === "health" && (
       <Card className="bg-card/40">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -644,7 +750,9 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {adminSection === "types" && (
       <Card className="bg-card/40">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
@@ -754,6 +862,70 @@ export default function Admin() {
           </p>
         </CardContent>
       </Card>
+      )}
+
+      {adminSection === "visibility" && (
+        <Card className="bg-card/40">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg">Visibilidad Global De Proyectos</CardTitle>
+                <CardDescription>
+                  Esta configuración aplica para todos los usuarios del sistema.
+                </CardDescription>
+              </div>
+              {projectVisibilityDirty && (
+                <button
+                  onClick={saveProjectVisibility}
+                  disabled={savingProjectVisibility}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  {savingProjectVisibility ? t('common.loading') : "Guardar"}
+                </button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead>Proyecto</TableHead>
+                    <TableHead>Clave</TableHead>
+                    <TableHead className="text-right">Visible</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {projectVisibility.map((project) => (
+                    <TableRow key={project.projectId} className="border-border hover:bg-accent/50">
+                      <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableCell>
+                        <span className="rounded bg-accent/40 px-2 py-0.5 text-xs font-mono">
+                          {project.projectKey}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          onClick={() => toggleProjectVisibility(project.projectKey)}
+                          className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${
+                            project.visible
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {project.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                          {project.visible ? "Visible" : "Oculto"}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

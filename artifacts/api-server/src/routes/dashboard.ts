@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { db, portfolioCacheTable, userProjectSettingsTable } from "@workspace/db";
-import { desc, sql } from "drizzle-orm";
+import { db, portfolioCacheTable } from "@workspace/db";
+import { desc } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../middleware/auth";
+import { getProjectVisibilityMap } from "../lib/project-visibility";
 
 const router: IRouter = Router();
 const DASHBOARD_OVERVIEW_PERIOD_DAYS = 30;
@@ -15,24 +16,22 @@ function formatDurationDays(value: number): string {
 
 router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> => {
   const authReq = req as AuthRequest;
-  const userId = authReq.user!.userId;
+  if (!authReq.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
-  const userSettings = await db
-    .select({ projectId: userProjectSettingsTable.projectId })
-    .from(userProjectSettingsTable)
-    .where(
-      sql`${userProjectSettingsTable.userId} = ${userId} AND ${userProjectSettingsTable.visible} = false`
-    );
-  const hiddenIds = new Set(userSettings.map((s) => s.projectId));
+  const [cached, visibilityMap] = await Promise.all([
+    db
+      .select()
+      .from(portfolioCacheTable)
+      .orderBy(desc(portfolioCacheTable.throughput)),
+    getProjectVisibilityMap(),
+  ]);
 
-  const cached = await db
-    .select()
-    .from(portfolioCacheTable)
-    .orderBy(desc(portfolioCacheTable.throughput));
-
-  const visible = hiddenIds.size > 0
-    ? cached.filter((p) => !hiddenIds.has(p.projectId))
-    : cached;
+  const visible = cached.filter(
+    (p) => visibilityMap.get(p.projectKey.trim().toUpperCase()) !== false
+  );
 
   const totalResolved = visible.reduce((sum, p) => sum + (p.doneCount ?? 0), 0);
   const cycleValues = visible

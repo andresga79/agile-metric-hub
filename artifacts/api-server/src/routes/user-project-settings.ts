@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, userProjectSettingsTable, portfolioCacheTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { requireAuth, type AuthRequest } from "../middleware/auth";
+import { db, portfolioCacheTable } from "@workspace/db";
+import { requireAuth, requireAdmin, type AuthRequest } from "../middleware/auth";
 import {
   listJiraProjects,
   isJiraConfigured,
   getProjectBoardType,
 } from "../lib/jira";
+import { getProjectVisibilityMap, upsertProjectVisibility } from "../lib/project-visibility";
 
 const router: IRouter = Router();
 
@@ -31,16 +31,10 @@ interface ProjectWithVisibility {
 router.get(
   "/user/projects",
   requireAuth,
-  async (req, res): Promise<void> => {
-    const authReq = req as AuthRequest;
-    const userId = authReq.user!.userId;
-
-    const [jiraProjects, settings, portfolioRows] = await Promise.all([
+  async (_req, res): Promise<void> => {
+    const [jiraProjects, visibilityMap, portfolioRows] = await Promise.all([
       listJiraProjects(),
-      db
-        .select()
-        .from(userProjectSettingsTable)
-        .where(eq(userProjectSettingsTable.userId, userId)),
+      getProjectVisibilityMap(),
       db
         .select()
         .from(portfolioCacheTable),
@@ -58,10 +52,6 @@ router.get(
     }));
     const sourceProjects = jiraProjects.length > 0 ? jiraProjects : fallbackProjects;
 
-    const settingsMap = new Map(
-      settings.map((s) => [s.projectId, s.visible])
-    );
-
     const boardTypes = await Promise.all(
       sourceProjects.map(async (p) => {
         const bt = await getProjectBoardType(p.id).catch(() => "simple" as const);
@@ -71,7 +61,7 @@ router.get(
     const boardTypeMap = new Map(boardTypes);
 
     const projects: ProjectWithVisibility[] = sourceProjects.map((p) => {
-      const visible = settingsMap.get(p.id) ?? true;
+      const visible = visibilityMap.get(p.key.trim().toUpperCase()) !== false;
       const cached = portfolioMap.get(p.id);
       const boardType = boardTypeMap.get(p.id) ?? "simple";
 
@@ -110,10 +100,11 @@ const updateSchema = {
 router.put(
   "/user/projects",
   requireAuth,
+  requireAdmin,
   async (req, res): Promise<void> => {
     const authReq = req as AuthRequest;
     const userId = authReq.user!.userId;
-    const body = req.body;
+    const body = req.body as unknown;
 
     if (!Array.isArray(body)) {
       res
@@ -122,32 +113,38 @@ router.put(
       return;
     }
 
-    await db.transaction(async (tx) => {
-      for (const item of body) {
-        if (!item.projectId || typeof item.visible !== "boolean") {
-          res
-            .status(400)
-            .json({
-              error: `Invalid item: ${JSON.stringify(item)}`,
-            });
-          return;
-        }
-        await tx
-          .insert(userProjectSettingsTable)
-          .values({
-            userId,
-            projectId: item.projectId,
-            visible: item.visible,
-          })
-          .onConflictDoUpdate({
-            target: [
-              userProjectSettingsTable.userId,
-              userProjectSettingsTable.projectId,
-            ],
-            set: { visible: item.visible },
-          });
+    const [jiraProjects, portfolioRows] = await Promise.all([
+      listJiraProjects(),
+      db.select().from(portfolioCacheTable),
+    ]);
+
+    const idToKey = new Map<string, string>();
+    for (const project of jiraProjects) {
+      idToKey.set(project.id, project.key);
+    }
+    for (const row of portfolioRows) {
+      if (!idToKey.has(row.projectId)) {
+        idToKey.set(row.projectId, row.projectKey);
       }
-    });
+    }
+
+    const parsedEntries: { projectKey: string; visible: boolean }[] = [];
+    for (const item of body as { projectId?: unknown; visible?: unknown }[]) {
+      if (typeof item.projectId !== "string" || typeof item.visible !== "boolean") {
+        res.status(400).json({ error: `Invalid item: ${JSON.stringify(item)}` });
+        return;
+      }
+
+      const projectKey = idToKey.get(item.projectId);
+      if (!projectKey) {
+        res.status(400).json({ error: `Unknown projectId: ${item.projectId}` });
+        return;
+      }
+
+      parsedEntries.push({ projectKey, visible: item.visible });
+    }
+
+    await upsertProjectVisibility(parsedEntries, userId);
 
     res.json({ ok: true });
   }

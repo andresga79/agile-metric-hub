@@ -18,7 +18,6 @@ import ProjectReport from "@/pages/project-report";
 import ProjectQaRejected from "@/pages/project-qa-rejected";
 import ProjectSprints from "@/pages/project-sprints";
 import ProjectKanban from "@/pages/project-kanban";
-import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
 
 import "@/lib/auth"; // init auth token getter
@@ -142,7 +141,7 @@ function Router() {
       </Route>
 
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
+        {() => <AdminRoute component={Admin} />}
       </Route>
       <Route path="/admin">
         {() => <AdminRoute component={Admin} />}
