@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 const SETTINGS_KEY = "default";
 export const DEFAULT_PORTFOLIO_ISSUE_TYPES = ["Story", "Task", "Bug"] as const;
+export const KANBAN_EXCLUDED_ISSUE_TYPES = ["Test Execution", "Test", "Test Plan"] as const;
 
 const ISSUE_TYPE_ALIASES: Record<string, string> = {
   hu: "Story",
@@ -19,6 +20,9 @@ const ISSUE_TYPE_ALIASES: Record<string, string> = {
   "tarea tecnica": "Task",
   epic: "Epic",
   epica: "Epic",
+  "test execution": "Test Execution",
+  test: "Test",
+  "test plan": "Test Plan",
 };
 
 function normalizeIssueTypeName(value: string): string {

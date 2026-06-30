@@ -14,7 +14,11 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
   if (rows.length === 0) {
     const inserted = await db
       .insert(defaultMetricThresholdsTable)
-      .values(DEFAULT_HEALTH_THRESHOLDS)
+      .values(DEFAULT_HEALTH_THRESHOLDS.map((threshold) => ({
+        metric: threshold.metric,
+        goodValue: String(threshold.goodValue),
+        warningValue: String(threshold.warningValue),
+      })))
       .returning();
     res.json(inserted);
     return;

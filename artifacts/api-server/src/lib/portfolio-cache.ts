@@ -38,8 +38,12 @@ async function getLightweightPortfolioMetrics(
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - PORTFOLIO_METRICS_PERIOD_DAYS);
 
+  const filteredIssues = issues.filter((issue) =>
+    allowedIssueTypes.includes(getEffectiveIssueType(issue))
+  );
+
   const resolvedWithDates = await Promise.all(
-    issues
+    filteredIssues
       .filter((issue) => isIssueDone(issue))
       .map(async (issue) => ({
         issue,
@@ -47,14 +51,13 @@ async function getLightweightPortfolioMetrics(
       }))
   );
 
-  // Count all done issues (unfiltered by type) for the project detail page
+  // Count only allowed issue types so portfolio totals match the Admin filter.
   const allDone = resolvedWithDates.filter(
     (entry) => entry.resolvedAt && entry.resolvedAt >= startDate
   );
   const doneCount = allDone.length;
 
-  // Keep portfolio overview aligned with project detail metrics:
-  // use all resolved issues in the window (no additional issue-type filter).
+  // Keep portfolio overview aligned with project detail metrics.
   const resolved = allDone.map((entry) => entry.issue);
 
   const leadTimes = (
@@ -103,10 +106,13 @@ async function processProject(
       includeChangelog: true,
       forceRefresh: options?.forceRefresh,
     });
-    const issueCount = issues.length;
-    const inProgressCount = issues.filter((issue) => isIssueInProgress(issue)).length;
+    const filteredIssues = issues.filter((issue) =>
+      allowedIssueTypes.includes(getEffectiveIssueType(issue))
+    );
+    const issueCount = filteredIssues.length;
+    const inProgressCount = filteredIssues.filter((issue) => isIssueInProgress(issue)).length;
     const { doneCount, resolvedCount, cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
-      issues,
+      filteredIssues,
       allowedIssueTypes
     );
 
@@ -123,7 +129,7 @@ async function processProject(
       error: null,
     };
   } catch (err) {
-    logger.error(`Error processing project ${p.id}:`, err);
+    logger.error({ err, projectId: p.id }, `Error processing project ${p.id}`);
     return {
       projectId: p.id,
       projectKey: p.key,
@@ -225,7 +231,7 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
     );
   } catch (err) {
     portfolioRecalculationLastError = String(err);
-    logger.error("Error calculating portfolio cache:", err);
+    logger.error({ err }, "Error calculating portfolio cache");
   } finally {
     isPortfolioRecalculating = false;
     portfolioRecalculationFinishedAt = new Date();
@@ -253,7 +259,7 @@ export async function getPortfolioRecalculationStatus(): Promise<PortfolioRecalc
       lastError: portfolioRecalculationLastError,
     };
   } catch (err) {
-    logger.error("Error getting portfolio recalculation status:", err);
+    logger.error({ err }, "Error getting portfolio recalculation status");
     return {
       running: isPortfolioRecalculating,
       startedAt: portfolioRecalculationStartedAt?.toISOString() ?? null,
@@ -278,7 +284,7 @@ export async function isPortfolioCacheStale(): Promise<boolean> {
     const age = Date.now() - cached.calculatedAt.getTime();
     return age > oneDayMs;
   } catch (err) {
-    logger.error("Error checking portfolio cache staleness:", err);
+    logger.error({ err }, "Error checking portfolio cache staleness");
     return true;
   }
 }

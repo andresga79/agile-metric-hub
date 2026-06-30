@@ -105,13 +105,18 @@ async function computeMetrics(
   period: Period,
   projectId: string,
   boardType: ProjectBoardType,
-  sprints: JiraSprint[]
+  sprints: JiraSprint[],
+  allowedIssueTypes: string[]
 ) {
   const periodDays = periodToDays(period);
   const startDate = getStartDate(periodDays);
 
+  const filteredIssues = issues.filter((issue) =>
+    allowedIssueTypes.includes(getEffectiveIssueType(issue))
+  );
+
   const resolvedWithDates = await Promise.all(
-    issues
+    filteredIssues
       .filter((i) => isIssueDone(i))
       .map(async (i) => ({
         issue: i,
@@ -319,12 +324,13 @@ router.get(
       return;
     }
 
-    const [allProjects, issues, boardType, sprints, portfolioRows] = await Promise.all([
+    const [allProjects, issues, boardType, sprints, portfolioRows, allowedIssueTypes] = await Promise.all([
       listJiraProjects(),
       getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
       getProjectBoardType(projectId),
       getJiraSprints(projectId),
       db.select().from(portfolioCacheTable),
+      getPortfolioAllowedIssueTypes(),
     ]);
 
     let project = allProjects.find(
@@ -344,10 +350,10 @@ router.get(
         id: portfolioRow.projectId,
         key: portfolioRow.projectKey,
         name: portfolioRow.projectName,
-        description: null,
+        description: undefined,
         projectTypeKey: "software",
         avatarUrls: { "48x48": "" },
-        lead: { displayName: null },
+        lead: { displayName: "" },
         self: "",
       };
 
@@ -378,7 +384,7 @@ router.get(
     }
 
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints);
+    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints, allowedIssueTypes);
 
     res.json(metrics);
   }
@@ -427,15 +433,15 @@ router.get(
         id: portfolioRow.projectId,
         key: portfolioRow.projectKey,
         name: portfolioRow.projectName,
-        description: null,
+        description: undefined,
         projectTypeKey: "software",
         avatarUrls: { "48x48": "" },
-        lead: { displayName: null },
+        lead: { displayName: "" },
         self: "",
       };
     }
 
-    const visible = await isProjectKeyVisible(project.key);
+        const visible = await isProjectKeyVisible(project!.key);
     if (!visible) {
       res.status(404).json({ error: "Project not found" });
       return;

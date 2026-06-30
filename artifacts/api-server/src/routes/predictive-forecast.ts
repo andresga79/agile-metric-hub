@@ -12,7 +12,9 @@ router.post(
   "/projects/:projectId/predictive-forecast",
   requireAuth,
   async (req, res): Promise<void> => {
-    const projectId = req.params.projectId ?? "";
+    const projectId = Array.isArray(req.params.projectId)
+      ? req.params.projectId[0]
+      : (req.params.projectId ?? "");
     const { remainingIssues, windowWeeks = 12 } = req.body as { remainingIssues?: number; windowWeeks?: number };
 
     if (!remainingIssues || remainingIssues < 1) {

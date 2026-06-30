@@ -15,6 +15,7 @@ import {
   getStatusCategoryMap,
   type JiraIssue,
 } from "../lib/jira";
+import { logger } from "../lib/logger";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();

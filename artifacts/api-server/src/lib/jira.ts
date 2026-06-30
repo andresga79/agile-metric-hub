@@ -16,6 +16,9 @@ const ISSUE_TYPE_MAP: Record<string, string> = {
   subtask: "Task",
   "sub-task": "Task",
   epic: "Epic",
+  "test execution": "Test Execution",
+  test: "Test",
+  "test plan": "Test Plan",
   // Spanish
   historia: "Story",
   "historia de usuario": "Story",
@@ -759,6 +762,12 @@ export async function getSprintIssues(
 
 const JIRA_MAX_LOOKBACK_DAYS = 90;
 
+type JiraSearchResponse = {
+  issues: JiraIssue[];
+  nextPageToken?: string;
+  isLast?: boolean;
+};
+
 function capLookbackDays(periodDays: number): number {
   return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
 }
@@ -908,9 +917,8 @@ export async function getRecentlyResolvedIssues(
         const jql = encodeURIComponent(
           `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC`
         );
-        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
-        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${tokenParam}`
+        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${pageToken ? `&pageToken=${pageToken}` : ""}`
         );
         const pageIssues = result.issues ?? [];
         allIssues.push(...pageIssues);
@@ -965,9 +973,8 @@ export async function getIssuesStatusCounts(
         const jql = encodeURIComponent(
           `project = ${projectId} AND created >= "${sinceStr}" ORDER BY created DESC`
         );
-        const tokenParam = pageToken ? `&pageToken=${pageToken}` : "";
-        const result = await jiraFetch<{ issues: JiraIssue[]; nextPageToken?: string; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status,issuetype${tokenParam}`
+        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status,issuetype${pageToken ? `&pageToken=${pageToken}` : ""}`
         );
         const pageIssues = result.issues ?? [];
         for (const issue of pageIssues) {

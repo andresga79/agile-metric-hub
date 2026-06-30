@@ -12,7 +12,9 @@ router.get(
   "/projects/:projectId/issues-by-week",
   requireAuth,
   async (req, res): Promise<void> => {
-    const projectId = req.params.projectId ?? "";
+    const projectId = Array.isArray(req.params.projectId)
+      ? req.params.projectId[0]
+      : (req.params.projectId ?? "");
     const week = req.query.week as string;
     const period = (req.query.period as string) ?? "1m";
 

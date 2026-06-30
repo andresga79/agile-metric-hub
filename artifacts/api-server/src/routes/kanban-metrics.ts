@@ -12,9 +12,14 @@ import {
   getEffectiveIssueType,
   type JiraIssue,
 } from "../lib/jira";
+import {
+  getPortfolioAllowedIssueTypes,
+  KANBAN_EXCLUDED_ISSUE_TYPES,
+} from "../lib/portfolio-metric-settings";
 import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
+const KANBAN_EXCLUDED_ISSUE_TYPES_SET: Set<string> = new Set(KANBAN_EXCLUDED_ISSUE_TYPES);
 
 interface WeekMetric {
   weekStart: string;
@@ -83,7 +88,9 @@ router.get(
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
       : req.params.projectId;
-    const period = req.params.period ?? "1m";
+    const period = Array.isArray(req.params.period)
+      ? req.params.period[0]
+      : (req.params.period ?? "1m");
 
     const jiraProject = await getJiraProject(projectId);
     if (!jiraProject) {
@@ -101,8 +108,13 @@ router.get(
     const maxWeeks = period === "1m" ? 5 : 13;
 
     const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
+    const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const doneIssues = uniqueIssues.filter((i) => isIssueDone(i));
+    const filteredIssues = uniqueIssues.filter((i) => {
+      const issueType = getEffectiveIssueType(i);
+      return allowedIssueTypes.includes(issueType) && !KANBAN_EXCLUDED_ISSUE_TYPES_SET.has(issueType);
+    });
+    const doneIssues = filteredIssues.filter((i) => isIssueDone(i));
 
     // Generate week buckets using ISO weeks for consistency with analytics
     const emptyWeeks: WeekMetric[] = [];

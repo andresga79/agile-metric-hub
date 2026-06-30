@@ -7,7 +7,9 @@ import { eq, and } from "drizzle-orm";
 const router: IRouter = Router();
 
 router.get("/projects/:projectId/targets", requireAuth, async (req, res): Promise<void> => {
-  const projectId = req.params.projectId ?? "";
+  const projectId = Array.isArray(req.params.projectId)
+    ? req.params.projectId[0]
+    : (req.params.projectId ?? "");
   const targets = await db
     .select()
     .from(metricTargetsTable)
@@ -32,7 +34,9 @@ router.post("/projects/:projectId/targets", requireAuth, async (req, res): Promi
       return;
     }
   }
-  const projectId = req.params.projectId ?? "";
+  const projectId = Array.isArray(req.params.projectId)
+    ? req.params.projectId[0]
+    : (req.params.projectId ?? "");
   const { metric, targetValue, period } = req.body as { metric: string; targetValue: number; period?: string };
 
   if (!metric || targetValue === undefined) {
