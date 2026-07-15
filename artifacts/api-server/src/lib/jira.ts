@@ -312,7 +312,7 @@ export function findQaRejections(
 }
 
 export function isBugIssue(issue: JiraIssue): boolean {
-  return /^bug$/i.test(issue.fields.issuetype.name.trim());
+  return mapIssueType(issue.fields.issuetype.name) === "Bug";
 }
 
 /** Extract bugs linked via issuelinks from a set of issues.
@@ -330,7 +330,7 @@ export function extractLinkedBugs(
       // The linked issue could be inward or outward
       const linked = link.inwardIssue ?? link.outwardIssue;
       if (!linked) continue;
-      if (!/^bug$/i.test(linked.fields.issuetype.name.trim())) continue;
+      if (mapIssueType(linked.fields.issuetype.name) !== "Bug") continue;
 
       const bugKey = linked.key;
       if (bugs.has(bugKey)) continue;
