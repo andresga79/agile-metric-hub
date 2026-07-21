@@ -534,7 +534,7 @@ export default function Dashboard() {
                       <TableCell className="text-xs text-muted-foreground">{p.suggestedAction}</TableCell>
                       <TableCell>
                         <DropdownMenu>
-                          <DropdownMenuTrigger className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors">
+                          <DropdownMenuTrigger aria-label={`Más acciones para ${p.name}`} className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors">
                             <MoreHorizontal size={16} />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">

@@ -13,6 +13,7 @@ import {
   getLeadTimeDays,
   getStoryPoints,
   getStatusCategoryMap,
+  mapIssueType,
   type JiraIssue,
 } from "../lib/jira";
 import { logger } from "../lib/logger";
@@ -55,15 +56,8 @@ function isIssueCurrentlyFlagged(issue: JiraIssue): boolean {
 }
 
 function isBlockedEligibleIssueType(issue: JiraIssue): boolean {
-  const rawType = issue.fields.issuetype.name?.trim().toLowerCase() ?? "";
-  return (
-    rawType === "hu" ||
-    rawType === "historia" ||
-    rawType === "historia de usuario" ||
-    rawType === "story" ||
-    rawType === "tarea" ||
-    rawType === "task"
-  );
+  const normalized = mapIssueType(issue.fields.issuetype.name ?? "");
+  return normalized === "Story" || normalized === "Task" || normalized === "Bug";
 }
 
 function getISOWeek(date: Date): string {
@@ -320,7 +314,14 @@ router.get(
     const metrics = await computePeriodMetrics(uniqueIssues, startDate);
 
     // --- WIP Aging Report (#2) ---
-    const inProgressIssues = uniqueIssues.filter((i) => isIssueInProgress(i));
+    // Use the wider 90-day fetch (same one blocked analysis uses), not the
+    // period-scoped `uniqueIssues` - otherwise an issue created 45 days ago
+    // and still open never matches "resolved in period" nor "created in
+    // period" on the 1M view, and silently disappears from its own aging report.
+    const uniqueBlockedScopeIssues = Array.from(
+      new Map(blockedScopeIssues.map((i) => [i.key, i])).values()
+    );
+    const inProgressIssues = uniqueBlockedScopeIssues.filter((i) => isIssueInProgress(i));
     const wipAging = await Promise.all(
       inProgressIssues.map(async (i) => {
         const histories = i.changelog?.histories ?? [];
@@ -367,6 +368,7 @@ router.get(
     );
 
     wipAging.sort((a, b) => (b.daysInProgress ?? 0) - (a.daysInProgress ?? 0));
+    const wipAgingTotal = wipAging.length;
     const wipAgingTop = wipAging.slice(0, 10);
 
     // --- Blocked Time Analysis (#7) ---
@@ -381,6 +383,7 @@ router.get(
             totalDays: 0,
             isCurrentlyBlocked: false,
             currentStatus: i.fields.status.name,
+            blockReason: null as "status" | "flag" | "both" | null,
           };
         }
 
@@ -418,8 +421,13 @@ router.get(
           }
         }
 
-        const currentlyBlockedByStatus = isBlockedStatus(i.fields.status.name);
-        const currentlyBlockedByFlag = isIssueCurrentlyFlagged(i);
+        // Done issues can't be "currently" blocked, even if the Flagged field or
+        // status was never cleared before closing - otherwise a stale flag on an
+        // old resolved issue accumulates blocked time forever (seen in practice:
+        // 300+ days on an issue that finished long ago).
+        const isDone = isIssueDone(i);
+        const currentlyBlockedByStatus = !isDone && isBlockedStatus(i.fields.status.name);
+        const currentlyBlockedByFlag = !isDone && isIssueCurrentlyFlagged(i);
         const isCurrentlyBlocked = currentlyBlockedByStatus || currentlyBlockedByFlag;
 
         if (isCurrentlyBlocked && intervalStart === null) {
@@ -430,9 +438,25 @@ router.get(
 
         if (isCurrentlyBlocked && intervalStart !== null) {
           totalBlockedMs += Date.now() - intervalStart;
+        } else if (isDone && intervalStart !== null) {
+          // Blocked/flagged when it closed but never explicitly unblocked - stop
+          // the clock at resolution time instead of leaving the interval open.
+          const resolvedAt = await getResolutionDate(i);
+          if (resolvedAt) {
+            totalBlockedMs += Math.max(0, resolvedAt.getTime() - intervalStart);
+          }
         }
 
         const totalDays = Math.round((totalBlockedMs / (1000 * 60 * 60 * 24)) * 10) / 10;
+
+        // Report what actually caused the (most recent) block: the status the
+        // issue transitioned to, or Jira's Flagged field - useful to tell apart
+        // teams that use a dedicated "Blocked" status from ones that just flag.
+        const reasonByStatus = isCurrentlyBlocked ? currentlyBlockedByStatus : blockedByStatus;
+        const reasonByFlag = isCurrentlyBlocked ? currentlyBlockedByFlag : blockedByFlag;
+        const blockReason: "status" | "flag" | "both" | null =
+          reasonByStatus && reasonByFlag ? "both" : reasonByStatus ? "status" : reasonByFlag ? "flag" : null;
+
         return {
           key: i.key,
           summary: i.fields.summary,
@@ -441,6 +465,7 @@ router.get(
           totalDays,
           isCurrentlyBlocked,
           currentStatus: i.fields.status.name,
+          blockReason,
         };
       })
     );
@@ -479,6 +504,7 @@ router.get(
       fetchedAt: cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null,
       ...metrics,
       wipAging: wipAgingTop,
+      wipAgingTotal,
       blockedIssues,
       timeInStatus,
       previousPeriod,

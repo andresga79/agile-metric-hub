@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UserRole = typeof UserRole[keyof typeof UserRole];
+export type UserRoleProperty = typeof UserRoleProperty[keyof typeof UserRoleProperty];
 
 
-export const UserRole = {
+export const UserRoleProperty = {
   admin: 'admin',
   member: 'member',
   viewer: 'viewer',

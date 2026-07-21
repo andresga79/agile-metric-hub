@@ -225,10 +225,23 @@ router.get(
         : 0;
 
     // --- Sprint grouping with bugs ---
+    // Track unique issue keys per sprint bucket (not raw transition events) so
+    // these counts stay reconcilable with the headline totals above, which are
+    // also per-unique-issue. A story that re-enters QA twice within the same
+    // sprint must only count once here, same as it does in totalIssuesThatEnteredQa.
     const sprintMap = new Map<
       string,
-      { rejectedCount: number; totalEnteredQa: number; bugsCount: number }
+      { rejectedKeys: Set<string>; enteredKeys: Set<string>; bugsCount: number }
     >();
+
+    function getSprintBucket(name: string) {
+      let bucket = sprintMap.get(name);
+      if (!bucket) {
+        bucket = { rejectedKeys: new Set(), enteredKeys: new Set(), bugsCount: 0 };
+        sprintMap.set(name, bucket);
+      }
+      return bucket;
+    }
 
     for (const issue of issues) {
       const histories = issue.changelog?.histories ?? [];
@@ -239,10 +252,7 @@ router.get(
           if (to && qaStatusSet.has(to.toLowerCase())) {
             const sprint = findSprintForDate(new Date(h.created), sprints);
             const name = sprint?.name ?? "Unknown";
-            if (!sprintMap.has(name)) {
-              sprintMap.set(name, { rejectedCount: 0, totalEnteredQa: 0, bugsCount: 0 });
-            }
-            sprintMap.get(name)!.totalEnteredQa++;
+            getSprintBucket(name).enteredKeys.add(issue.key);
           }
         }
       }
@@ -250,10 +260,7 @@ router.get(
 
     for (const r of allRejections) {
       const name = r.sprintName ?? "Unknown";
-      if (!sprintMap.has(name)) {
-        sprintMap.set(name, { rejectedCount: 0, totalEnteredQa: 0, bugsCount: 0 });
-      }
-      sprintMap.get(name)!.rejectedCount++;
+      getSprintBucket(name).rejectedKeys.add(r.issueKey);
     }
 
     // Count bugs per sprint (by parent story's sprint)
@@ -264,33 +271,34 @@ router.get(
       const bugDate = new Date(bug.bugCreated);
       const sprint = findSprintForDate(bugDate, sprints);
       const name = sprint?.name ?? "Unknown";
-      if (!sprintMap.has(name)) {
-        sprintMap.set(name, { rejectedCount: 0, totalEnteredQa: 0, bugsCount: 0 });
-      }
-      sprintMap.get(name)!.bugsCount++;
+      getSprintBucket(name).bugsCount++;
     }
 
     const bySprint = Array.from(sprintMap.entries())
-      .map(([sprintName, { rejectedCount, totalEnteredQa, bugsCount }]) => ({
-        sprintName,
-        rejectedCount,
-        totalEnteredQa,
-        rate:
-          totalEnteredQa > 0
-            ? Math.round((rejectedCount / totalEnteredQa) * 1000) / 10
-            : 0,
-        bugsCount,
-        bugRate:
-          totalEnteredQa > 0
-            ? Math.round((bugsCount / totalEnteredQa) * 1000) / 10
-            : 0,
-        qaImpactRate:
-          totalEnteredQa > 0
-            ? Math.round(
-                ((rejectedCount + bugsCount) / totalEnteredQa) * 1000
-              ) / 10
-            : 0,
-      }))
+      .map(([sprintName, { rejectedKeys, enteredKeys, bugsCount }]) => {
+        const rejectedCount = rejectedKeys.size;
+        const totalEnteredQa = enteredKeys.size;
+        return {
+          sprintName,
+          rejectedCount,
+          totalEnteredQa,
+          rate:
+            totalEnteredQa > 0
+              ? Math.round((rejectedCount / totalEnteredQa) * 1000) / 10
+              : 0,
+          bugsCount,
+          bugRate:
+            totalEnteredQa > 0
+              ? Math.round((bugsCount / totalEnteredQa) * 1000) / 10
+              : 0,
+          qaImpactRate:
+            totalEnteredQa > 0
+              ? Math.round(
+                  ((rejectedCount + bugsCount) / totalEnteredQa) * 1000
+                ) / 10
+              : 0,
+        };
+      })
       .sort((a, b) => a.sprintName.localeCompare(b.sprintName));
 
     const qaNames = await getQaStatuses();

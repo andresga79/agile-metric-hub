@@ -6,6 +6,8 @@ import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers } f
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ProjectTabs } from "@/components/project-tabs";
+import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
 
@@ -82,12 +84,10 @@ export default function ProjectSprints() {
         </div>
       </div>
 
+      <ProjectTabs projectId={project.id} active="sprints" />
+
       {sprints.length === 0 ? (
-        <Card className="bg-card/40">
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {t('page.sprints.noSprints')}
-          </CardContent>
-        </Card>
+        <EmptyState icon={Gauge} title={t('page.sprints.noSprints')} />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

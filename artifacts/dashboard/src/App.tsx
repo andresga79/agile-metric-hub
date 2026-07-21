@@ -14,6 +14,7 @@ import ProjectHealth from "@/pages/project-health";
 import ProjectForecast from "@/pages/project-forecast";
 import ProjectAnalytics from "@/pages/project-analytics";
 import ProjectFlow from "@/pages/project-flow";
+import ProjectEvolution from "@/pages/project-evolution";
 import ProjectReport from "@/pages/project-report";
 import ProjectQaRejected from "@/pages/project-qa-rejected";
 import ProjectSprints from "@/pages/project-sprints";
@@ -126,6 +127,9 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/flow">
         {() => <SectionRoute section="flow" component={ProjectFlow} />}
+      </Route>
+      <Route path="/projects/:projectId/evolution">
+        {() => <SectionRoute section="evolution" component={ProjectEvolution} />}
       </Route>
       <Route path="/projects/:projectId/report">
         {() => <SectionRoute section="report" component={ProjectReport} />}

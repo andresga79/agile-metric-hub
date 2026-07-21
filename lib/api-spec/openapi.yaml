@@ -436,6 +436,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/evolution:
+    get:
+      operationId: getProjectEvolution
+      tags: [metrics]
+      summary: Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+      description: >
+        Returns one row per ISO week from the project's accumulated metric_snapshots
+        table, alongside the project's configured targets. Snapshots are written by
+        the daily background sync, so this can cover more history over time than a
+        single live Jira query (capped at 90 days) would allow.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Weekly metric evolution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/users:
     get:
       operationId: listAdminUsers
@@ -665,7 +693,7 @@ components:
       required: true
       schema:
         type: string
-          enum: ["1m", "3m"]
+        enum: ["1m", "3m"]
 
   schemas:
     HealthStatus:
@@ -1475,5 +1503,47 @@ components:
           type: integer
         totalCompletedStoryPoints:
           type: number
+
+    EvolutionResponse:
+      type: object
+      required: [projectId, weeks, targets]
+      properties:
+        projectId:
+          type: string
+        weeks:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvolutionWeek"
+        targets:
+          $ref: "#/components/schemas/EvolutionTargets"
+
+    EvolutionWeek:
+      type: object
+      required: [weekStart, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
+      properties:
+        weekStart:
+          type: string
+          format: date
+          description: ISO date of the Monday of this week
+        leadTimeAvg:
+          type: ["number", "null"]
+        cycleTimeAvg:
+          type: ["number", "null"]
+        throughput:
+          type: integer
+        qaRejectionRate:
+          type: ["number", "null"]
+          description: Percentage of issues entering QA that were rejected back, or null if none entered QA that week
+
+    EvolutionTargets:
+      type: object
+      required: [leadTime, cycleTime, throughput]
+      properties:
+        leadTime:
+          type: ["number", "null"]
+        cycleTime:
+          type: ["number", "null"]
+        throughput:
+          type: ["number", "null"]
 
 

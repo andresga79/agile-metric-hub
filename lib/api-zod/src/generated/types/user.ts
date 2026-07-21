@@ -5,12 +5,12 @@
  * Agile Metrics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserRole } from './userRole';
+import type { UserRoleProperty } from './userRoleProperty';
 
 export interface User {
   id: number;
   username: string;
   email: string;
-  role?: UserRole;
+  role: UserRoleProperty;
   createdAt?: string;
 }

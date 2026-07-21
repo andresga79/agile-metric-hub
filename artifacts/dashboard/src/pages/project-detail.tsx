@@ -4,20 +4,13 @@ import { useTranslation } from "react-i18next";
 import {
   useGetProject, getGetProjectQueryKey,
   useGetProjectMetrics, getGetProjectMetricsQueryKey,
-  useGetCurrentUser, getGetCurrentUserQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ChevronRight, ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, Download, Ban } from "lucide-react";
+import { ChevronRight, Download, Ban } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getSectionLinks, useRolePermissions } from "@/lib/project-section-permissions";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
@@ -50,10 +43,6 @@ export default function ProjectDetail() {
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
-  const { data: currentUser } = useGetCurrentUser({
-    query: { queryKey: getGetCurrentUserQueryKey(), enabled: !!token },
-  });
-  const { data: permissions } = useRolePermissions();
 
   const { data: metrics, isLoading: loadingMetrics } = useGetProjectMetrics(projectId!, period, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
@@ -110,54 +99,6 @@ export default function ProjectDetail() {
 
   if (loadingProject || loadingMetrics) return <DetailSkeleton />;
   if (!project) return <div>{t('page.detail.notFound')}</div>;
-
-  const sectionLinks = getSectionLinks(currentUser?.role, project.id, permissions ?? [], project.boardType);
-
-  // Decision-oriented order:
-  // 1) Summary (fixed tab), 2) Health, 3) Flow, 4) Forecast,
-  // 5) Execution (Sprints or Kanban), 6) Team, 7) QA Rejected, 8) Analytics, 9) Report
-  const orderedSections = [
-    'health',
-    'flow',
-    'forecast',
-    'sprints',
-    'kanban',
-    'team',
-    'qa-rejected',
-    'analytics',
-    'report',
-  ] as const;
-
-  const orderIndex = new Map<string, number>(
-    orderedSections.map((section, index) => [section, index])
-  );
-
-  const orderedLinks = [...sectionLinks].sort((left, right) => {
-    const leftIdx = orderIndex.get(left.section) ?? Number.MAX_SAFE_INTEGER;
-    const rightIdx = orderIndex.get(right.section) ?? Number.MAX_SAFE_INTEGER;
-    return leftIdx - rightIdx;
-  });
-
-  const primaryTabSections = ['health', 'flow', 'forecast', 'sprints', 'kanban'];
-  const secondaryTabSections = ['team', 'qa-rejected', 'analytics', 'report'];
-
-  const primaryLinks = orderedLinks.filter(l => primaryTabSections.includes(l.section));
-  const secondaryLinks = orderedLinks.filter(l => secondaryTabSections.includes(l.section));
-
-  const tabIconMap: Record<string, React.ReactNode> = {
-    sprints: <BarChart3 size={16} />,
-    kanban: <BarChart3 size={16} />,
-    flow: <GitPullRequest size={16} />,
-    health: <HeartPulse size={16} />,
-    forecast: <Activity size={16} />,
-  };
-
-  const dropdownIconMap: Record<string, React.ReactNode> = {
-    team: <Users size={14} />,
-    analytics: <BarChart3 size={14} />,
-    report: <FileText size={14} />,
-    "qa-rejected": <ShieldAlert size={14} />,
-  };
 
   const metricInfo = (metric: string) => {
     const actual = metric === "leadTime" ? metrics?.leadTime
@@ -242,39 +183,7 @@ export default function ProjectDetail() {
       </nav>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="flex items-center gap-1.5 text-xs font-semibold bg-primary/10 text-primary px-3 py-1.5 rounded-md">
-            {t('page.detail.summaryTab')}
-          </span>
-          {primaryLinks.map((link) => (
-            <Link
-              key={link.section}
-              href={link.href}
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent px-3 py-1.5 rounded-md transition-colors"
-            >
-              {tabIconMap[link.section] ?? null}
-              {link.label}
-            </Link>
-          ))}
-          {secondaryLinks.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent px-3 py-1.5 rounded-md transition-colors">
-                {t('common.more')}
-                <ChevronDown size={14} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {secondaryLinks.map((link) => (
-                  <DropdownMenuItem key={link.section} asChild>
-                    <Link href={link.href} className="flex items-center gap-2 cursor-pointer">
-                      {dropdownIconMap[link.section] ?? null}
-                      {link.label}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+        <ProjectTabs projectId={project.id} active="summary" />
         <div className="flex bg-background border border-border rounded-md p-1">
           {(['1m', '3m'] as Period[]).map((p) => (
             <button

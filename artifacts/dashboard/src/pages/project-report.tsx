@@ -9,6 +9,7 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { toast } from "@/hooks/use-toast";
 import { getAuthToken } from "@/lib/auth";
+import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
@@ -185,6 +186,8 @@ export default function ProjectReport() {
           </button>
         </div>
       </div>
+
+      <ProjectTabs projectId={projectId!} active="report" />
 
       <div ref={reportRef} className="space-y-4 bg-white text-black p-8 rounded-lg">
         <div className="text-center border-b border-gray-300 pb-4 mb-4">

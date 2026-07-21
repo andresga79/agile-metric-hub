@@ -23,6 +23,7 @@ export interface Project {
   issueCount: number;
   doneCount: number;
   inProgressCount: number;
+  visible: boolean;
   /** @nullable */
   lead?: string | null;
   /** @nullable */

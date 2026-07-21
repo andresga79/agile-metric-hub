@@ -4,8 +4,10 @@ import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
+import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Lightbulb, HeartPulse } from "lucide-react";
 import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-suggestions";
+import { ProjectTabs } from "@/components/project-tabs";
+import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
 
@@ -57,7 +59,10 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
           <div className="flex items-center gap-3 shrink-0">
             <span className="text-2xl font-bold tabular-nums">{suggestion.value}</span>
             {suggestion.actions.length > 0 && (
-              <button className="text-muted-foreground hover:text-foreground transition-colors">
+              <button
+                aria-label={expanded ? t('page.health.collapseActions') : t('page.health.expandActions')}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
                 {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
             )}
@@ -164,12 +169,14 @@ export default function ProjectHealth() {
         </div>
       </div>
 
+      <ProjectTabs projectId={projectId!} active="health" />
+
       {suggestions.length === 0 ? (
-        <Card className="bg-card/40">
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {t('page.health.noData')}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={HeartPulse}
+          title={t('page.health.noDataTitle')}
+          description={t('page.health.noData')}
+        />
       ) : (
         <>
           {critical.length > 0 && (

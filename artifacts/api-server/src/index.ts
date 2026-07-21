@@ -97,6 +97,21 @@ async function initDb() {
     await ensureCacheTable();
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS metric_snapshots (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        week_start DATE NOT NULL,
+        lead_time_avg NUMERIC,
+        cycle_time_avg NUMERIC,
+        throughput INTEGER NOT NULL DEFAULT 0,
+        qa_rejection_rate NUMERIC,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(project_id, week_start)
+      );
+    `);
+
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS portfolio_cache (
         id SERIAL PRIMARY KEY,
         project_id TEXT NOT NULL UNIQUE,

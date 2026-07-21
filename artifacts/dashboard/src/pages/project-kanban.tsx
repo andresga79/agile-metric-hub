@@ -6,6 +6,8 @@ import { ArrowLeft, TrendingUp, Clock, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
+import { ProjectTabs } from "@/components/project-tabs";
+import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
 
@@ -76,12 +78,10 @@ export default function ProjectKanban() {
         </div>
       </div>
 
+      <ProjectTabs projectId={project.id} active="kanban" />
+
       {weeks.length === 0 ? (
-        <Card className="bg-card/40">
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {t('page.kanban.noData')}
-          </CardContent>
-        </Card>
+        <EmptyState icon={BarChart3} title={t('page.kanban.noData')} />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-3">

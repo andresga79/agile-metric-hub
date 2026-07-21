@@ -5,7 +5,7 @@ export function MetricTooltip({ description }: { description: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button type="button" className="inline-flex items-center ml-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-help" tabIndex={-1}>
+        <button type="button" aria-label={description} className="inline-flex items-center ml-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-help">
           <Info size={13} />
         </button>
       </TooltipTrigger>

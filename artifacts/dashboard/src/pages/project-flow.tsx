@@ -6,8 +6,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getAuthToken } from "@/lib/auth";
+import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
+
+const CATEGORY_LABEL: Record<string, string> = {
+  new: "Por hacer",
+  indeterminate: "En progreso",
+  done: "Completado",
+  other: "Otro",
+};
+
+const CATEGORY_BADGE_CLASS: Record<string, string> = {
+  new: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  indeterminate: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  done: "bg-green-500/15 text-green-600 dark:text-green-400",
+  other: "bg-muted text-muted-foreground",
+};
 
 export default function ProjectFlow() {
   const { t } = useTranslation();
@@ -73,6 +88,7 @@ export default function ProjectFlow() {
   if (error) return <div>{error}</div>;
 
   const wipItems = data?.wipAging ?? [];
+  const wipAgingTotal = data?.wipAgingTotal ?? wipItems.length;
   const blockedItems = data?.blockedIssues ?? [];
   const timeInStatus = data?.timeInStatus ?? [];
   const fetchedAt = data?.fetchedAt ?? null;
@@ -144,6 +160,8 @@ export default function ProjectFlow() {
         </div>
       </div>
 
+      <ProjectTabs projectId={projectId!} active="flow" />
+
       <Card className="bg-card/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -165,34 +183,43 @@ export default function ProjectFlow() {
                     <TableHead className="text-right">{t('page.flow.avgDays')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.medianDays')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.issues')}</TableHead>
-                    <TableHead className="w-[200px]">{t('page.flow.distribution')}</TableHead>
+                    <TableHead className="w-[220px]">{t('page.flow.timeShare')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {timeInStatus.map((entry: any) => {
-                    const maxAvg = Math.max(...timeInStatus.map((s: any) => s.avgDays), 1);
-                    const pct = (entry.avgDays / maxAvg) * 100;
-                    const barColor =
-                      entry.avgDays >= 14 ? "bg-red-500"
-                        : entry.avgDays >= 7 ? "bg-orange-500"
-                        : entry.avgDays >= 3 ? "bg-amber-500"
-                        : "bg-green-500";
+                    const totalAvgDays = timeInStatus.reduce((sum: number, s: any) => sum + s.avgDays, 0) || 1;
+                    const pct = (entry.avgDays / totalAvgDays) * 100;
+                    const maxPct = Math.max(...timeInStatus.map((s: any) => (s.avgDays / totalAvgDays) * 100));
+                    const isBottleneck = pct === maxPct && entry.avgDays > 0;
                     return (
-                      <TableRow key={entry.status} className="border-border hover:bg-accent/50">
-                        <TableCell className="font-medium">{entry.status}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground capitalize">{entry.category}</TableCell>
+                      <TableRow
+                        key={entry.status}
+                        className={`border-border hover:bg-accent/50 ${isBottleneck ? "bg-red-500/5" : ""}`}
+                      >
+                        <TableCell className="font-medium">
+                          {entry.status}
+                          {isBottleneck && (
+                            <span className="ml-2 text-[11px] font-semibold text-red-500">{t('page.flow.bottleneck')}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${CATEGORY_BADGE_CLASS[entry.category] ?? CATEGORY_BADGE_CLASS.other}`}>
+                            {CATEGORY_LABEL[entry.category] ?? entry.category}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right font-mono">{entry.avgDays}d</TableCell>
                         <TableCell className="text-right font-mono">{entry.medianDays}d</TableCell>
                         <TableCell className="text-right font-mono">{entry.issueCount}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="h-3 rounded-sm bg-muted flex-1 overflow-hidden">
+                            <div className="h-2 rounded-sm bg-muted flex-1 overflow-hidden">
                               <div
-                                className={`h-full rounded-sm ${barColor} transition-all`}
+                                className={`h-full rounded-sm transition-all ${isBottleneck ? "bg-red-500" : "bg-primary"}`}
                                 style={{ width: `${Math.max(pct, 2)}%` }}
                               />
                             </div>
-                            <span className="text-xs text-muted-foreground w-8 text-right">{entry.avgDays}d</span>
+                            <span className="text-xs text-muted-foreground w-9 text-right">{pct.toFixed(0)}%</span>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -211,7 +238,12 @@ export default function ProjectFlow() {
             <Clock size={18} />
             {t('page.flow.agingTitle')}
           </CardTitle>
-          <CardDescription>{wipItems.length} {t('page.flow.agingDesc')} — {wipItems.filter((i: any) => i.alertLevel === "critical").length} {t('page.flow.critical')}, {wipItems.filter((i: any) => i.alertLevel === "warning").length} {t('page.flow.warning')}, {wipItems.filter((i: any) => i.alertLevel === "watch").length} {t('page.flow.watch')}</CardDescription>
+          <CardDescription>
+            {wipAgingTotal} {t('page.flow.agingDesc')} — {wipItems.filter((i: any) => i.alertLevel === "critical").length} {t('page.flow.critical')}, {wipItems.filter((i: any) => i.alertLevel === "warning").length} {t('page.flow.warning')}, {wipItems.filter((i: any) => i.alertLevel === "watch").length} {t('page.flow.watch')}
+            {wipAgingTotal > wipItems.length && (
+              <span className="block text-xs mt-0.5">{t('page.flow.showingOldest', { count: wipItems.length })}</span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {wipItems.length === 0 ? (
@@ -227,6 +259,7 @@ export default function ProjectFlow() {
                     <TableHead>{t('page.flow.priority')}</TableHead>
                     <TableHead>{t('page.flow.assignee')}</TableHead>
                     <TableHead>{t('page.flow.alert')}</TableHead>
+                    <TableHead>{t('page.flow.since')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.daysInProgress')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -246,6 +279,9 @@ export default function ProjectFlow() {
                         <TableCell>{item.priority}</TableCell>
                         <TableCell>{item.assignee ?? "—"}</TableCell>
                         <TableCell>{alertBadge}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {item.enteredDate ? new Date(item.enteredDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                        </TableCell>
                         <TableCell className="text-right font-mono">{item.daysInProgress !== null ? `${item.daysInProgress}d` : "—"}</TableCell>
                       </TableRow>
                     );
@@ -276,11 +312,12 @@ export default function ProjectFlow() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
-                    <TableHead>Key</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Priority</TableHead>
+                    <TableHead>{t('page.flow.key')}</TableHead>
+                    <TableHead>{t('page.flow.summary')}</TableHead>
+                    <TableHead>{t('page.flow.type')}</TableHead>
+                    <TableHead>{t('page.flow.priority')}</TableHead>
                     <TableHead>{t('page.flow.status')}</TableHead>
+                    <TableHead>{t('page.flow.reason')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.totalBlockedDays')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -296,6 +333,12 @@ export default function ProjectFlow() {
                           ? <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded">🔴 {item.currentStatus}</span>
                           : <span className="text-xs text-muted-foreground">{item.currentStatus}</span>
                         }
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {item.blockReason === "both" ? t('page.flow.reasonBoth')
+                          : item.blockReason === "flag" ? t('page.flow.reasonFlag')
+                          : item.blockReason === "status" ? t('page.flow.reasonStatus')
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right font-mono text-red-400">{item.totalDays}d</TableCell>
                     </TableRow>

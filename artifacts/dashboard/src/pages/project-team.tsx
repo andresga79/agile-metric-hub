@@ -9,6 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Users } from "lucide-react";
+import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
@@ -115,6 +116,8 @@ export default function ProjectTeam() {
           ))}
         </div>
       </div>
+
+      <ProjectTabs projectId={project.id} active="team" />
 
       <Card className="bg-card/40 border-border">
         <CardHeader>

@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { calculateAndCachePortfolio } from "./portfolio-cache";
+import { storeWeeklySnapshots } from "./metric-snapshots";
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const DAILY_SYNC_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -164,7 +165,14 @@ async function warmVisibleProjectsCache(forceRefresh: boolean = false): Promise<
             getJiraIssuesForProject(project.id, 90, { includeChangelog: true, forceRefresh }).catch(() => null),
             getProjectBoardType(project.id, { forceRefresh }).catch(() => null),
             getJiraSprints(project.id, 50, { forceRefresh }).catch(() => null),
-          ]).then(() => "ok" as const);
+          ]).then(async ([, changelogIssues]) => {
+            if (changelogIssues) {
+              await storeWeeklySnapshots(project.id, changelogIssues).catch((err) => {
+                logger.warn({ err, projectId: project.id }, "Failed to store weekly metric snapshots");
+              });
+            }
+            return "ok" as const;
+          });
 
           const timeoutPromise = new Promise<"timeout">((resolve) =>
             setTimeout(() => resolve("timeout"), PROJECT_WARM_TIMEOUT_MS)

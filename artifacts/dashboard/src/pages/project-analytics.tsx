@@ -8,6 +8,7 @@ import { ArrowLeft, Timer } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { DrillDownModal } from "@/components/drill-down-modal";
 import { getAuthToken } from "@/lib/auth";
+import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
@@ -137,6 +138,8 @@ export default function ProjectAnalytics() {
           </div>
         </div>
       </div>
+
+      <ProjectTabs projectId={projectId!} active="analytics" />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="bg-card/40">

@@ -6,3 +6,4 @@ export * from "./role-permissions";
 export * from "./default-metric-thresholds";
 export * from "./portfolio-cache";
 export * from "./portfolio-metric-settings";
+export * from "./metric-snapshots";

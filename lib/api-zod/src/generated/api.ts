@@ -35,7 +35,7 @@ export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'user']).optional(),
+  "role": zod.enum(['admin', 'member', 'viewer']),
   "createdAt": zod.string().optional()
 })
 })
@@ -56,7 +56,7 @@ export const GetCurrentUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'user']).optional(),
+  "role": zod.enum(['admin', 'member', 'viewer']),
   "createdAt": zod.string().optional()
 })
 
@@ -76,6 +76,7 @@ export const ListProjectsResponseItem = zod.object({
   "issueCount": zod.number(),
   "doneCount": zod.number(),
   "inProgressCount": zod.number(),
+  "visible": zod.boolean(),
   "lead": zod.string().nullish(),
   "url": zod.string().nullish(),
   "usingMockData": zod.boolean().optional().describe('Whether the data is from Jira or demo\/mock data')
@@ -102,6 +103,7 @@ export const GetProjectResponse = zod.object({
   "issueCount": zod.number(),
   "doneCount": zod.number(),
   "inProgressCount": zod.number(),
+  "visible": zod.boolean(),
   "lead": zod.string().nullish(),
   "url": zod.string().nullish(),
   "usingMockData": zod.boolean().optional().describe('Whether the data is from Jira or demo\/mock data')
@@ -459,13 +461,39 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
+ * Returns one row per ISO week from the project's accumulated metric_snapshots table, alongside the project's configured targets. Snapshots are written by the daily background sync, so this can cover more history over time than a single live Jira query (capped at 90 days) would allow.
+ *
+ * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ */
+export const GetProjectEvolutionParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetProjectEvolutionResponse = zod.object({
+  "projectId": zod.string(),
+  "weeks": zod.array(zod.object({
+  "weekStart": zod.coerce.date().describe('ISO date of the Monday of this week'),
+  "leadTimeAvg": zod.number().nullable(),
+  "cycleTimeAvg": zod.number().nullable(),
+  "throughput": zod.number(),
+  "qaRejectionRate": zod.number().nullable().describe('Percentage of issues entering QA that were rejected back, or null if none entered QA that week')
+})),
+  "targets": zod.object({
+  "leadTime": zod.number().nullable(),
+  "cycleTime": zod.number().nullable(),
+  "throughput": zod.number().nullable()
+})
+})
+
+
+/**
  * @summary List all users (admin only)
  */
 export const ListAdminUsersResponseItem = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'user']),
+  "role": zod.enum(['admin', 'member', 'viewer']),
   "createdAt": zod.string().optional()
 })
 export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
@@ -477,13 +505,13 @@ export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
 
 
 
-export const createAdminUserBodyRoleDefault = `user`;
+export const createAdminUserBodyRoleDefault = `member`;
 
 export const CreateAdminUserBody = zod.object({
   "username": zod.string().min(1),
   "email": zod.string().min(1),
   "password": zod.string().min(1),
-  "role": zod.enum(['admin', 'user']).default(createAdminUserBodyRoleDefault)
+  "role": zod.enum(['admin', 'member', 'viewer']).default(createAdminUserBodyRoleDefault)
 })
 
 
@@ -503,14 +531,14 @@ export const UpdateAdminUserBody = zod.object({
   "username": zod.string().min(1).optional(),
   "email": zod.string().min(1).optional(),
   "password": zod.string().min(1).optional(),
-  "role": zod.enum(['admin', 'user']).optional()
+  "role": zod.enum(['admin', 'member', 'viewer']).optional()
 })
 
 export const UpdateAdminUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'user']),
+  "role": zod.enum(['admin', 'member', 'viewer']),
   "createdAt": zod.string().optional()
 })
 
@@ -538,6 +566,34 @@ export const GetDashboardSummaryResponse = zod.object({
   "activeProjects": zod.number(),
   "topPerformingProject": zod.string().nullish(),
   "usingMockData": zod.boolean().optional().describe('Whether the data is from Jira or demo\/mock data')
+})
+
+
+/**
+ * @summary Get project visibility settings
+ */
+export const GetProjectVisibilitySettingsResponse = zod.object({
+  "projects": zod.array(zod.object({
+  "projectId": zod.string(),
+  "projectKey": zod.string(),
+  "name": zod.string(),
+  "visible": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Update project visibility settings
+ */
+export const UpdateProjectVisibilitySettingsBody = zod.object({
+  "projects": zod.array(zod.object({
+  "projectKey": zod.string(),
+  "visible": zod.boolean()
+}))
+})
+
+export const UpdateProjectVisibilitySettingsResponse = zod.object({
+  "message": zod.string()
 })
 
 

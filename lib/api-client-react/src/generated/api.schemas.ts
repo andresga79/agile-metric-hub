@@ -24,10 +24,10 @@ export interface LoginCredentials {
   password: string;
 }
 
-export type UserRole = typeof UserRole[keyof typeof UserRole];
+export type UserRoleProperty = typeof UserRoleProperty[keyof typeof UserRoleProperty];
 
 
-export const UserRole = {
+export const UserRoleProperty = {
   admin: 'admin',
   member: 'member',
   viewer: 'viewer',
@@ -37,7 +37,7 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  role?: UserRole;
+  role: UserRoleProperty;
   createdAt?: string;
 }
 
@@ -45,6 +45,15 @@ export interface AuthToken {
   token: string;
   user: User;
 }
+
+export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+
+export const UserRole = {
+  admin: 'admin',
+  member: 'member',
+  viewer: 'viewer',
+} as const;
 
 export type AdminUserRole = typeof AdminUserRole[keyof typeof AdminUserRole];
 
@@ -129,6 +138,7 @@ export interface Project {
   issueCount: number;
   doneCount: number;
   inProgressCount: number;
+  visible: boolean;
   /** @nullable */
   lead?: string | null;
   /** @nullable */
@@ -172,6 +182,26 @@ export interface ProjectWithVisibility {
 export interface ProjectVisibilityUpdate {
   projectId: string;
   visible: boolean;
+}
+
+export interface ProjectVisibilityItem {
+  projectId: string;
+  projectKey: string;
+  name: string;
+  visible: boolean;
+}
+
+export interface ProjectVisibilitySettings {
+  projects: ProjectVisibilityItem[];
+}
+
+export type UpdateProjectVisibilityRequestProjectsItem = {
+  projectKey: string;
+  visible: boolean;
+};
+
+export interface UpdateProjectVisibilityRequest {
+  projects: UpdateProjectVisibilityRequestProjectsItem[];
 }
 
 /**
@@ -551,5 +581,35 @@ export interface KanbanMetricsSummary {
 export interface KanbanMetricsResponse {
   weeks: WeekMetric[];
   summary: KanbanMetricsSummary;
+}
+
+export interface EvolutionWeek {
+  /** ISO date of the Monday of this week */
+  weekStart: string;
+  /** @nullable */
+  leadTimeAvg: number | null;
+  /** @nullable */
+  cycleTimeAvg: number | null;
+  throughput: number;
+  /**
+     * Percentage of issues entering QA that were rejected back, or null if none entered QA that week
+     * @nullable
+     */
+  qaRejectionRate: number | null;
+}
+
+export interface EvolutionTargets {
+  /** @nullable */
+  leadTime: number | null;
+  /** @nullable */
+  cycleTime: number | null;
+  /** @nullable */
+  throughput: number | null;
+}
+
+export interface EvolutionResponse {
+  projectId: string;
+  weeks: EvolutionWeek[];
+  targets: EvolutionTargets;
 }
 

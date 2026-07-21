@@ -27,6 +27,7 @@ import type {
   CfdResponse,
   DashboardSummary,
   ErrorResponse,
+  EvolutionResponse,
   ForecastRequest,
   ForecastResponse,
   HealthResponse,
@@ -37,11 +38,13 @@ import type {
   MemberStats,
   Project,
   ProjectMetrics,
+  ProjectVisibilitySettings,
   ProjectVisibilityUpdate,
   ProjectWithVisibility,
   QaRejectedResponse,
   SprintMetricsResponse,
   SuccessResponse,
+  UpdateProjectVisibilityRequest,
   User
 } from './api.schemas';
 
@@ -1468,6 +1471,85 @@ export function useGetProjectSprintMetrics<TData = Awaited<ReturnType<typeof get
 
 
 
+export const getGetProjectEvolutionUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/evolution`
+}
+
+/**
+ * Returns one row per ISO week from the project's accumulated metric_snapshots table, alongside the project's configured targets. Snapshots are written by the daily background sync, so this can cover more history over time than a single live Jira query (capped at 90 days) would allow.
+ *
+ * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ */
+export const getProjectEvolution = async (projectId: string, options?: RequestInit): Promise<EvolutionResponse> => {
+
+  return customFetch<EvolutionResponse>(getGetProjectEvolutionUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectEvolutionQueryKey = (projectId: string,) => {
+    return [
+    `/api/projects/${projectId}/evolution`
+    ] as const;
+    }
+
+
+export const getGetProjectEvolutionQueryOptions = <TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectEvolutionQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectEvolution>>> = ({ signal }) => getProjectEvolution(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectEvolutionQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectEvolution>>>
+export type GetProjectEvolutionQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ */
+
+export function useGetProjectEvolution<TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectEvolutionQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getListAdminUsersUrl = () => {
 
 
@@ -1832,4 +1914,151 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 
 
 
+
+export const getGetProjectVisibilitySettingsUrl = () => {
+
+
+
+
+  return `/api/settings/project-visibility`
+}
+
+/**
+ * @summary Get project visibility settings
+ */
+export const getProjectVisibilitySettings = async ( options?: RequestInit): Promise<ProjectVisibilitySettings> => {
+
+  return customFetch<ProjectVisibilitySettings>(getGetProjectVisibilitySettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectVisibilitySettingsQueryKey = () => {
+    return [
+    `/api/settings/project-visibility`
+    ] as const;
+    }
+
+
+export const getGetProjectVisibilitySettingsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectVisibilitySettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectVisibilitySettings>>> = ({ signal }) => getProjectVisibilitySettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectVisibilitySettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectVisibilitySettings>>>
+export type GetProjectVisibilitySettingsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get project visibility settings
+ */
+
+export function useGetProjectVisibilitySettings<TData = Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectVisibilitySettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateProjectVisibilitySettingsUrl = () => {
+
+
+
+
+  return `/api/settings/project-visibility`
+}
+
+/**
+ * @summary Update project visibility settings
+ */
+export const updateProjectVisibilitySettings = async (updateProjectVisibilityRequest: UpdateProjectVisibilityRequest, options?: RequestInit): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getUpdateProjectVisibilitySettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateProjectVisibilityRequest)
+  }
+);}
+
+
+
+
+export const getUpdateProjectVisibilitySettingsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext> => {
+
+const mutationKey = ['updateProjectVisibilitySettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, {data: BodyType<UpdateProjectVisibilityRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateProjectVisibilitySettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProjectVisibilitySettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>>
+    export type UpdateProjectVisibilitySettingsMutationBody = BodyType<UpdateProjectVisibilityRequest>
+    export type UpdateProjectVisibilitySettingsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update project visibility settings
+ */
+export const useUpdateProjectVisibilitySettings = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProjectVisibilitySettings>>,
+        TError,
+        {data: BodyType<UpdateProjectVisibilityRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateProjectVisibilitySettingsMutationOptions(options));
+    }
 

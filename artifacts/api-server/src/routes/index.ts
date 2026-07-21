@@ -20,6 +20,7 @@ import kanbanMetricsRouter from "./kanban-metrics";
 import adminRouter from "./admin";
 import rolePermissionsRouter from "./role-permissions";
 import syncStatusRouter from "./sync-status";
+import evolutionRouter from "./evolution";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ router.use(sprintMetricsRouter);
 router.use(kanbanMetricsRouter);
 router.use(rolePermissionsRouter);
 router.use(syncStatusRouter);
+router.use(evolutionRouter);
 router.use(adminRouter);
 
 export default router;
