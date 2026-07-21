@@ -618,7 +618,12 @@ export async function getProjectBoardType(
   if (!isJiraConfigured()) return MOCK_BOARD_TYPES[projectId] ?? "scrum";
 
   const override = MANUAL_BOARD_OVERRIDES[projectId];
-  if (override) return override;
+  if (override) {
+    // Route through the cache even though there's nothing to fetch, so the
+    // boardType cache key still gets populated - the background sync's
+    // health check otherwise always flags overridden projects as "partial".
+    return withCache(`boardType:${projectId}`, async () => override, options);
+  }
 
   return withCache(`boardType:${projectId}`, async () => {
     try {
@@ -732,6 +737,12 @@ export async function getJiraSprints(
   }, options);
 }
 
+type JiraSearchResponse = {
+  issues: JiraIssue[];
+  nextPageToken?: string;
+  isLast?: boolean;
+};
+
 /** Fetch all issues assigned to a specific sprint via JQL `sprint = {sprintId}`. */
 export async function getSprintIssues(
   sprintId: number,
@@ -742,16 +753,17 @@ export async function getSprintIssues(
     "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
   try {
     const allIssues: JiraIssue[] = [];
-    let startAt = 0;
+    let pageToken: string | null = null;
     for (let page = 0; page < 5; page++) {
       const jql = encodeURIComponent(`sprint = ${sprintId} ORDER BY created DESC`);
-      const result = await jiraFetch<{ issues: JiraIssue[]; total: number }>(
-        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
+      const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
       );
       const pageIssues = result.issues ?? [];
       allIssues.push(...pageIssues);
-      if (pageIssues.length < maxResults) break;
-      startAt += maxResults;
+      if (result.isLast || pageIssues.length < maxResults) break;
+      pageToken = result.nextPageToken ?? null;
+      if (!pageToken) break;
     }
     return allIssues;
   } catch (err) {
@@ -761,12 +773,6 @@ export async function getSprintIssues(
 }
 
 const JIRA_MAX_LOOKBACK_DAYS = 90;
-
-type JiraSearchResponse = {
-  issues: JiraIssue[];
-  nextPageToken?: string;
-  isLast?: boolean;
-};
 
 function capLookbackDays(periodDays: number): number {
   return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
@@ -792,47 +798,88 @@ export async function getJiraIssuesForProject(
   return withCache(cacheKey, async () => {
     const since = new Date();
     since.setDate(since.getDate() - effectivePeriodDays);
-    const sinceStr = since.toISOString().split("T")[0];
 
     const baseFields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
     const fields = includeIssueLinks ? `${baseFields},issuelinks` : baseFields;
 
     const maxResults = 100;
-    const MAX_PAGES = 50;
+    const MAX_PAGES = 5;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
 
-    const fetchPagedIssues = async (jqlRaw: string): Promise<JiraIssue[]> => {
+    // This Jira site's /search/jql nextPageToken never actually advances the
+    // result window (confirmed directly against the API: page 2 returns the
+    // identical issues as page 1, regardless of sort field). Work around it by
+    // splitting the date range into weekly chunks small enough that a single
+    // page (100 results) covers each chunk, instead of depending on multi-page
+    // pagination at all. The inner loop below still attempts pagination
+    // defensively in case a chunk genuinely exceeds 100, but bails out the
+    // moment it detects the page isn't moving instead of grinding to MAX_PAGES.
+    const fetchPagedIssuesInRange = async (
+      buildJql: (from: string, to: string) => string,
+      fromDate: Date,
+      toDate: Date
+    ): Promise<JiraIssue[]> => {
       const issues: JiraIssue[] = [];
-      let startAt = 0;
+      let pageToken: string | null = null;
       let pageCount = 0;
-      const jql = encodeURIComponent(jqlRaw);
+      let lastSeenKey: string | null = null;
+      const jql = encodeURIComponent(buildJql(formatDate(fromDate), formatDate(toDate)));
 
       for (;;) {
-        if (++pageCount > MAX_PAGES) {
-          logger.warn({ projectId, jql: jqlRaw, total: issues.length }, "Too many pages, stopping pagination");
-          break;
-        }
+        if (++pageCount > MAX_PAGES) break;
 
         const expandParam = includeChangelog ? "&expand=changelog" : "";
-        const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
-          `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
+        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
         );
         const pageIssues = result.issues ?? [];
+        const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
+        if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
+          logger.warn({ projectId, jql: buildJql(formatDate(fromDate), formatDate(toDate)) }, "Pagination stalled (Jira returned the same page again), stopping");
+          break;
+        }
         issues.push(...pageIssues);
-        if (pageIssues.length < maxResults) break;
-        startAt += maxResults;
+        if (result.isLast || pageIssues.length < maxResults) break;
+        lastSeenKey = newLastKey;
+        pageToken = result.nextPageToken ?? null;
+        if (!pageToken) break;
       }
 
       return issues;
     };
 
+    const fetchPagedIssuesChunked = async (buildJql: (from: string, to: string) => string): Promise<JiraIssue[]> => {
+      const CHUNK_DAYS = 7;
+      const CONCURRENCY = 4;
+      const now = new Date();
+      const chunks: Array<[Date, Date]> = [];
+      let chunkStart = since;
+      while (chunkStart <= now) {
+        const chunkEnd = new Date(Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * ONE_DAY_MS, now.getTime()));
+        chunks.push([chunkStart, chunkEnd]);
+        chunkStart = new Date(chunkEnd.getTime() + ONE_DAY_MS);
+      }
+
+      const allIssues: JiraIssue[] = [];
+      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+        const batch = chunks.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(batch.map(([from, to]) => fetchPagedIssuesInRange(buildJql, from, to)));
+        for (const r of results) allIssues.push(...r);
+      }
+      return allIssues;
+    };
+
     // Fetch resolved and unresolved streams separately so large active backlogs don't hide resolved issues.
     const [resolvedIssues, unresolvedIssues] = await Promise.all([
-      fetchPagedIssues(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC, updated DESC`
+      fetchPagedIssuesChunked(
+        (from, to) =>
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate <= "${to}"`
       ),
-      fetchPagedIssues(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${sinceStr}" AND resolutiondate is EMPTY ORDER BY updated DESC`
+      fetchPagedIssuesChunked(
+        (from, to) =>
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${from}" AND created <= "${to}" AND resolutiondate is EMPTY`
       ),
     ]);
 
@@ -863,7 +910,7 @@ export async function getFlaggedJiraIssuesForProject(
     const maxResults = 100;
     const MAX_PAGES = 50;
     const issues: JiraIssue[] = [];
-    let startAt = 0;
+    let pageToken: string | null = null;
     let pageCount = 0;
     const jql = encodeURIComponent(
       `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND Flagged is not EMPTY ORDER BY updated DESC`
@@ -876,14 +923,15 @@ export async function getFlaggedJiraIssuesForProject(
       }
 
       const expandParam = includeChangelog ? "&expand=changelog" : "";
-      const result = await jiraFetch<{ issues: JiraIssue[]; total?: number; isLast?: boolean }>(
-        `/search/jql?jql=${jql}&startAt=${startAt}&maxResults=${maxResults}&fields=${fields}${expandParam}`
+      const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
       );
 
       const pageIssues = result.issues ?? [];
       issues.push(...pageIssues);
-      if (pageIssues.length < maxResults) break;
-      startAt += maxResults;
+      if (result.isLast || pageIssues.length < maxResults) break;
+      pageToken = result.nextPageToken ?? null;
+      if (!pageToken) break;
     }
 
     return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
@@ -918,7 +966,7 @@ export async function getRecentlyResolvedIssues(
           `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${sinceStr}" ORDER BY resolutiondate DESC`
         );
         const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${pageToken ? `&pageToken=${pageToken}` : ""}`
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
         );
         const pageIssues = result.issues ?? [];
         allIssues.push(...pageIssues);
@@ -974,7 +1022,7 @@ export async function getIssuesStatusCounts(
           `project = ${projectId} AND created >= "${sinceStr}" ORDER BY created DESC`
         );
         const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status,issuetype${pageToken ? `&pageToken=${pageToken}` : ""}`
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=status,issuetype${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
         );
         const pageIssues = result.issues ?? [];
         for (const issue of pageIssues) {
