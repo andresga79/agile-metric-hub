@@ -218,6 +218,18 @@ export default function Dashboard() {
     const cycleRef = Math.max(1, avgCycleP50 ?? 5);
     const leadRef = Math.max(1, avgLeadTime ?? 7);
     const cycleThreshold = thresholds["cycleTime"];
+    const leadThreshold = thresholds["leadTime"];
+    const flowThreshold = thresholds["flowLoad"];
+
+    // Portfolio averages (cycleRef/leadRef) are only a fallback while /api/admin/metric-thresholds
+    // is still loading — once it resolves, every project in this table is judged against the same
+    // admin-configured cutoffs (Admin -> Health), not a value that shifts with the portfolio average.
+    const cycleGood = cycleThreshold?.goodValue ?? cycleRef;
+    const cycleWarn = cycleThreshold?.warningValue ?? cycleRef * 1.4;
+    const leadGood = leadThreshold?.goodValue ?? leadRef;
+    const leadWarn = leadThreshold?.warningValue ?? leadRef * 1.5;
+    const flowGood = flowThreshold?.goodValue ?? 1.2;
+    const flowWarn = flowThreshold?.warningValue ?? 2.0;
 
     return filteredPortfolio.map((p) => {
       const throughput = p.doneCount ?? 0;
@@ -226,12 +238,11 @@ export default function Dashboard() {
       const cycle = p.cycleTimeP50 ?? cycleRef;
       const lead = p.leadTimeAvg ?? leadRef;
 
-      const cycleGood = cycleThreshold?.goodValue ?? cycleRef;
-      const cycleWarn = cycleThreshold?.warningValue ?? cycleRef * 1.4;
-
-      const flowStatus: DimStatus = flowLoad >= 2.0 ? "fail" : flowLoad >= 1.2 ? "warn" : "ok";
+      const flowStatus: DimStatus = flowLoad >= flowWarn ? "fail" : flowLoad >= flowGood ? "warn" : "ok";
       const cycleStatus: DimStatus = p.cycleTimeP50 === null ? "ok" : cycle > cycleWarn ? "fail" : cycle > cycleGood ? "warn" : "ok";
-      const leadStatus: DimStatus = p.leadTimeAvg === null ? "ok" : lead > leadRef * 1.5 ? "fail" : lead > leadRef * 1.2 ? "warn" : "ok";
+      const leadStatus: DimStatus = p.leadTimeAvg === null ? "ok" : lead > leadWarn ? "fail" : lead > leadGood ? "warn" : "ok";
+      // Delivery is a structural stall check (nothing shipping while work sits in progress), not a
+      // tunable metric threshold, so it intentionally stays outside the admin thresholds table.
       const deliveryStatus: DimStatus =
         throughput === 0 && wip >= 3
           ? "fail"
@@ -244,7 +255,7 @@ export default function Dashboard() {
           key: "flow",
           label: "Flujo",
           value: throughput > 0 ? `${flowLoad.toFixed(1)}x` : wip > 0 ? "Sin salida" : "—",
-          ref: "ref: ≤ 1.0x",
+          ref: `ref: ≤ ${flowGood.toFixed(1)}x`,
           status: flowStatus,
         },
         {
@@ -258,7 +269,7 @@ export default function Dashboard() {
           key: "lead",
           label: "Lead Time",
           value: p.leadTimeAvg !== null ? formatDurationDays(lead) : "—",
-          ref: `ref: ${formatDurationDays(leadRef)}`,
+          ref: `ref: ${formatDurationDays(leadGood)}`,
           status: leadStatus,
         },
         {

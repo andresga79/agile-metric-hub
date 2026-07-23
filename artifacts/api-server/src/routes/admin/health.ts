@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, defaultMetricThresholdsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { DEFAULT_HEALTH_THRESHOLDS } from "./constants";
 
 const router: IRouter = Router();
@@ -9,6 +9,7 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(defaultMetricThresholdsTable)
+    .where(isNull(defaultMetricThresholdsTable.projectId))
     .orderBy(defaultMetricThresholdsTable.metric);
 
   if (rows.length === 0) {
@@ -16,6 +17,7 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
       .insert(defaultMetricThresholdsTable)
       .values(DEFAULT_HEALTH_THRESHOLDS.map((threshold) => ({
         metric: threshold.metric,
+        projectId: null,
         goodValue: String(threshold.goodValue),
         warningValue: String(threshold.warningValue),
       })))
@@ -23,6 +25,19 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
     res.json(inserted);
     return;
   }
+
+  res.json(rows);
+});
+
+// Per-project overrides only (does not include the global rows) — an empty array means
+// the project inherits every global default as-is.
+router.get("/metric-thresholds/project/:projectId", async (req, res): Promise<void> => {
+  const { projectId } = req.params;
+  const rows = await db
+    .select()
+    .from(defaultMetricThresholdsTable)
+    .where(eq(defaultMetricThresholdsTable.projectId, projectId))
+    .orderBy(defaultMetricThresholdsTable.metric);
 
   res.json(rows);
 });
@@ -46,7 +61,7 @@ router.put("/metric-thresholds/:metric", async (req, res): Promise<void> => {
   const existing = await db
     .select()
     .from(defaultMetricThresholdsTable)
-    .where(eq(defaultMetricThresholdsTable.metric, metric))
+    .where(and(eq(defaultMetricThresholdsTable.metric, metric), isNull(defaultMetricThresholdsTable.projectId)))
     .limit(1);
 
   let result;
@@ -59,11 +74,61 @@ router.put("/metric-thresholds/:metric", async (req, res): Promise<void> => {
   } else {
     [result] = await db
       .insert(defaultMetricThresholdsTable)
-      .values({ metric, goodValue: String(gv), warningValue: String(wv) })
+      .values({ metric, projectId: null, goodValue: String(gv), warningValue: String(wv) })
       .returning();
   }
 
   res.json(result);
+});
+
+router.put("/metric-thresholds/:metric/project/:projectId", async (req, res): Promise<void> => {
+  const { metric, projectId } = req.params;
+  const { goodValue, warningValue } = req.body;
+
+  if (goodValue === undefined || warningValue === undefined) {
+    res.status(400).json({ error: "goodValue and warningValue are required" });
+    return;
+  }
+
+  const gv = Number(goodValue);
+  const wv = Number(warningValue);
+  if (isNaN(gv) || isNaN(wv)) {
+    res.status(400).json({ error: "goodValue and warningValue must be valid numbers" });
+    return;
+  }
+
+  const existing = await db
+    .select()
+    .from(defaultMetricThresholdsTable)
+    .where(and(eq(defaultMetricThresholdsTable.metric, metric), eq(defaultMetricThresholdsTable.projectId, projectId)))
+    .limit(1);
+
+  let result;
+  if (existing.length > 0) {
+    [result] = await db
+      .update(defaultMetricThresholdsTable)
+      .set({ goodValue: String(gv), warningValue: String(wv) })
+      .where(eq(defaultMetricThresholdsTable.id, existing[0].id))
+      .returning();
+  } else {
+    [result] = await db
+      .insert(defaultMetricThresholdsTable)
+      .values({ metric, projectId, goodValue: String(gv), warningValue: String(wv) })
+      .returning();
+  }
+
+  res.json(result);
+});
+
+// Removes a project-level override, reverting that metric back to the global default.
+router.delete("/metric-thresholds/:metric/project/:projectId", async (req, res): Promise<void> => {
+  const { metric, projectId } = req.params;
+
+  await db
+    .delete(defaultMetricThresholdsTable)
+    .where(and(eq(defaultMetricThresholdsTable.metric, metric), eq(defaultMetricThresholdsTable.projectId, projectId)));
+
+  res.status(204).end();
 });
 
 export default router;

@@ -13,11 +13,14 @@ import {
   getLeadTimeDays,
   getStoryPoints,
   getStatusCategoryMap,
-  mapIssueType,
+  isBlockedStatus,
+  isIssueCurrentlyFlagged,
+  isBlockedEligibleIssueType,
   type JiraIssue,
 } from "../lib/jira";
 import { logger } from "../lib/logger";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
+import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
 
@@ -34,10 +37,9 @@ function getStartDate(periodDays: number): Date {
   return d;
 }
 
-function isBlockedStatus(name: string): boolean {
-  return /block|impediment|bloqueado|obstáculo/i.test(name.trim());
-}
-
+// isBlockedStatus / isIssueCurrentlyFlagged / isBlockedEligibleIssueType now live in lib/jira.ts
+// (shared with metrics.ts's per-member blocked count). isBlockedFlagValue stays local — it's used
+// directly here to inspect a changelog transition's raw value, not just the issue's current state.
 function isBlockedFlagValue(value: string | null | undefined): boolean {
   if (!value) return false;
   return /block|impediment|bloqueado|obstáculo/i.test(value.trim());
@@ -49,17 +51,6 @@ function isFlaggedTransition(item: { field: string; fieldId?: string }): boolean
   return fieldId === "customfield_10021" || fieldName === "flagged" || fieldName === "marca";
 }
 
-function isIssueCurrentlyFlagged(issue: JiraIssue): boolean {
-  const flagged = issue.fields.customfield_10021;
-  if (!Array.isArray(flagged)) return false;
-  return flagged.some((entry) => isBlockedFlagValue(entry?.value ?? null));
-}
-
-function isBlockedEligibleIssueType(issue: JiraIssue): boolean {
-  const normalized = mapIssueType(issue.fields.issuetype.name ?? "");
-  return normalized === "Story" || normalized === "Task" || normalized === "Bug";
-}
-
 function getISOWeek(date: Date): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -69,11 +60,18 @@ function getISOWeek(date: Date): string {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
-function getAlertLevel(days: number | null): "critical" | "warning" | "watch" | null {
+// Admin -> Health configures wipAging as a (goodValue, warningValue) pair (defaults 3d / 14d).
+// The "watch"/"warning" split below the two admin cutoffs is derived as their midpoint so the
+// existing 3-tier UI (project-flow.tsx, flow-health-card.tsx) keeps working without a 3rd
+// admin-configurable number.
+function getAlertLevel(days: number | null, threshold: EffectiveThreshold | undefined): "critical" | "warning" | "watch" | null {
   if (days === null) return null;
-  if (days >= 14) return "critical";
-  if (days >= 7) return "warning";
-  if (days >= 3) return "watch";
+  const good = threshold?.goodValue ?? 3;
+  const warning = threshold?.warningValue ?? 14;
+  const midpoint = (good + warning) / 2;
+  if (days >= warning) return "critical";
+  if (days >= midpoint) return "warning";
+  if (days >= good) return "watch";
   return null;
 }
 
@@ -284,7 +282,7 @@ router.get(
       await clearCache(`issues:${projectId}:flagged:changelog`);
     }
 
-    const [issues, blockedScopeIssues, flaggedIssues, allowedIssueTypes] = await Promise.all([
+    const [issues, blockedScopeIssues, flaggedIssues, allowedIssueTypes, effectiveThresholds] = await Promise.all([
       getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
         logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
         return [] as JiraIssue[];
@@ -300,6 +298,7 @@ router.get(
         return [] as JiraIssue[];
       }),
       getPortfolioAllowedIssueTypes(),
+      getEffectiveThresholds(projectId),
     ]);
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
@@ -361,7 +360,7 @@ router.get(
           issueType: i.fields.issuetype.name,
           priority: i.fields.priority.name,
           daysInProgress,
-          alertLevel: getAlertLevel(daysInProgress),
+          alertLevel: getAlertLevel(daysInProgress, effectiveThresholds.wipAging),
           enteredDate: enteredInProgress?.toISOString() ?? fallbackStart.toISOString(),
         };
       })

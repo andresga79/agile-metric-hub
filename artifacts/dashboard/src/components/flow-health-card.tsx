@@ -8,10 +8,16 @@ interface FlowHealthCardProps {
   compact?: boolean;
 }
 
+const DEFAULT_FLOW_HEALTH_THRESHOLDS = {
+  flowEfficiency: { good: 25, warning: 15 },
+  wipAging: { good: 3, warning: 14 },
+};
+
 export default function FlowHealthCard({ projectId, period = "3m", compact = false }: FlowHealthCardProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [thresholds, setThresholds] = useState(DEFAULT_FLOW_HEALTH_THRESHOLDS);
 
   useEffect(() => {
     if (!projectId) return;
@@ -25,6 +31,30 @@ export default function FlowHealthCard({ projectId, period = "3m", compact = fal
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [projectId, period]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const token = localStorage.getItem("auth_token");
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+    ]).then(([global, overrides]) => {
+      const merged = { ...DEFAULT_FLOW_HEALTH_THRESHOLDS };
+      for (const source of [global, overrides]) {
+        if (!Array.isArray(source)) continue;
+        for (const t of source) {
+          if (t.metric === "flowEfficiency" || t.metric === "wipAging") {
+            merged[t.metric as "flowEfficiency" | "wipAging"] = {
+              good: Number(t.goodValue),
+              warning: Number(t.warningValue),
+            };
+          }
+        }
+      }
+      setThresholds(merged);
+    }).catch(() => {});
+  }, [projectId]);
 
   if (loading) {
     return (
@@ -55,14 +85,14 @@ export default function FlowHealthCard({ projectId, period = "3m", compact = fal
   const maxAvg = timeInStatus.length > 0 ? Math.max(...timeInStatus.map((s: any) => s.avgDays), 1) : 1;
 
   const flowEffLabel = flowEff !== null && flowEff !== undefined
-    ? flowEff >= 60 ? t('page.flowHealth.efficient')
-      : flowEff >= 40 ? t('page.flowHealth.fair')
+    ? flowEff >= thresholds.flowEfficiency.good ? t('page.flowHealth.efficient')
+      : flowEff >= thresholds.flowEfficiency.warning ? t('page.flowHealth.fair')
       : t('page.flowHealth.poor')
     : null;
 
   const flowEffColor = flowEff !== null && flowEff !== undefined
-    ? flowEff >= 60 ? "text-green-500"
-      : flowEff >= 40 ? "text-amber-500"
+    ? flowEff >= thresholds.flowEfficiency.good ? "text-green-500"
+      : flowEff >= thresholds.flowEfficiency.warning ? "text-amber-500"
       : "text-red-500"
     : "";
 
@@ -85,10 +115,14 @@ export default function FlowHealthCard({ projectId, period = "3m", compact = fal
           <div className="space-y-1.5">
             {topStatuses.map((entry: any, idx: number) => {
               const pct = (entry.avgDays / maxAvg) * 100;
-              const isBottleneck = idx === 0 && entry.avgDays > 2;
+              // Reuses the wipAging threshold (Admin -> Health) since both measure "days an issue
+              // has been sitting somewhere it shouldn't" — the midpoint splits it into the same
+              // 3 bands the backend derives for WIP aging alertLevel (see analytics.ts).
+              const agingMidpoint = (thresholds.wipAging.good + thresholds.wipAging.warning) / 2;
+              const isBottleneck = idx === 0 && entry.avgDays > thresholds.wipAging.good;
               const barColor = isBottleneck ? "bg-red-500"
-                : entry.avgDays >= 7 ? "bg-orange-500"
-                : entry.avgDays >= 3 ? "bg-amber-500"
+                : entry.avgDays >= agingMidpoint ? "bg-orange-500"
+                : entry.avgDays >= thresholds.wipAging.good ? "bg-amber-500"
                 : "bg-green-500";
               return (
                 <div key={entry.status} className="flex items-center gap-2">
@@ -107,7 +141,7 @@ export default function FlowHealthCard({ projectId, period = "3m", compact = fal
         )}
       </div>
 
-      {bottleneck && bottleneck.avgDays > 2 && (
+      {bottleneck && bottleneck.avgDays > thresholds.wipAging.good && (
         <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-red-500/10 text-red-400 border border-red-500/20">
           <AlertTriangle size={14} />
           <span><strong>{t('page.flowHealth.bottleneck')}:</strong> {bottleneck.status} ({bottleneck.avgDays.toFixed(1)}d {t('page.flow.avgDays').toLowerCase()})</span>

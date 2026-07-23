@@ -43,7 +43,7 @@ interface AdminProjectVisibilityRow {
 
 type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
-const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"];
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging"];
 const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency"];
 
 const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
@@ -54,7 +54,9 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   cfr: { label: "Calidad (CFR)", unit: "%" },
   predictability: { label: "Predictabilidad", unit: "" },
   flowEfficiency: { label: "Flow Efficiency", unit: "%" },
-  blocked: { label: "Issues Bloqueados", unit: "" },
+  blocked: { label: "Issues Bloqueados", unit: "% del WIP" },
+  flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
+  wipAging: { label: "WIP Aging", unit: "d" },
 };
 
 const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
@@ -86,8 +88,18 @@ export default function Admin() {
   const [localPerms, setLocalPerms] = useState<PermissionEntry[]>([]);
 
   const [thresholds, setThresholds] = useState<ThresholdRow[]>([]);
+  // Snapshot of what the server actually has, taken right after each successful fetch/save.
+  // saveAllThresholds() diffs against this instead of blindly re-sending every row in `thresholds` —
+  // otherwise a stray render with stale local state (e.g. a slow fetch, a leftover edit from before
+  // the page finished loading) could silently overwrite metrics the user never touched.
+  const [originalThresholds, setOriginalThresholds] = useState<ThresholdRow[]>([]);
   const [thresholdsDirty, setThresholdsDirty] = useState(false);
   const [savingThresholds, setSavingThresholds] = useState(false);
+  const [overrideProjectId, setOverrideProjectId] = useState<string>("");
+  const [projectOverrides, setProjectOverrides] = useState<Record<string, { goodValue: number; warningValue: number; hasOverride: boolean }>>({});
+  const [originalProjectOverrides, setOriginalProjectOverrides] = useState<Record<string, { goodValue: number; warningValue: number; hasOverride: boolean }>>({});
+  const [overridesDirty, setOverridesDirty] = useState(false);
+  const [savingOverrides, setSavingOverrides] = useState(false);
   const [allowedIssueTypes, setAllowedIssueTypes] = useState<string[]>([]);
   const [issueTypesDirty, setIssueTypesDirty] = useState(false);
   const [savingIssueTypes, setSavingIssueTypes] = useState(false);
@@ -107,11 +119,13 @@ export default function Admin() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setThresholds(data.map((t: any) => ({
+          const rows = data.map((t: any) => ({
             metric: t.metric,
             goodValue: Number(t.goodValue),
             warningValue: Number(t.warningValue),
-          })));
+          }));
+          setThresholds(rows);
+          setOriginalThresholds(rows);
         }
       })
       .catch(() => {});
@@ -179,7 +193,11 @@ export default function Admin() {
   const saveAllThresholds = async () => {
     const token = localStorage.getItem("auth_token");
     setSavingThresholds(true);
-    for (const t of thresholds) {
+    const changed = thresholds.filter((t) => {
+      const original = originalThresholds.find((o) => o.metric === t.metric);
+      return !original || original.goodValue !== t.goodValue || original.warningValue !== t.warningValue;
+    });
+    for (const t of changed) {
       try {
         await fetch(`/api/admin/metric-thresholds/${t.metric}`, {
           method: "PUT",
@@ -188,8 +206,89 @@ export default function Admin() {
         });
       } catch {}
     }
+    setOriginalThresholds(thresholds);
     setSavingThresholds(false);
     setThresholdsDirty(false);
+  };
+
+  useEffect(() => {
+    if (!overrideProjectId) {
+      setProjectOverrides({});
+      setOriginalProjectOverrides({});
+      return;
+    }
+    const token = localStorage.getItem("auth_token");
+    fetch(`/api/admin/metric-thresholds/project/${overrideProjectId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((overrideRows) => {
+        const overrideByMetric = new Map(
+          (Array.isArray(overrideRows) ? overrideRows : []).map((r: any) => [r.metric, r])
+        );
+        const merged: typeof projectOverrides = {};
+        for (const t of thresholds) {
+          const override = overrideByMetric.get(t.metric);
+          merged[t.metric] = override
+            ? { goodValue: Number(override.goodValue), warningValue: Number(override.warningValue), hasOverride: true }
+            : { goodValue: t.goodValue, warningValue: t.warningValue, hasOverride: false };
+        }
+        setProjectOverrides(merged);
+        setOriginalProjectOverrides(merged);
+        setOverridesDirty(false);
+      })
+      .catch(() => setProjectOverrides({}));
+  }, [overrideProjectId, thresholds]);
+
+  const toggleOverride = (metric: string) => {
+    setProjectOverrides((prev) => ({
+      ...prev,
+      [metric]: { ...prev[metric], hasOverride: !prev[metric]?.hasOverride },
+    }));
+    setOverridesDirty(true);
+  };
+
+  const updateOverride = (metric: string, field: "goodValue" | "warningValue", value: number) => {
+    setProjectOverrides((prev) => ({
+      ...prev,
+      [metric]: { ...prev[metric], [field]: value },
+    }));
+    setOverridesDirty(true);
+  };
+
+  const saveProjectOverrides = async () => {
+    if (!overrideProjectId) return;
+    const token = localStorage.getItem("auth_token");
+    setSavingOverrides(true);
+    // Only touch metrics whose override state or values actually changed since the last load —
+    // otherwise every save re-sends a PUT/DELETE for all 10 metrics, most of them no-ops that
+    // just add risk (and noise) for nothing.
+    const changedEntries = Object.entries(projectOverrides).filter(([metric, row]) => {
+      const original = originalProjectOverrides[metric];
+      return !original
+        || original.hasOverride !== row.hasOverride
+        || original.goodValue !== row.goodValue
+        || original.warningValue !== row.warningValue;
+    });
+    for (const [metric, row] of changedEntries) {
+      try {
+        if (row.hasOverride) {
+          await fetch(`/api/admin/metric-thresholds/${metric}/project/${overrideProjectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ goodValue: row.goodValue, warningValue: row.warningValue }),
+          });
+        } else {
+          await fetch(`/api/admin/metric-thresholds/${metric}/project/${overrideProjectId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      } catch {}
+    }
+    setOriginalProjectOverrides(projectOverrides);
+    setSavingOverrides(false);
+    setOverridesDirty(false);
   };
 
   const toggleIssueType = (issueType: string) => {
@@ -751,6 +850,106 @@ export default function Admin() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+      )}
+
+      {adminSection === "health" && (
+      <Card className="bg-card/40">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Activity size={18} className="text-primary" />
+                Overrides por proyecto
+              </CardTitle>
+              <CardDescription>
+                Sobrescribe los umbrales globales para un proyecto puntual (ej. uno con volumen o cadencia muy distinta al resto del portafolio).
+              </CardDescription>
+            </div>
+            {overridesDirty && overrideProjectId && (
+              <button
+                onClick={saveProjectOverrides}
+                disabled={savingOverrides}
+                className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/80 px-3 py-1.5 rounded-md transition-colors disabled:opacity-50"
+              >
+                <Save size={14} />
+                {savingOverrides ? t('common.loading') : t('page.admin.saveThresholds')}
+              </button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4">
+            <select
+              value={overrideProjectId}
+              onChange={(e) => setOverrideProjectId(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1.5 text-sm min-w-[240px]"
+            >
+              <option value="">Seleccionar proyecto…</option>
+              {projectVisibility.map((p) => (
+                <option key={p.projectId} value={p.projectId}>{p.name} ({p.projectKey})</option>
+              ))}
+            </select>
+          </div>
+
+          {overrideProjectId && (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>{t('page.admin.metric')}</TableHead>
+                    <TableHead className="text-center">{t('page.admin.good')}</TableHead>
+                    <TableHead className="text-center">{t('page.admin.warning')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {thresholds.map((globalRow) => {
+                    const meta = METRIC_LABELS[globalRow.metric] ?? { label: globalRow.metric, unit: "" };
+                    const row = projectOverrides[globalRow.metric];
+                    const active = row?.hasOverride ?? false;
+                    return (
+                      <TableRow key={globalRow.metric} className="border-border hover:bg-accent/50">
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleOverride(globalRow.metric)}
+                            title="Anular el valor global para este proyecto"
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{meta.label}</TableCell>
+                        <TableCell className="text-center">
+                          <input
+                            type="number"
+                            disabled={!active}
+                            value={row?.goodValue ?? globalRow.goodValue}
+                            onChange={(e) => updateOverride(globalRow.metric, "goodValue", Number(e.target.value))}
+                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums disabled:opacity-40"
+                          />
+                          <span className="text-xs text-muted-foreground ml-1">{meta.unit}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <input
+                            type="number"
+                            disabled={!active}
+                            value={row?.warningValue ?? globalRow.warningValue}
+                            onChange={(e) => updateOverride(globalRow.metric, "warningValue", Number(e.target.value))}
+                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums disabled:opacity-40"
+                          />
+                          <span className="text-xs text-muted-foreground ml-1">{meta.unit}</span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <p className="text-xs text-muted-foreground mt-2">
+                Destildá la casilla para volver a usar el valor global de esa métrica en este proyecto.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
       )}

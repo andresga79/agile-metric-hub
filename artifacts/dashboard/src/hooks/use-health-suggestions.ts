@@ -13,6 +13,7 @@ export interface Suggestion {
 interface RawHealth {
   throughput: number;
   avgCycleTime: number;
+  avgLeadTime: number;
   cfr: number;
   wipRatio: number;
   predictability: number;
@@ -22,15 +23,18 @@ interface RawHealth {
   totalIssues: number;
 }
 
+// Fallback copy of artifacts/api-server/src/routes/admin/constants.ts DEFAULT_HEALTH_THRESHOLDS,
+// used only until the /api/admin/metric-thresholds fetch below resolves. blocked is a percentage
+// of WIP (blocked / inProgressCount * 100), not an absolute issue count.
 const DEFAULT_THRESHOLDS = {
   cycleTime: { good: 15, warning: 25 },
-  leadTime: { good: 20, warning: 35 },
+  leadTime: { good: 25, warning: 35 },
   throughput: { good: 10, warning: 5 },
   wipRatio: { good: 30, warning: 50 },
   cfr: { good: 10, warning: 25 },
   predictability: { good: 70, warning: 40 },
-  flowEfficiency: { good: 40, warning: 20 },
-  blocked: { good: 0, warning: 3 },
+  flowEfficiency: { good: 25, warning: 15 },
+  blocked: { good: 0, warning: 15 },
 };
 
 export function useHealthSuggestions(projectId: string | undefined, period: string) {
@@ -47,8 +51,9 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
       fetch(`/api/projects/${projectId}/health/${period}`, { headers }).then((r) => r.json()),
       fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then((r) => r.json()),
       fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
     ])
-      .then(([healthData, analyticsData, thresholds]) => {
+      .then(([healthData, analyticsData, thresholds, projectOverrides]) => {
         const raw: RawHealth = healthData.raw;
         const analytics = analyticsData;
         const result: Suggestion[] = [];
@@ -57,8 +62,10 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         for (const key of Object.keys(DEFAULT_THRESHOLDS)) {
           mergedThresholds[key] = { ...DEFAULT_THRESHOLDS[key as keyof typeof DEFAULT_THRESHOLDS] };
         }
-        if (Array.isArray(thresholds)) {
-          for (const t of thresholds) {
+        // Global admin defaults first, then this project's overrides (if any) win.
+        for (const source of [thresholds, projectOverrides]) {
+          if (!Array.isArray(source)) continue;
+          for (const t of source) {
             if (t.metric && t.goodValue !== undefined && t.warningValue !== undefined) {
               mergedThresholds[t.metric] = {
                 good: Number(t.goodValue),
@@ -69,7 +76,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         }
 
         const isLowerBetter = (metric: string) =>
-          ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked"].includes(metric);
+          ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging"].includes(metric);
 
         const evalMetric = (
           area: string,
@@ -94,14 +101,18 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
             label,
             value: `${rawValue.toFixed(1)}${unit}`,
             status,
-            diagnosis: diagnosisTemplate(rawValue, isLower ? threshold.good : threshold.good),
-            actions: actionsList,
+            diagnosis: diagnosisTemplate(rawValue, threshold.good),
+            // A "good" metric still shows its card (confirmation matters), but doesn't get a list of
+            // "here's how to improve it" actions — there's nothing to fix, so suggesting fixes here
+            // reads as noise and undercuts trust in the ones that actually matter.
+            actions: status === "good" ? [] : actionsList,
           });
         };
 
-        // --- Cycle Time ---
+        // --- Cycle Time (mean, not median — the Resumen tab shows P50 for this same metric;
+        // labeled explicitly so the two don't read as contradictory) ---
         evalMetric(
-          "cycleTime", "Cycle Time", raw.avgCycleTime, mergedThresholds.cycleTime,
+          "cycleTime", "Cycle Time (promedio)", raw.avgCycleTime, mergedThresholds.cycleTime,
           (v, t) => v > t
             ? `El cycle time promedio es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Los issues tardan demasiado en completarse una vez iniciados.`
             : `El cycle time promedio de ${v.toFixed(1)}d está dentro del rango saludable (≤${t}d).`,
@@ -115,9 +126,15 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Lead Time ---
         evalMetric(
-          "leadTime", "Lead Time", null, mergedThresholds.leadTime,
-          () => "Lead time no disponible para este período.",
-          []
+          "leadTime", "Lead Time (promedio)", raw.avgLeadTime, mergedThresholds.leadTime,
+          (v, t) => v > t
+            ? `El lead time promedio es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Desde que se crea un issue hasta que se entrega pasa demasiado tiempo.`
+            : `El lead time promedio de ${v.toFixed(1)}d está dentro del rango saludable (≤${t}d).`,
+          [
+            "Revisar cuánto tiempo pasan los issues en el backlog antes de empezarlos — un cycle time sano con lead time alto suele significar demasiada espera previa al arranque.",
+            "Priorizar y refinar el backlog con más frecuencia para reducir el tiempo de espera antes de iniciar el trabajo.",
+            "Acortar el tiempo entre creación y priorización de nuevos issues.",
+          ]
         );
 
         // --- Throughput ---
@@ -190,20 +207,34 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
           );
         }
 
-        // --- Blocked Issues ---
-        const blocked = analytics?.blockedIssues;
-        const blockedCount = blocked?.length ?? 0;
-        if (blockedCount > 0) {
+        // --- Blocked Issues (as % of current WIP) ---
+        // Two things this used to get wrong:
+        // 1. It counted every issue that was EVER blocked in the last 90 days (analytics.blockedIssues),
+        //    not just issues blocked right now — so a project with 0 active blocks could still show up
+        //    as "Crítico" here. Filtering to isCurrentlyBlocked matches what the Resumen tab's
+        //    "Bloqueos Activos" card already does.
+        // 2. It divided by raw.inProgressCount (from this page's own /health endpoint, scoped to the
+        //    selected period) while Resumen divides by analytics.wipAging.length (a wider, unscoped
+        //    "currently in progress" list) — same project, same moment, two different WIP counts.
+        //    Using wipAging here keeps both tabs in agreement.
+        const blockedIssues: { isCurrentlyBlocked: boolean }[] = Array.isArray(analytics?.blockedIssues) ? analytics.blockedIssues : [];
+        const blockedCount = blockedIssues.filter((b) => b.isCurrentlyBlocked).length;
+        const wipForBlocked = Array.isArray(analytics?.wipAging) ? analytics.wipAging.length : 0;
+        if (wipForBlocked > 0) {
+          const blockedPct = (blockedCount / wipForBlocked) * 100;
           evalMetric(
-            "blocked", "Issues Bloqueados", blockedCount, mergedThresholds.blocked,
-            (v, t) => v > t
-              ? `Hay ${v.toFixed(0)} issues bloqueados actualmente. Los bloqueos prolongados detienen el flujo y acumulan deuda.`
-              : `Solo ${v.toFixed(0)} issues bloqueados, dentro del rango esperado.`,
+            "blocked", "Issues Bloqueados", blockedPct, mergedThresholds.blocked,
+            (v) => blockedCount === 0
+              ? `Ningún issue en curso está bloqueado actualmente (0 de ${wipForBlocked}).`
+              : v > mergedThresholds.blocked.warning
+                ? `${blockedCount} de ${wipForBlocked} issues en curso (${v.toFixed(0)}%) están bloqueados ahora mismo. Los bloqueos prolongados detienen el flujo y acumulan deuda.`
+                : `${blockedCount} de ${wipForBlocked} issues en curso (${v.toFixed(0)}%) están bloqueados ahora mismo, dentro del rango esperado.`,
             [
               "Establecer un proceso claro de escalado de bloqueos con tiempos máximos por nivel.",
               "Asignar un facilitador para resolver bloqueos críticos (>2 días).",
               "Documentar las causas de bloqueo para identificar patrones y prevenir recurrencias.",
-            ]
+            ],
+            "%"
           );
         }
 

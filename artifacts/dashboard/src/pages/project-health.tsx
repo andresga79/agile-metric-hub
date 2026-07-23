@@ -38,8 +38,6 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
   const config = STATUS_CONFIG[suggestion.status];
   const Icon = config.icon;
 
-  if (suggestion.actions.length === 0 && suggestion.status === "good") return null;
-
   return (
     <Card className={`${config.bg} transition-colors`}>
       <CardHeader className="pb-3 cursor-pointer" onClick={() => suggestion.actions.length > 0 && setExpanded(!expanded)}>
@@ -141,7 +139,7 @@ export default function ProjectHealth() {
 
   const critical = suggestions.filter((s) => s.status === "critical");
   const warning = suggestions.filter((s) => s.status === "warning");
-  const good = suggestions.filter((s) => s.status === "good" && s.actions.length > 0);
+  const good = suggestions.filter((s) => s.status === "good");
 
   return (
     <div className="space-y-6">

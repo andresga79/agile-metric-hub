@@ -7,9 +7,11 @@ import {
   periodToDays,
   getResolutionDate,
   getCycleTimeDays,
+  getLeadTimeDays,
   getStoryPoints,
   type JiraIssue,
 } from "../lib/jira";
+import { getEffectiveThresholds } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
 
@@ -23,10 +25,16 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
-function normalize(value: number, bad: number, good: number, invert = false): number {
-  const raw = invert
-    ? 100 - ((value - bad) / (good - bad)) * 100
-    : ((value - bad) / (good - bad)) * 100;
+// worst/best are reference points, not numerically ordered — worst maps to score 0, best to
+// score 100, regardless of whether worst > best (lower-is-better metric) or worst < best
+// (higher-is-better metric). The value is clamped into [worst, best] BEFORE computing the ratio,
+// so a value past the worst anchor can't wrap the fraction's sign and read back out as 100 — the
+// previous (bad, good, invert) version did exactly that for every lower-is-better metric whenever
+// the actual value was worse than the "warning" anchor.
+function normalize(value: number, worst: number, best: number): number {
+  if (worst === best) return 100;
+  const clampedValue = clamp(value, Math.min(worst, best), Math.max(worst, best));
+  const raw = ((clampedValue - worst) / (best - worst)) * 100;
   return Math.round(clamp(raw, 0, 100));
 }
 
@@ -41,7 +49,20 @@ router.get(
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
+    const [issues, thresholds] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays),
+      getEffectiveThresholds(projectId),
+    ]);
+
+    // normalize()'s bad/good anchors come from Admin -> Health instead of fixed constants, so this
+    // DORA-style score moves in lockstep with the rest of the app's health thresholds (same table
+    // used by dashboard.tsx, analytics.ts and use-health-suggestions.ts) — including per-project
+    // overrides. warningValue is the "0-score" anchor and goodValue the "100-score" anchor.
+    const throughputThreshold = thresholds.throughput ?? { goodValue: 10, warningValue: 5 };
+    const cycleTimeThreshold = thresholds.cycleTime ?? { goodValue: 15, warningValue: 25 };
+    const cfrThreshold = thresholds.cfr ?? { goodValue: 10, warningValue: 25 };
+    const wipRatioThreshold = thresholds.wipRatio ?? { goodValue: 30, warningValue: 50 };
+    const leadTimeThreshold = thresholds.leadTime ?? { goodValue: 25, warningValue: 35 };
 
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({
@@ -65,6 +86,14 @@ router.get(
     const avgCycleTime =
       cycleTimes.length > 0
         ? cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length
+        : 0;
+
+    const leadTimes = (
+      await Promise.all(resolved.map((i) => getLeadTimeDays(i)))
+    ).filter((v): v is number => v !== null);
+    const avgLeadTime =
+      leadTimes.length > 0
+        ? leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length
         : 0;
 
     const bugCount = resolved.filter((i) => /^bug$/i.test(i.fields.issuetype.name.trim())).length;
@@ -91,21 +120,21 @@ router.get(
       : 50;
 
     const doraScore = (() => {
-      const freqScore = normalize(throughput, 0, 5);
-      const ltScore = normalize(avgCycleTime, 30, 0, true);
-      const cfrScore = normalize(cfr, 15, 0, true);
+      const freqScore = normalize(throughput, throughputThreshold.warningValue, throughputThreshold.goodValue);
+      const ltScore = normalize(avgCycleTime, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue);
+      const cfrScore = normalize(cfr, cfrThreshold.warningValue, cfrThreshold.goodValue);
       return Math.round((freqScore + ltScore + cfrScore) / 3);
     })();
 
     const dimensions: HealthDimension[] = [
       {
         name: "Throughput",
-        value: normalize(throughput, 0, 5),
+        value: normalize(throughput, throughputThreshold.warningValue, throughputThreshold.goodValue),
         description: `${throughput.toFixed(1)} issues/week`,
       },
       {
         name: "Cycle Time",
-        value: normalize(avgCycleTime, 30, 0, true),
+        value: normalize(avgCycleTime, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue),
         description: `${avgCycleTime.toFixed(1)}d avg`,
       },
       {
@@ -115,7 +144,7 @@ router.get(
       },
       {
         name: "WIP Balance",
-        value: normalize(wipRatio, 50, 15, true),
+        value: normalize(wipRatio, wipRatioThreshold.warningValue, wipRatioThreshold.goodValue),
         description: `${inProgress.length} in progress`,
       },
       {
@@ -125,8 +154,13 @@ router.get(
       },
       {
         name: "Quality",
-        value: normalize(cfr, 15, 0, true),
+        value: normalize(cfr, cfrThreshold.warningValue, cfrThreshold.goodValue),
         description: `${bugCount} bugs resolved`,
+      },
+      {
+        name: "Lead Time",
+        value: normalize(avgLeadTime, leadTimeThreshold.warningValue, leadTimeThreshold.goodValue),
+        description: `${avgLeadTime.toFixed(1)}d avg`,
       },
     ];
 
@@ -137,6 +171,7 @@ router.get(
       raw: {
         throughput,
         avgCycleTime,
+        avgLeadTime,
         cfr: Math.round(cfr * 10) / 10,
         wipRatio: Math.round(wipRatio * 10) / 10,
         predictability,
