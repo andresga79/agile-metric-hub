@@ -1,15 +1,16 @@
 import { Router, type IRouter } from "express";
-import { db, metricTargetsTable, defaultMetricThresholdsTable } from "@workspace/db";
+import { db, metricTargetsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { getJiraProject } from "../lib/jira";
 import { getProjectSnapshots } from "../lib/metric-snapshots";
+import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
 
 function pickTarget(
   targets: { metric: string; period: string; targetValue: string }[],
-  thresholds: { metric: string; goodValue: string }[],
+  thresholds: Record<string, EffectiveThreshold>,
   metric: string
 ): number | null {
   const preferred = targets.find((t) => t.metric === metric && t.period === "3m");
@@ -17,10 +18,9 @@ function pickTarget(
   const match = preferred ?? fallback;
   if (match) return Number(match.targetValue);
 
-  // No project-specific target configured - fall back to the same
-  // admin-configured threshold "good" value the project detail page labels "Meta".
-  const threshold = thresholds.find((t) => t.metric === metric);
-  return threshold ? Number(threshold.goodValue) : null;
+  // No project-specific target configured - fall back to the same admin-configured "good" value
+  // (global default, or this project's override if one exists) the project detail page labels "Meta".
+  return thresholds[metric]?.goodValue ?? null;
 }
 
 router.get(
@@ -40,7 +40,7 @@ router.get(
     const [snapshots, targets, thresholds] = await Promise.all([
       getProjectSnapshots(projectId),
       db.select().from(metricTargetsTable).where(eq(metricTargetsTable.projectId, projectId)),
-      db.select().from(defaultMetricThresholdsTable),
+      getEffectiveThresholds(projectId),
     ]);
 
     res.json({
