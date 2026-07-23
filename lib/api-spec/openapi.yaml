@@ -1100,20 +1100,10 @@ components:
 
     DashboardSummary:
       type: object
-      required: [totalProjects, totalIssuesResolved, avgVelocity, avgCycleTime, activeProjects]
+      required: [avgCycleTime]
       properties:
-        totalProjects:
-          type: integer
-        totalIssuesResolved:
-          type: integer
-        avgVelocity:
-          type: number
         avgCycleTime:
           type: number
-        activeProjects:
-          type: integer
-        topPerformingProject:
-          type: ["string", "null"]
         usingMockData:
           type: boolean
           description: Whether the data is from Jira or demo/mock data

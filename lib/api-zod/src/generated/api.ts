@@ -566,12 +566,7 @@ export const DeleteAdminUserResponse = zod.object({
  * @summary Get high-level dashboard summary stats
  */
 export const GetDashboardSummaryResponse = zod.object({
-  "totalProjects": zod.number(),
-  "totalIssuesResolved": zod.number(),
-  "avgVelocity": zod.number(),
   "avgCycleTime": zod.number(),
-  "activeProjects": zod.number(),
-  "topPerformingProject": zod.string().nullish(),
   "usingMockData": zod.boolean().optional().describe('Whether the data is from Jira or demo\/mock data')
 })
 

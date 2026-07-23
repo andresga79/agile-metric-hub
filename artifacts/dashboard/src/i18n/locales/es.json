@@ -27,7 +27,7 @@
   "page.dashboard.synced": "Sincronizado:",
   "page.dashboard.loading": "Cargando...",
   "page.dashboard.activeProjects": "Proyectos Activos",
-  "page.dashboard.visibleProjects": "Proyectos visibles",
+  "page.dashboard.visibleProjects": "{{count}} proyectos visibles en total",
   "page.dashboard.avgVelocity": "Velocidad Promedio",
   "page.dashboard.pointsPerSprint": "Points por sprint",
   "page.dashboard.avgCycleTime": "Tiempo de Ciclo Promedio",

@@ -27,7 +27,7 @@
   "page.dashboard.synced": "Synced:",
   "page.dashboard.loading": "Loading...",
   "page.dashboard.activeProjects": "Active Projects",
-  "page.dashboard.visibleProjects": "Visible projects",
+  "page.dashboard.visibleProjects": "{{count}} visible projects total",
   "page.dashboard.avgVelocity": "Avg Velocity",
   "page.dashboard.pointsPerSprint": "Points per sprint",
   "page.dashboard.avgCycleTime": "Avg Cycle Time",

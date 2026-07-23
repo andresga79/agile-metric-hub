@@ -99,6 +99,12 @@ export default function Dashboard() {
     () => portfolioData.filter((p) => visibleIds.has(p.id)),
     [portfolioData, visibleIds]
   );
+  // "Activos" = tuvieron al menos un issue en los últimos 90 días. visiblePortfolio.length
+  // por sí solo cuenta cualquier proyecto visible aunque no tenga ninguna actividad.
+  const activeVisiblePortfolio = useMemo(
+    () => visiblePortfolio.filter((p) => (p.issueCount ?? 0) > 0),
+    [visiblePortfolio]
+  );
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -354,9 +360,11 @@ export default function Dashboard() {
             {isLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <div className="text-2xl font-bold">{visiblePortfolio.length}</div>
+              <div className="text-2xl font-bold">{activeVisiblePortfolio.length}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.visibleProjects')}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('page.dashboard.visibleProjects', { count: visiblePortfolio.length })}
+            </p>
           </CardContent>
         </Card>
 

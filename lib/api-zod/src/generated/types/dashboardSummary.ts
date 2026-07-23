@@ -7,13 +7,7 @@
  */
 
 export interface DashboardSummary {
-  totalProjects: number;
-  totalIssuesResolved: number;
-  avgVelocity: number;
   avgCycleTime: number;
-  activeProjects: number;
-  /** @nullable */
-  topPerformingProject?: string | null;
   /** Whether the data is from Jira or demo/mock data */
   usingMockData?: boolean;
 }

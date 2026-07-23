@@ -3,6 +3,7 @@ import { portfolioCacheTable } from "@workspace/db/schema";
 import {
   listJiraProjects,
   getJiraIssuesForProject,
+  getOpenIssuesForProject,
   getLeadTimeDays,
   getCycleTimeDays,
   getResolutionDate,
@@ -102,11 +103,20 @@ async function processProject(
   options?: { forceRefresh?: boolean }
 ) {
   try {
-    const issues = await getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, {
-      includeChangelog: true,
-      forceRefresh: options?.forceRefresh,
-    });
-    const filteredIssues = issues.filter((issue) =>
+    // Merged with getOpenIssuesForProject (no date bound) so a ticket opened more than 90 days
+    // ago and still in progress doesn't silently vanish from the portfolio's WIP count — same fix
+    // already applied to the per-project pages (see metrics.ts's /issues/:period route).
+    const [issues, openIssues] = await Promise.all([
+      getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, {
+        includeChangelog: true,
+        forceRefresh: options?.forceRefresh,
+      }),
+      getOpenIssuesForProject(p.id, { forceRefresh: options?.forceRefresh }),
+    ]);
+    const combinedIssues = Array.from(
+      new Map([...issues, ...openIssues].map((issue) => [issue.id, issue])).values()
+    );
+    const filteredIssues = combinedIssues.filter((issue) =>
       allowedIssueTypes.includes(getEffectiveIssueType(issue))
     );
     const issueCount = filteredIssues.length;

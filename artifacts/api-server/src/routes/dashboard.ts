@@ -33,7 +33,6 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     (p) => visibilityMap.get(p.projectKey.trim().toUpperCase()) !== false
   );
 
-  const totalResolved = visible.reduce((sum, p) => sum + (p.doneCount ?? 0), 0);
   const cycleValues = visible
     .map((p) => (p.cycleTimeP50 ? Number(p.cycleTimeP50) : null))
     .filter((v): v is number => v !== null);
@@ -44,20 +43,8 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         ) / 10
       : 0;
 
-  const topProject = visible.reduce<string | null>(
-    (best, p) =>
-      (p.doneCount ?? 0) > (visible.find((x) => x.projectName === best)?.doneCount ?? 0)
-        ? p.projectName
-        : best,
-    null
-  );
   res.json({
-    totalProjects: visible.length,
-    totalIssuesResolved: totalResolved,
-    avgVelocity: 0,
     avgCycleTime,
-    activeProjects: visible.length,
-    topPerformingProject: topProject,
     usingMockData: false,
   });
 });
