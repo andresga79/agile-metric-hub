@@ -1,8 +1,9 @@
-# Session Log — Agile Metric Hub (2026-07-21/22/23)
+# Session Log — Agile Metric Hub (2026-07-21 al 2026-07-23)
 
-Registro de todo lo hecho en esta sesión para poder continuar mañana desde otra PC
-sin perder contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión,
-y qué queda pendiente.
+Registro de todo lo hecho para poder continuar entre sesiones y entre PCs sin perder
+contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión, y qué
+queda pendiente. **Este archivo se actualiza cada vez que se retoma el trabajo** —
+si seguís desde acá, actualizalo de nuevo antes de cortar.
 
 ## 0. Estado del repo
 
@@ -12,7 +13,7 @@ y qué queda pendiente.
   `user.email = andresga79@users.noreply.github.com`. En otra PC hay que configurar
   esto de nuevo (o usar la que ya tengas) — no viaja con el repo.
 
-### Commits de esta sesión (orden cronológico)
+### Commits (orden cronológico)
 
 | Commit | Resumen |
 |---|---|
@@ -23,6 +24,11 @@ y qué queda pendiente.
 | `fdf5287` | fix: correct sprint metrics — active-sprint averaging, reopened count, admin thresholds |
 | `b7e8ebd` | fix: correct analytics period comparison and admin-configurable SLA/flow thresholds |
 | `50693f4` | fix: remove debug leakage from Kanban API, share reopened-count fix, weight cycle time by issue |
+| `aec3bc5` | docs: add session log for continuity across machines |
+| `7338106` | fix: migrate default_metric_thresholds table for per-project overrides (desde otra PC) |
+| `616d329` | fix: correct portfolio WIP undercount and simplify dashboard summary (desde otra PC) |
+| `85cc7e5` | fix: correct Forecast window clamping and issue-type consistency (desde otra PC) |
+| `3242205` | fix: CFD in-progress band and Spanish bug-type detection in Health/metrics (desde otra PC) |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -77,11 +83,15 @@ Ahora existe una única fuente de verdad:
   para overrides puntuales (con checkbox "anular" por métrica).
 - **Endpoints**: `GET/PUT /api/admin/metric-thresholds`, `GET/PUT/DELETE /api/admin/metric-thresholds/:metric/project/:projectId`.
 
-### Métricas centralizadas actualmente (16 en total)
+### Métricas centralizadas actualmente (17 en total)
 
 `cycleTime`, `leadTime`, `throughput`, `wipRatio`, `cfr`, `predictability`, `flowEfficiency`,
 `blocked` (% del WIP, no conteo absoluto), `flowLoad`, `wipAging`, `sprintCompletion`,
 `slaHighest` (en horas), `slaHigh`, `slaMedium`, `slaLow`, `slaLowest` (en días), `slaCompliance`.
+
+La migración del schema (columna `project_id` + índice) ahora corre **automáticamente en cada
+arranque del API** (`artifacts/api-server/src/index.ts`, función `initDb()`), con `IF NOT EXISTS`/
+`IF EXISTS` en cada statement — es idempotente, no hace falta correrla a mano en una PC nueva.
 
 Las 5 métricas `sla*` por prioridad son un **valor objetivo único**, no una banda buena/advertencia
 — la UI de Admin las trata distinto (muestra "—"/"Objetivo único" en la columna de Advertencia
@@ -118,21 +128,36 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
 9. **Bloqueados contados por historial completo en vez de estado actual** (Health) — "Issues
    Bloqueados" contaba todo lo bloqueado en los últimos 90 días, no lo bloqueado *ahora mismo*,
    contradiciendo lo que mostraba la pestaña Resumen para el mismo proyecto.
+10. **Detección de tipo "Bug" por regex en inglés** (`/^bug$/i`) en vez del helper compartido
+    `mapIssueType()` — no reconocía tipos en español ("Error", "Problema"). Encontrado en
+    `project-health.ts` y `metrics.ts` (Health mostraba CFR 0%/Calidad perfecta en un proyecto
+    con 29% de change failure rate real). Mismo patrón ya arreglado antes en `jira.ts` y QA-rejected.
+11. **CFD (Cumulative Flow Diagram) con la banda "En Progreso" en cero siempre** — el fetch de
+    issues para CFD no pedía `includeChangelog: true`, así que no podía leer las transiciones de
+    estado que necesita para ubicar cada issue en el tiempo. Reutilizaba además un heurístico de
+    palabras clave EN/ES para "¿este estado es activo?" en vez del `statusCategory` compartido.
+12. **WIP subestimado también en el Resumen Ejecutivo / Portfolio** — mismo bug de la fila 3, mismo
+    fetch limitado a 90 días, esta vez en el cache de portfolio (`portfolio-cache.ts`). OLP pasó de
+    22 a 28 en curso al arreglarlo con `getOpenIssuesForProject()`.
+13. **Forecast dejaba elegir una ventana de 180 días** pero el fetch de Jira siempre corta en 90 —
+    la matemática de baldes semanales usaba el 180 crudo contra datos de 90, sesgando los percentiles.
 
 ## 5. Qué se revisó y qué no (todavía)
 
-**Revisado y corregido en profundidad**: Resumen Ejecutivo (tablero principal), Health,
-Team, Sprints, Analíticas (incluye SLA), Kanban Weekly.
+**Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
+`portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
+y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` + `/analytics`,
+los primeros dos ya revisados a fondo; `/analytics` también).
 
 **Todavía NO revisado con este mismo nivel de detalle** — candidatos naturales para continuar:
-- **Flow** (`project-flow.tsx` / lo que alimente esa pestaña — tiempo en estado, WIP aging, bloqueados)
-- **Forecast** (`project-forecast.tsx`)
-- **Evolución** (`project-evolution.tsx`, la vista agregada por semana que se agregó recientemente, commit `7e3e599`)
+- **Flow** (`project-flow.tsx` — tiempo en estado, WIP aging, bloqueados; ver si comparte los
+  mismos bugs de ventana angosta / regex de reopened que ya aparecieron en otros lados)
+- **Evolución** (`project-evolution.tsx`, la vista agregada por semana, commit `7e3e599` — nunca
+  se le hizo ni siquiera una primera pasada)
 - **QA Rechazados** (`qa-rejected.ts` / `project-qa-rejected.tsx`)
-- **Reporte** (`project-report.tsx`, exportación a PDF)
-- El propio **tablero de Resumen Ejecutivo** (`dashboard.tsx`) recibió el fix de thresholds pero
-  no una revisión de bugs tan exhaustiva como las 5 secciones de arriba — podría valer la pena
-  pasarlo por el mismo proceso.
+- **Reporte** propiamente dicho más allá de CFD/members/analytics — la exportación a PDF en sí
+  (¿arma bien el layout con los datos ya corregidos? ¿hay algo hardcodeado ahí que no capturamos
+  al revisar los endpoints por separado?)
 
 ## 6. Otras cosas que quedaron anotadas pero sin resolver (menor prioridad)
 
@@ -149,10 +174,15 @@ Team, Sprints, Analíticas (incluye SLA), Kanban Weekly.
   pena considerar agregar al menos tests unitarios para `getCycleTimeDays`, `countReopenedIssues`,
   y el merge de `getEffectiveThresholds`, ya que son los puntos que más se repitieron rotos.
 
-## 7. Cómo retomar mañana
+## 7. Cómo retomar
 
-1. Levantar el entorno (sección 1).
-2. Confirmar que los 16 thresholds están sembrados: `GET /api/admin/metric-thresholds` (o mirar
+1. `git pull` primero — más de una PC/sesión está tocando este repo, chequear
+   `git log --oneline origin/main..HEAD` / `HEAD..origin/main` antes de asumir que estás al día.
+2. Levantar el entorno (sección 1) — `docker compose up -d --build`.
+3. Confirmar que los 17 thresholds están sembrados: `GET /api/admin/metric-thresholds` (o mirar
    la pestaña Admin → Health en el navegador).
-3. Elegir una sección de la lista de "todavía no revisado" (sección 5) y pedir la misma dinámica:
-   "revisa X y hazme una propuesta" — el proceso de la sección 2 se puede repetir tal cual.
+4. Elegir una sección de la lista de "todavía no revisado" (sección 5: Flow, Evolución, QA
+   Rechazados, o el Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta"
+   — el proceso de la sección 2 se puede repetir tal cual.
+5. Antes de cortar la sesión, **actualizar este archivo** (commits nuevos, bugs nuevos, qué quedó
+   cubierto) y pushearlo — es lo que le permitió a la sesión anterior seguir sin perder contexto.
