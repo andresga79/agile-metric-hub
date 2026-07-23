@@ -1,7 +1,8 @@
 FROM node:22-bullseye-slim AS builder
 
 ARG SKIP_CODEGEN=0
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm@12.0.0-alpha.17
 
 WORKDIR /app
 
@@ -12,6 +13,7 @@ COPY lib/api-client-react ./lib/api-client-react
 COPY lib/db ./lib/db
 COPY artifacts/dashboard ./artifacts/dashboard
 
+RUN mkdir -p lib/integrations
 RUN pnpm install --frozen-lockfile
 # Optionally skip codegen in CI/docker builds if platform-specific binaries fail
 RUN if [ "$SKIP_CODEGEN" = "1" ]; then echo "Skipping api-spec codegen"; else pnpm --filter @workspace/api-spec run codegen; fi
