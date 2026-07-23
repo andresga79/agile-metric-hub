@@ -4,6 +4,7 @@ import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache
 import {
   getJiraIssuesForProject,
   getFlaggedJiraIssuesForProject,
+  getOpenIssuesForProject,
   getEffectiveIssueType,
   periodToDays,
   isIssueDone,
@@ -288,7 +289,7 @@ router.get(
       await clearCache(`issues:${projectId}:flagged:changelog`);
     }
 
-    const [issues, blockedScopeIssues, flaggedIssues, allowedIssueTypes, effectiveThresholds] = await Promise.all([
+    const [issues, blockedScopeIssues, flaggedIssues, openIssues, allowedIssueTypes, effectiveThresholds] = await Promise.all([
       getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
         logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
         return [] as JiraIssue[];
@@ -303,6 +304,12 @@ router.get(
         logger.warn({ err, projectId }, "Failed to fetch flagged Jira issues for blocked analysis, returning empty");
         return [] as JiraIssue[];
       }),
+      // Unbounded by period — feeds time-in-status below so an issue open longer than the
+      // selected period (never touched "in period") still counts toward bottleneck analysis.
+      getOpenIssuesForProject(projectId, { includeChangelog: true }).catch((err) => {
+        logger.warn({ err, projectId }, "Failed to fetch open Jira issues for time-in-status, returning empty");
+        return [] as JiraIssue[];
+      }),
       getPortfolioAllowedIssueTypes(),
       getEffectiveThresholds(projectId),
     ]);
@@ -312,6 +319,12 @@ router.get(
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
     const blockedSourceIssues = Array.from(
       new Map([...blockedScopeIssues, ...flaggedIssues].map((i) => [i.key, i])).values()
+    );
+    // Same period-scoped set, merged with every currently-open issue regardless of age — otherwise
+    // time-in-status/bottleneck analysis silently drops any issue that's been open longer than the
+    // selected period and wasn't resolved in it either.
+    const timeInStatusIssues = Array.from(
+      new Map([...uniqueIssues, ...openIssues].map((i) => [i.key, i])).values()
     );
 
     // Issue type filter only applies to portfolio-level comparison.
@@ -375,6 +388,14 @@ router.get(
     wipAging.sort((a, b) => (b.daysInProgress ?? 0) - (a.daysInProgress ?? 0));
     const wipAgingTotal = wipAging.length;
     const wipAgingTop = wipAging.slice(0, 10);
+    // Computed over the FULL list, not wipAgingTop — otherwise "N critical" only counts among the
+    // 10 oldest shown, silently hiding critical/warning items ranked 11+ from the tally itself
+    // (not just from the visible table).
+    const wipAgingCounts = {
+      critical: wipAging.filter((i) => i.alertLevel === "critical").length,
+      warning: wipAging.filter((i) => i.alertLevel === "warning").length,
+      watch: wipAging.filter((i) => i.alertLevel === "watch").length,
+    };
 
     // --- Blocked Time Analysis (#7) ---
     const blockedData = await Promise.all(
@@ -483,7 +504,7 @@ router.get(
       });
 
     // --- Time in Status (#9) ---
-    const timeInStatus = await computeTimeInStatus(uniqueIssues);
+    const timeInStatus = await computeTimeInStatus(timeInStatusIssues);
 
     // --- Period-over-Period (#3) ---
     let previousPeriod: any = null;
@@ -508,6 +529,7 @@ router.get(
       ...metrics,
       wipAging: wipAgingTop,
       wipAgingTotal,
+      wipAgingCounts,
       blockedIssues,
       timeInStatus,
       previousPeriod,

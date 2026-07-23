@@ -7,6 +7,7 @@ import { ArrowLeft, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
+import FlowHealthCard from "@/components/flow-health-card";
 
 type Period = "1m" | "3m";
 
@@ -89,6 +90,9 @@ export default function ProjectFlow() {
 
   const wipItems = data?.wipAging ?? [];
   const wipAgingTotal = data?.wipAgingTotal ?? wipItems.length;
+  // Computed server-side over the FULL wip-aging list, not just the (up to) 10 oldest shown below —
+  // filtering wipItems here would silently undercount critical/warning items ranked 11+.
+  const wipAgingCounts = data?.wipAgingCounts ?? { critical: 0, warning: 0, watch: 0 };
   const blockedItems = data?.blockedIssues ?? [];
   const timeInStatus = data?.timeInStatus ?? [];
   const fetchedAt = data?.fetchedAt ?? null;
@@ -161,6 +165,12 @@ export default function ProjectFlow() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="flow" />
+
+      <Card className="bg-card/40">
+        <CardContent className="pt-6">
+          <FlowHealthCard projectId={projectId!} period={period} />
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/40">
         <CardHeader>
@@ -239,7 +249,7 @@ export default function ProjectFlow() {
             {t('page.flow.agingTitle')}
           </CardTitle>
           <CardDescription>
-            {wipAgingTotal} {t('page.flow.agingDesc')} — {wipItems.filter((i: any) => i.alertLevel === "critical").length} {t('page.flow.critical')}, {wipItems.filter((i: any) => i.alertLevel === "warning").length} {t('page.flow.warning')}, {wipItems.filter((i: any) => i.alertLevel === "watch").length} {t('page.flow.watch')}
+            {wipAgingTotal} {t('page.flow.agingDesc')} — {wipAgingCounts.critical} {t('page.flow.critical')}, {wipAgingCounts.warning} {t('page.flow.warning')}, {wipAgingCounts.watch} {t('page.flow.watch')}
             {wipAgingTotal > wipItems.length && (
               <span className="block text-xs mt-0.5">{t('page.flow.showingOldest', { count: wipItems.length })}</span>
             )}

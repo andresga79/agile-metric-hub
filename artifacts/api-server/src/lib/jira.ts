@@ -1012,14 +1012,16 @@ export async function getFlaggedJiraIssuesForProject(
  * view. Use this whenever you need true current WIP/blocked state, not period-scoped activity. */
 export async function getOpenIssuesForProject(
   projectId: string,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; includeChangelog?: boolean }
 ): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) {
     return getMockIssues(projectId).filter((issue) => !isIssueDone(issue));
   }
 
+  const includeChangelog = options?.includeChangelog === true;
   const canonicalProjectId = await getCanonicalProjectId(projectId);
-  const cacheKey = `issues:${canonicalProjectId}:open`;
+  const cacheKeyBase = `issues:${canonicalProjectId}:open`;
+  const cacheKey = includeChangelog ? `${cacheKeyBase}:changelog` : cacheKeyBase;
 
   return withCache(cacheKey, async () => {
     const fields =
@@ -1033,6 +1035,7 @@ export async function getOpenIssuesForProject(
     const jql = encodeURIComponent(
       `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate is EMPTY ORDER BY updated DESC`
     );
+    const expandParam = includeChangelog ? "&expand=changelog" : "";
 
     for (;;) {
       if (++pageCount > MAX_PAGES) {
@@ -1041,7 +1044,7 @@ export async function getOpenIssuesForProject(
       }
 
       const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
       );
 
       const pageIssues = result.issues ?? [];
