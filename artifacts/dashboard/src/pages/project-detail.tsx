@@ -8,7 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
-import { ChevronRight, Download, Ban } from "lucide-react";
+import { ChevronRight, Download, Ban, Target } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 
@@ -19,8 +19,16 @@ type ThresholdStatus = "good" | "warning" | "critical" | null;
 
 const DEFAULT_THRESHOLDS: Record<string, MetricThreshold> = {
   cycleTime: { good: 15, warning: 25 },
-  leadTime: { good: 20, warning: 35 },
+  leadTime: { good: 25, warning: 35 },
+  throughput: { good: 10, warning: 5 },
 };
+
+function statusTextColor(status: ThresholdStatus): string {
+  return status === "good" ? "text-green-400"
+    : status === "warning" ? "text-amber-400"
+    : status === "critical" ? "text-red-400"
+    : "";
+}
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -108,16 +116,15 @@ export default function ProjectDetail() {
     const targetEntry = getTarget(metric);
     const targetVal = targetEntry ? Number(targetEntry.targetValue) : null;
     const isLowerBetter = metric === "leadTime" || metric === "cycleTime";
+    const isThresholdTracked = isLowerBetter || metric === "throughput";
     const threshold = thresholds[metric];
     const onTrack = targetVal !== null && actual !== undefined && actual !== null
       ? isLowerBetter ? actual <= targetVal : actual >= targetVal
       : null;
-    const thresholdStatus: ThresholdStatus = (metric === "leadTime" || metric === "cycleTime") && threshold && actual !== undefined && actual !== null
-      ? actual <= threshold.good
-        ? "good"
-        : actual <= threshold.warning
-        ? "warning"
-        : "critical"
+    const thresholdStatus: ThresholdStatus = isThresholdTracked && threshold && actual !== undefined && actual !== null
+      ? isLowerBetter
+        ? (actual <= threshold.good ? "good" : actual <= threshold.warning ? "warning" : "critical")
+        : (actual >= threshold.good ? "good" : actual >= threshold.warning ? "warning" : "critical")
       : null;
     const label = metric === "leadTime" ? t('page.detail.leadTime')
       : metric === "cycleTime" ? t('page.detail.cycleTime')
@@ -368,7 +375,7 @@ function MetricCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">{info.label}</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        {((metricKey === "leadTime" || metricKey === "cycleTime") && info.thresholdStatus !== null) ? (
+        {((metricKey === "leadTime" || metricKey === "cycleTime" || metricKey === "throughput") && info.thresholdStatus !== null) ? (
           <div className="mb-2">
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -387,14 +394,17 @@ function MetricCard({
             </span>
           </div>
         ) : null}
-        <div className="text-3xl font-bold">
+        <div className={`text-3xl font-bold ${statusTextColor(info.thresholdStatus)}`}>
           {info.actual !== undefined && info.actual !== null ? `${Number(info.actual).toFixed(1)}` : "—"}
           <span className="text-sm font-normal text-muted-foreground ml-1">{info.unit}</span>
         </div>
         {trend && <div className="mt-1">{trend}</div>}
         {(metricKey === "leadTime" || metricKey === "cycleTime") && percentiles && thresholdValue && (
           <div className="mt-2 text-xs text-muted-foreground">
-            P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong> · P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong> · Meta <strong className="text-foreground">{thresholdValue}d</strong>
+            P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong> · P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong> ·{" "}
+            <span className="inline-flex items-center gap-1 text-sky-400">
+              <Target size={11} /> Meta <strong>{thresholdValue}d</strong>
+            </span>
           </div>
         )}
         {percentiles && (metricKey !== "leadTime" && metricKey !== "cycleTime") && (
@@ -404,8 +414,8 @@ function MetricCard({
           </div>
         )}
         {metricKey !== "leadTime" && metricKey !== "cycleTime" && info.targetVal !== null && info.actual !== null && info.actual !== undefined && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            {t('page.detail.target')} {info.targetVal}{info.unit}
+          <div className="mt-2 text-xs inline-flex items-center gap-1 text-sky-400">
+            <Target size={11} /> {t('page.detail.target')} <strong>{info.targetVal}{info.unit}</strong>
           </div>
         )}
         {metricKey !== "leadTime" && metricKey !== "cycleTime" && info.targetVal !== null && info.onTrack !== null && info.actual !== null && info.actual !== undefined && (
@@ -414,7 +424,9 @@ function MetricCard({
               <span className={info.onTrack ? "text-green-400" : "text-red-400"}>
                 {info.onTrack ? t('page.detail.onTrack') : t('page.detail.behind')}
               </span>
-              <span className="text-muted-foreground">{t('page.detail.target')} {info.targetVal}{info.unit}</span>
+              <span className="inline-flex items-center gap-1 text-sky-400">
+                <Target size={11} /> {t('page.detail.target')} <strong>{info.targetVal}{info.unit}</strong>
+              </span>
             </div>
             <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
               <div
