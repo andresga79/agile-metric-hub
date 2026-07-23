@@ -5,6 +5,7 @@ import {
   periodToDays,
   getCycleTimeDays,
   getResolutionDate,
+  getStatusCategoryMap,
   isIssueDone,
   isIssueInProgress,
   type JiraIssue,
@@ -26,7 +27,10 @@ interface StatusTimeline {
   resolved: Date | null;
 }
 
-async function buildTimeline(issue: JiraIssue): Promise<StatusTimeline> {
+async function buildTimeline(
+  issue: JiraIssue,
+  categoryMap: Map<string, string>
+): Promise<StatusTimeline> {
   const created = new Date(issue.fields.created);
   let firstInProgress: Date | null = null;
   const resolved = await getResolutionDate(issue);
@@ -36,25 +40,15 @@ async function buildTimeline(issue: JiraIssue): Promise<StatusTimeline> {
     const statusItem = h.items.find((it) => it.field === "status");
     if (!statusItem) continue;
     const toStatus = statusItem.toString ?? "";
-    const toLower = toStatus.trim().toLowerCase();
     if (
       !firstInProgress &&
-      isActiveStatus(toLower)
+      categoryMap.get(toStatus.trim().toLowerCase()) === "indeterminate"
     ) {
       firstInProgress = new Date(h.created);
     }
   }
 
   return { created, firstInProgress, resolved };
-}
-
-function isActiveStatus(name: string): boolean {
-  const activeKeywords = [
-    "in progress", "in-progress", "inprogress",
-    "review", "development", "implementing",
-    "en curso", "progreso", "desarrollo",
-  ];
-  return activeKeywords.some((k) => name.includes(k));
 }
 
 interface CfdPoint {
@@ -72,7 +66,8 @@ async function computeCfd(
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - periodDays);
 
-  const timelines = await Promise.all(issues.map(buildTimeline));
+  const categoryMap = await getStatusCategoryMap();
+  const timelines = await Promise.all(issues.map((issue) => buildTimeline(issue, categoryMap)));
 
   const step = periodDays > 90 ? 7 : 1;
   const points: CfdPoint[] = [];
@@ -134,7 +129,11 @@ router.get(
     }
 
     const periodDays = periodToDays(period);
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
+    // includeChangelog: required for buildTimeline() to find the first in-progress transition —
+    // without it, every issue silently classified as either Done or To Do, and the CFD's "In
+    // Progress" band was permanently zero (confirmed: 91/91 days showed inProgress: 0 for a
+    // project with 28 real in-progress issues).
+    const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
     const dataPoints = await computeCfd(issues, periodDays);
 
     res.json({

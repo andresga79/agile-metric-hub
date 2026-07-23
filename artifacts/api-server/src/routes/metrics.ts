@@ -15,6 +15,7 @@ import {
   getResolutionDate,
   getJiraSprints,
   getEffectiveIssueType,
+  mapIssueType,
   type JiraIssue,
   type JiraSprint,
   type ProjectBoardType,
@@ -100,7 +101,7 @@ function classifyDora(
 }
 
 function isBugIssue(issue: JiraIssue): boolean {
-  return /^bug$/i.test(issue.fields.issuetype.name.trim());
+  return mapIssueType(issue.fields.issuetype.name) === "Bug";
 }
 
 async function computeMetrics(

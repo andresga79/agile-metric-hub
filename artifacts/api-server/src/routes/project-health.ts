@@ -9,6 +9,7 @@ import {
   getCycleTimeDays,
   getLeadTimeDays,
   getStoryPoints,
+  mapIssueType,
   type JiraIssue,
 } from "../lib/jira";
 import { getEffectiveThresholds } from "../lib/health-thresholds";
@@ -99,7 +100,7 @@ router.get(
         ? leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length
         : 0;
 
-    const bugCount = resolved.filter((i) => /^bug$/i.test(i.fields.issuetype.name.trim())).length;
+    const bugCount = resolved.filter((i) => mapIssueType(i.fields.issuetype.name) === "Bug").length;
     const cfr = resolved.length > 0 ? (bugCount / resolved.length) * 100 : 0;
 
     const wipRatio = total > 0 ? (inProgress.length / total) * 100 : 0;
