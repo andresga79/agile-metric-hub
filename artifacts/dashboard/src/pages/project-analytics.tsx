@@ -22,6 +22,11 @@ function formatDurationDays(value: number | null | undefined): string {
 
 const COLORS = ["hsl(var(--primary))", "hsl(142, 76%, 45%)", "hsl(35, 85%, 55%)", "hsl(0, 70%, 50%)", "hsl(270, 60%, 60%)"];
 
+const DEFAULT_ANALYTICS_THRESHOLDS = {
+  flowEfficiency: { good: 25, warning: 15 },
+  slaCompliance: { good: 90, warning: 70 },
+};
+
 export default function ProjectAnalytics() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -32,6 +37,7 @@ export default function ProjectAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drillWeek, setDrillWeek] = useState<string | null>(null);
+  const [thresholds, setThresholds] = useState(DEFAULT_ANALYTICS_THRESHOLDS);
 
   const token = getAuthToken();
 
@@ -98,6 +104,26 @@ export default function ProjectAnalytics() {
       controller.abort();
     };
   }, [projectId, period, compare, token]);
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+    ]).then(([globalRows, overrideRows]) => {
+      const merged = { ...DEFAULT_ANALYTICS_THRESHOLDS };
+      for (const source of [globalRows, overrideRows]) {
+        if (!Array.isArray(source)) continue;
+        for (const t of source) {
+          if (t.metric === "flowEfficiency" || t.metric === "slaCompliance") {
+            merged[t.metric as "flowEfficiency" | "slaCompliance"] = { good: Number(t.goodValue), warning: Number(t.warningValue) };
+          }
+        }
+      }
+      setThresholds(merged);
+    }).catch(() => {});
+  }, [projectId, token]);
 
   if (loading) return <div>{t('page.analytics.loading')}</div>;
   if (!project) return <div>{t('page.analytics.notFound')}</div>;
@@ -206,7 +232,7 @@ export default function ProjectAnalytics() {
                   <circle
                     cx="50" cy="50" r="42"
                     fill="none"
-                    stroke={data.flowEfficiency >= 50 ? "hsl(142, 76%, 45%)" : data.flowEfficiency >= 30 ? "hsl(35, 85%, 55%)" : "hsl(0, 70%, 50%)"}
+                    stroke={data.flowEfficiency >= thresholds.flowEfficiency.good ? "hsl(142, 76%, 45%)" : data.flowEfficiency >= thresholds.flowEfficiency.warning ? "hsl(35, 85%, 55%)" : "hsl(0, 70%, 50%)"}
                     strokeWidth="8"
                     strokeDasharray={`${(data.flowEfficiency / 100) * 264} 264`}
                     strokeLinecap="round"
@@ -284,7 +310,7 @@ export default function ProjectAnalytics() {
                       <TableCell className="text-right">{s.total}</TableCell>
                       <TableCell className="text-right">{s.withinSla}</TableCell>
                       <TableCell className="text-right">
-                        <span className={`font-mono ${s.percentage >= 90 ? "text-green-400" : s.percentage >= 70 ? "text-amber-400" : "text-red-400"}`}>
+                        <span className={`font-mono ${s.percentage >= thresholds.slaCompliance.good ? "text-green-400" : s.percentage >= thresholds.slaCompliance.warning ? "text-amber-400" : "text-red-400"}`}>
                           {s.percentage}%
                         </span>
                       </TableCell>

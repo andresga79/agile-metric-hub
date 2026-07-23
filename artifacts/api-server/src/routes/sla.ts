@@ -7,16 +7,26 @@ import {
   getResolutionDate,
   getLeadTimeDays,
 } from "../lib/jira";
+import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
 
-const SLA_THRESHOLDS: Record<string, number> = {
-  Highest: 4 / 24,
-  High: 1,
-  Medium: 3,
-  Low: 5,
-  Lowest: 10,
+// Admin -> Health metric key per priority. slaHighest is stored in HOURS (its target is usually
+// sub-day), the rest in days — see DEFAULT_HEALTH_THRESHOLDS in routes/admin/constants.ts.
+const SLA_METRIC_BY_PRIORITY: Record<string, string> = {
+  Highest: "slaHighest",
+  High: "slaHigh",
+  Medium: "slaMedium",
+  Low: "slaLow",
+  Lowest: "slaLowest",
 };
+
+function slaTargetDays(priority: string, thresholds: Record<string, EffectiveThreshold>): number {
+  const metric = SLA_METRIC_BY_PRIORITY[priority] ?? SLA_METRIC_BY_PRIORITY.Lowest;
+  const configured = thresholds[metric]?.goodValue;
+  const value = configured ?? (metric === "slaHighest" ? 4 : { slaHigh: 1, slaMedium: 3, slaLow: 5, slaLowest: 10 }[metric] ?? 10);
+  return metric === "slaHighest" ? value / 24 : value;
+}
 
 router.get(
   "/projects/:projectId/sla/:period",
@@ -36,7 +46,10 @@ router.get(
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
+    const [issues, thresholds] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays),
+      getEffectiveThresholds(projectId),
+    ]);
 
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({
@@ -59,7 +72,7 @@ router.get(
       entry.total++;
 
       const leadTime = await getLeadTimeDays(issue);
-      const threshold = SLA_THRESHOLDS[priority] ?? SLA_THRESHOLDS.Lowest;
+      const threshold = slaTargetDays(priority, thresholds);
       if (leadTime !== null && leadTime <= threshold) {
         entry.withinSla++;
       }

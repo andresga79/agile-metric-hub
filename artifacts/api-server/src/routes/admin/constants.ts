@@ -55,4 +55,16 @@ export const DEFAULT_HEALTH_THRESHOLDS: {
   // % of committed story points (or issue count, if the sprint has none logged) completed by
   // sprint close. Previously hardcoded in project-sprints.tsx.
   { metric: "sprintCompletion", goodValue: 80, warningValue: 50 },
+  // SLA target per priority — how long an issue has to resolve within to count "within SLA".
+  // Previously a fixed SLA_THRESHOLDS map in sla.ts with no way to adjust it per client/project.
+  // Each priority has one target, not a good/warning band, so warningValue just duplicates
+  // goodValue here (the schema requires both columns). slaHighest is in HOURS, the rest in days.
+  { metric: "slaHighest", goodValue: 4, warningValue: 4 },
+  { metric: "slaHigh", goodValue: 1, warningValue: 1 },
+  { metric: "slaMedium", goodValue: 3, warningValue: 3 },
+  { metric: "slaLow", goodValue: 5, warningValue: 5 },
+  { metric: "slaLowest", goodValue: 10, warningValue: 10 },
+  // % of resolved issues that landed within their priority's SLA target. Previously hardcoded
+  // 90/70 in project-analytics.tsx.
+  { metric: "slaCompliance", goodValue: 90, warningValue: 70 },
 ];

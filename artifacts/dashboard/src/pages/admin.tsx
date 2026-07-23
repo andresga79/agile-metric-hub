@@ -43,8 +43,13 @@ interface AdminProjectVisibilityRow {
 
 type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
-const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging"];
-const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency", "sprintCompletion"];
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest"];
+const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
+
+// These are a single target value, not a good/warning band — the backend only ever reads
+// goodValue for them (see sla.ts). warningValue is kept in sync automatically so editing this
+// row can't create a hidden mismatch where "Advertencia" silently does nothing.
+const SINGLE_VALUE_METRICS = ["slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest"];
 
 const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   cycleTime: { label: "Cycle Time", unit: "d" },
@@ -58,6 +63,12 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
   wipAging: { label: "WIP Aging", unit: "d" },
   sprintCompletion: { label: "Sprint Completion", unit: "%" },
+  slaHighest: { label: "SLA - Prioridad Highest", unit: "h" },
+  slaHigh: { label: "SLA - Prioridad High", unit: "d" },
+  slaMedium: { label: "SLA - Prioridad Medium", unit: "d" },
+  slaLow: { label: "SLA - Prioridad Low", unit: "d" },
+  slaLowest: { label: "SLA - Prioridad Lowest", unit: "d" },
+  slaCompliance: { label: "SLA - % Compliance", unit: "%" },
 };
 
 const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
@@ -187,7 +198,11 @@ export default function Admin() {
   }, [recalculationStatus?.running, fetchPortfolioRecalculationStatus]);
 
   const updateThreshold = (metric: string, field: "goodValue" | "warningValue", value: number) => {
-    setThresholds((prev) => prev.map((t) => t.metric === metric ? { ...t, [field]: value } : t));
+    setThresholds((prev) => prev.map((t) => {
+      if (t.metric !== metric) return t;
+      if (SINGLE_VALUE_METRICS.includes(metric)) return { ...t, goodValue: value, warningValue: value };
+      return { ...t, [field]: value };
+    }));
     setThresholdsDirty(true);
   };
 
@@ -252,7 +267,9 @@ export default function Admin() {
   const updateOverride = (metric: string, field: "goodValue" | "warningValue", value: number) => {
     setProjectOverrides((prev) => ({
       ...prev,
-      [metric]: { ...prev[metric], [field]: value },
+      [metric]: SINGLE_VALUE_METRICS.includes(metric)
+        ? { ...prev[metric], goodValue: value, warningValue: value }
+        : { ...prev[metric], [field]: value },
     }));
     setOverridesDirty(true);
   };
@@ -807,6 +824,7 @@ export default function Admin() {
                 {thresholds.map((row) => {
                   const meta = METRIC_LABELS[row.metric] ?? { label: row.metric, unit: "" };
                   const isLower = LOWER_BETTER.includes(row.metric);
+                  const isSingleValue = SINGLE_VALUE_METRICS.includes(row.metric);
                   return (
                     <TableRow key={row.metric} className="border-border hover:bg-accent/50">
                       <TableCell className="font-medium">{meta.label}</TableCell>
@@ -825,24 +843,28 @@ export default function Admin() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <div className="inline-flex items-center gap-1">
-                          <span className="text-xs text-amber-400">
-                            {isLower ? "≤" : "≥"}
-                          </span>
-                          <input
-                            type="number"
-                            value={row.warningValue}
-                            onChange={(e) => updateThreshold(row.metric, "warningValue", Number(e.target.value))}
-                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums"
-                          />
-                          <span className="text-xs text-muted-foreground">{meta.unit}</span>
-                        </div>
+                        {isSingleValue ? (
+                          <span className="text-xs text-muted-foreground" title="Este umbral es un único valor objetivo, no una banda buena/advertencia.">—</span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1">
+                            <span className="text-xs text-amber-400">
+                              {isLower ? "≤" : "≥"}
+                            </span>
+                            <input
+                              type="number"
+                              value={row.warningValue}
+                              onChange={(e) => updateThreshold(row.metric, "warningValue", Number(e.target.value))}
+                              className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums"
+                            />
+                            <span className="text-xs text-muted-foreground">{meta.unit}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                           isLower ? "bg-blue-500/15 text-blue-400" : "bg-purple-500/15 text-purple-400"
                         }`}>
-                          {isLower ? t('page.admin.lowerBetter') : t('page.admin.higherBetter')}
+                          {isSingleValue ? "Objetivo único" : isLower ? t('page.admin.lowerBetter') : t('page.admin.higherBetter')}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -932,14 +954,20 @@ export default function Admin() {
                           <span className="text-xs text-muted-foreground ml-1">{meta.unit}</span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <input
-                            type="number"
-                            disabled={!active}
-                            value={row?.warningValue ?? globalRow.warningValue}
-                            onChange={(e) => updateOverride(globalRow.metric, "warningValue", Number(e.target.value))}
-                            className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums disabled:opacity-40"
-                          />
-                          <span className="text-xs text-muted-foreground ml-1">{meta.unit}</span>
+                          {SINGLE_VALUE_METRICS.includes(globalRow.metric) ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <>
+                              <input
+                                type="number"
+                                disabled={!active}
+                                value={row?.warningValue ?? globalRow.warningValue}
+                                onChange={(e) => updateOverride(globalRow.metric, "warningValue", Number(e.target.value))}
+                                className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-sm text-center tabular-nums disabled:opacity-40"
+                              />
+                              <span className="text-xs text-muted-foreground ml-1">{meta.unit}</span>
+                            </>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

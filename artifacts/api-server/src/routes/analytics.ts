@@ -166,6 +166,12 @@ async function computeTimeInStatus(
 async function computePeriodMetrics(
   issues: JiraIssue[],
   startDate: Date,
+  // Upper bound for "resolved in this period." The current-period caller omits this — an issue
+  // can't resolve in the future, so resolvedAt >= startDate is already a complete bound. The
+  // previous-period caller MUST pass its own end (= current period's startDate), or an issue
+  // resolved anytime between then and now — including this very week — counts as "previous
+  // period" activity too, overlapping with the current period it's being compared against.
+  endDate?: Date,
 ): Promise<{
   flowEfficiency: number | null;
   avgCycleTime: number | null;
@@ -198,7 +204,7 @@ async function computePeriodMetrics(
     }))
   );
   const resolved = resolvedWithDates
-    .filter((r) => r.resolvedAt && r.resolvedAt >= startDate)
+    .filter((r) => r.resolvedAt && r.resolvedAt >= startDate && (!endDate || r.resolvedAt < endDate))
     .map((r) => r.issue);
 
   const priorityCount = new Map<string, number>();
@@ -218,7 +224,7 @@ async function computePeriodMetrics(
   // --- Throughput Over Time / Run Chart (#8) ---
   const weekCount = new Map<string, number>();
   for (const r of resolvedWithDates) {
-    if (!r.resolvedAt || r.resolvedAt < startDate) continue;
+    if (!r.resolvedAt || r.resolvedAt < startDate || (endDate && r.resolvedAt >= endDate)) continue;
     const week = getISOWeek(r.resolvedAt);
     weekCount.set(week, (weekCount.get(week) ?? 0) + 1);
   }
@@ -485,14 +491,12 @@ router.get(
       const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
       const prevEndDate = new Date(startDate.getTime());
       const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2).catch(() => [] as JiraIssue[]);
-      const prevFiltered = prevIssues
-        .filter((i) => {
-          const created = new Date(i.fields.created);
-          return created >= prevStartDate && created < prevEndDate;
-        })
-        .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+      // Not filtered by created date — an issue created before prevStartDate but resolved inside
+      // [prevStartDate, prevEndDate) still belongs in the previous period's throughput. The actual
+      // resolved-in-window selection happens inside computePeriodMetrics via startDate/endDate.
+      const prevFiltered = prevIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
       if (prevFiltered.length > 0) {
-        previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate);
+        previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate, prevEndDate);
       }
     }
 

@@ -50,7 +50,10 @@ router.get(
     startDate.setDate(startDate.getDate() - periodDays);
 
     const [issues, thresholds] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays),
+      // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
+      // transition — without it, avgCycleTime silently degrades to lead time for every issue
+      // (confirmed: this endpoint was returning avgCycleTime === avgLeadTime exactly).
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
       getEffectiveThresholds(projectId),
     ]);
 
