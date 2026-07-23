@@ -7,7 +7,7 @@ import {
   isIssueDone,
   getStoryPoints,
   getCycleTimeDays,
-  getStatusCategoryMap,
+  countReopenedIssues,
   mapIssueType,
   getEffectiveIssueType,
   periodToDays,
@@ -63,42 +63,6 @@ interface SprintMetricsResponse {
     // lets the UI say "showing N of M" instead of silently dropping older sprints.
     totalSprintsInPeriod: number;
   };
-}
-
-// Counts issues that were marked "done" at some point and later moved back out of done — a real
-// quality signal (premature "done", QA bounce-back). The previous version matched status
-// transitions against a literal /^done$/i regex, ignoring both Jira's own statusCategory and the
-// multi-language "done" names isIssueDone() already knows about (listo, terminado, resuelto,
-// cerrado...) — it only ever worked by coincidence on projects whose done column is named "Done".
-async function countReopenedIssues(issues: JiraIssue[]): Promise<number> {
-  const categoryMap = await getStatusCategoryMap();
-  const isDoneStatusName = (name: string | null | undefined): boolean => {
-    if (!name) return false;
-    const trimmed = name.trim();
-    const category = categoryMap.get(trimmed.toLowerCase());
-    if (category) return category === "done";
-    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(trimmed);
-  };
-
-  return issues.filter((issue) => {
-    const statusTransitions = (issue.changelog?.histories ?? [])
-      .map((h) => ({ at: new Date(h.created).getTime(), items: h.items.filter((it) => it.field === "status") }))
-      .filter((h) => h.items.length > 0)
-      .sort((a, b) => a.at - b.at);
-
-    let sawDone = false;
-    for (const transition of statusTransitions) {
-      for (const item of transition.items) {
-        if (sawDone && isDoneStatusName(item.fromString) && !isDoneStatusName(item.toString)) {
-          return true;
-        }
-        if (isDoneStatusName(item.toString)) {
-          sawDone = true;
-        }
-      }
-    }
-    return false;
-  }).length;
 }
 
 async function computeSprintMetrics(

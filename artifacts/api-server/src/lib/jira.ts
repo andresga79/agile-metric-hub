@@ -488,6 +488,44 @@ export function isIssueCurrentlyBlocked(issue: JiraIssue): boolean {
   return isBlockedStatus(issue.fields.status.name) || isIssueCurrentlyFlagged(issue);
 }
 
+// Counts issues that were marked "done" at some point and later moved back out of done — a real
+// quality signal (premature "done", QA bounce-back). Shared by sprint-metrics.ts and
+// kanban-metrics.ts. Requires the issues to have been fetched with includeChangelog: true.
+//
+// Matches transitions via statusCategory (falling back to a multi-language "done" name regex) —
+// NOT a literal /^done$/i check, which only works by coincidence on projects whose done column is
+// named exactly "Done" and silently undercounts everywhere else (listo, terminado, resuelto...).
+export async function countReopenedIssues(issues: JiraIssue[]): Promise<number> {
+  const categoryMap = await getStatusCategoryMap();
+  const isDoneStatusName = (name: string | null | undefined): boolean => {
+    if (!name) return false;
+    const trimmed = name.trim();
+    const category = categoryMap.get(trimmed.toLowerCase());
+    if (category) return category === "done";
+    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(trimmed);
+  };
+
+  return issues.filter((issue) => {
+    const statusTransitions = (issue.changelog?.histories ?? [])
+      .map((h) => ({ at: new Date(h.created).getTime(), items: h.items.filter((it) => it.field === "status") }))
+      .filter((h) => h.items.length > 0)
+      .sort((a, b) => a.at - b.at);
+
+    let sawDone = false;
+    for (const transition of statusTransitions) {
+      for (const item of transition.items) {
+        if (sawDone && isDoneStatusName(item.fromString) && !isDoneStatusName(item.toString)) {
+          return true;
+        }
+        if (isDoneStatusName(item.toString)) {
+          sawDone = true;
+        }
+      }
+    }
+    return false;
+  }).length;
+}
+
 export interface JiraSprint {
   id: number;
   name: string;

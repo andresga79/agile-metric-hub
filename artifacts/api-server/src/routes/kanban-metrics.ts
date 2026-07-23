@@ -7,6 +7,7 @@ import {
   getStoryPoints,
   getCycleTimeDays,
   getResolutionDate,
+  countReopenedIssues,
   periodToDays,
   mapIssueType,
   getEffectiveIssueType,
@@ -45,12 +46,6 @@ interface KanbanMetricsResponse {
     avgCycleTimeDays: number | null;
     totalCompletedIssues: number;
     totalCompletedStoryPoints: number;
-  };
-  debug?: {
-    doneIssuesCount: number;
-    resolvedCount: number;
-    allDates: string[];
-    weekBreakdown: Array<{ week: string; count: number }>;
   };
 }
 
@@ -164,10 +159,6 @@ router.get(
       (r): r is { issue: JiraIssue; resolvedAt: Date } => r.resolvedAt !== null
     );
 
-    // DEBUG: Log all resolution dates
-    const allResolutionDates = withResolved.map(r => r.resolvedAt.toISOString().split("T")[0]);
-    console.log(`DEBUG kanban: ${withResolved.length} issues with resolution dates:`, allResolutionDates.slice(0, 20));
-
     // Group by ISO week
     const weekMap = new Map<string, JiraIssue[]>();
     for (const { issue, resolvedAt } of withResolved) {
@@ -177,6 +168,11 @@ router.get(
       existing.push(issue);
       weekMap.set(weekStart, existing);
     }
+
+    // Cycle times per issue, kept alongside the per-week averages so the summary can compute a
+    // true issue-weighted average below instead of an average of weekly averages (which would give
+    // a 1-issue week the same weight as a 10-issue week).
+    const cycleTimesByWeek = new Map<string, number[]>();
 
     // Compute metrics per week and merge into emptyWeeks
     for (const [weekStart, weekIssues] of weekMap) {
@@ -198,21 +194,12 @@ router.get(
         weekIssues.map((i) => getCycleTimeDays(i))
       );
       const validCycleTimes = cycleTimes.filter((t): t is number => t !== null && t >= 0);
+      cycleTimesByWeek.set(weekStart, validCycleTimes);
       const avgCycleTimeDays = validCycleTimes.length > 0
         ? validCycleTimes.reduce((a, b) => a + b, 0) / validCycleTimes.length
         : null;
 
-      const reopenedCount = weekIssues.filter((i) => {
-        const histories = i.changelog?.histories ?? [];
-        const idx = histories.findIndex((h) =>
-          h.items.some((it) => it.field === "status" && it.toString && /^done$/i.test(it.toString))
-        );
-        if (idx < 0) return false;
-        const postDone = histories.slice(idx + 1);
-        return postDone.some((h) =>
-          h.items.some((it) => it.field === "status" && it.fromString && /^done$/i.test(it.fromString))
-        );
-      }).length;
+      const reopenedCount = await countReopenedIssues(weekIssues);
 
       const idx = emptyWeeks.findIndex((w) => w.weekStart === weekStart);
       if (idx >= 0) {
@@ -241,9 +228,11 @@ router.get(
     const recent = emptyWeeks.sort((a, b) => a.weekStart.localeCompare(b.weekStart)).slice(-maxWeeks);
 
     const throughputs = recent.map((w) => w.totalIssues);
-    const cycleTimes = recent.map((w) => w.avgCycleTimeDays).filter((t): t is number => t !== null);
-    const avgCycleTimeDays = cycleTimes.length > 0
-      ? cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length
+    // Issue-weighted average across every completed issue in the displayed weeks — not an average
+    // of each week's own average, which would let a 1-issue week outweigh a 10-issue week.
+    const allCycleTimes = recent.flatMap((w) => cycleTimesByWeek.get(w.weekStart) ?? []);
+    const avgCycleTimeDays = allCycleTimes.length > 0
+      ? allCycleTimes.reduce((a, b) => a + b, 0) / allCycleTimes.length
       : null;
 
     const response: KanbanMetricsResponse = {
@@ -256,12 +245,6 @@ router.get(
         avgCycleTimeDays,
         totalCompletedIssues: recent.reduce((sum, w) => sum + w.totalIssues, 0),
         totalCompletedStoryPoints: recent.reduce((sum, w) => sum + w.totalStoryPoints, 0),
-      },
-      debug: {
-        doneIssuesCount: doneIssues.length,
-        resolvedCount: withResolved.length,
-        allDates: allResolutionDates,
-        weekBreakdown: Array.from(weekMap.entries()).map(([week, issues]) => ({ week, count: issues.length })),
       },
     };
 
