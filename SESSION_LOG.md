@@ -31,6 +31,8 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `3242205` | fix: CFD in-progress band and Spanish bug-type detection in Health/metrics (desde otra PC) |
 | `b6f17bc` | docs: update session log with the other machine's commits |
 | `3756c10` | fix: correct WIP aging severity counts and time-in-status window on Flow page |
+| `5f02cf1` | docs: mark Flow review as done in session log |
+| `16e502f` | fix: Evolution page ignoring a project's own admin threshold override |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -148,20 +150,22 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     mostraba "10 crítico, 0, 0" porque los 10 más viejos mostrados resultaban ser todos críticos.
 15. **"Tiempo en Estado" (bottleneck) con la misma ventana angosta de período** (Flow) — mismo
     patrón de la fila 3/12, ahora en el análisis de cuellos de botella.
+16. **Evolución ignoraba el override de Admin propio del proyecto** — `evolution.ts` tenía su
+    propia consulta (no usaba `getEffectiveThresholds`), traía **toda** la tabla de thresholds sin
+    filtrar por proyecto y elegía el primer match con `.find()`. Confirmado en vivo: STRIDER AI con
+    `leadTime=999` configurado como override propio seguía mostrando 25 (el global) como su "Meta".
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
 `portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
-Flow, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` + `/analytics`,
-los primeros dos ya revisados a fondo; `/analytics` también).
+Flow, Evolución, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` +
+`/analytics`, los primeros dos ya revisados a fondo; `/analytics` también).
 
 `FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
 arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
 
 **Todavía NO revisado con este mismo nivel de detalle** — candidatos naturales para continuar:
-- **Evolución** (`project-evolution.tsx`, la vista agregada por semana, commit `7e3e599` — nunca
-  se le hizo ni siquiera una primera pasada)
 - **QA Rechazados** (`qa-rejected.ts` / `project-qa-rejected.tsx`)
 - **Reporte** propiamente dicho más allá de CFD/members/analytics — la exportación a PDF en sí
   (¿arma bien el layout con los datos ya corregidos? ¿hay algo hardcodeado ahí que no capturamos
@@ -189,8 +193,8 @@ arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
 2. Levantar el entorno (sección 1) — `docker compose up -d --build`.
 3. Confirmar que los 17 thresholds están sembrados: `GET /api/admin/metric-thresholds` (o mirar
    la pestaña Admin → Health en el navegador).
-4. Elegir una sección de la lista de "todavía no revisado" (sección 5: Evolución, QA Rechazados,
-   o el Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta" — el proceso
+4. Elegir una sección de la lista de "todavía no revisado" (sección 5: QA Rechazados, o el
+   Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta" — el proceso
    de la sección 2 se puede repetir tal cual.
 5. Antes de cortar la sesión, **actualizar este archivo** (commits nuevos, bugs nuevos, qué quedó
    cubierto) y pushearlo — es lo que le permitió a la sesión anterior seguir sin perder contexto.
