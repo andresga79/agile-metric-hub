@@ -94,6 +94,20 @@ async function initDb() {
       );
     `);
 
+    // Migration: per-project threshold overrides (project_id NULL = global default).
+    // The old UNIQUE(metric) constraint predates this and must be dropped, since a
+    // project override needs a second row for the same metric.
+    await db.execute(sql`
+      ALTER TABLE default_metric_thresholds ADD COLUMN IF NOT EXISTS project_id TEXT;
+    `);
+    await db.execute(sql`
+      ALTER TABLE default_metric_thresholds DROP CONSTRAINT IF EXISTS default_metric_thresholds_metric_key;
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS default_metric_thresholds_metric_project_idx
+        ON default_metric_thresholds (metric, project_id);
+    `);
+
     await ensureCacheTable();
 
     await db.execute(sql`
