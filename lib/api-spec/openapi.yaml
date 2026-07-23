@@ -1007,7 +1007,7 @@ components:
 
     MemberStats:
       type: object
-      required: [accountId, displayName, issuesResolved, storyPoints, avgCycleTime, issuesInProgress]
+      required: [accountId, displayName, issuesResolved, issuesResolvedWithPoints, storyPoints, avgCycleTime, avgLeadTime, issuesInProgress, issuesBlocked]
       properties:
         accountId:
           type: string
@@ -1017,16 +1017,27 @@ components:
           type: ["string", "null"]
         issuesResolved:
           type: integer
+        issuesResolvedWithPoints:
+          type: integer
+          description: Of issuesResolved, how many carried a story point estimate — bugs/support work often don't, so storyPoints alone understates their contribution.
         storyPoints:
           type: number
         avgCycleTime:
           type: number
+          description: Mean time from first "in progress" transition to resolution (not from creation — that's avgLeadTime).
+        avgLeadTime:
+          type: number
+          description: Mean time from creation to resolution, including backlog wait time.
         issuesInProgress:
           type: integer
+          description: Currently open issues assigned to this member, regardless of when they were created.
+        issuesBlocked:
+          type: integer
+          description: Of issuesInProgress, how many are blocked right now (status or Flagged field).
 
     Issue:
       type: object
-      required: [id, key, summary, status, issueType, priority, createdAt]
+      required: [id, key, summary, status, issueType, priority, createdAt, isInProgress]
       properties:
         id:
           type: string
@@ -1042,6 +1053,12 @@ components:
           type: string
         assignee:
           type: ["string", "null"]
+        assigneeAccountId:
+          type: ["string", "null"]
+          description: Jira account ID — join key against MemberStats.accountId. Prefer this over the display name, which isn't guaranteed unique across an org.
+        isInProgress:
+          type: boolean
+          description: Jira's own statusCategory === "indeterminate" — the same signal MemberStats.issuesInProgress counts against. Don't re-derive "in progress" from the status name string; category names vary a lot per project/workflow.
         storyPoints:
           type: ["number", "null"]
         createdAt:

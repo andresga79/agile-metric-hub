@@ -15,6 +15,13 @@ export interface Issue {
   priority: string;
   /** @nullable */
   assignee?: string | null;
+  /**
+     * Jira account ID — join key against MemberStats.accountId. Prefer this over the display name, which isn't guaranteed unique across an org.
+     * @nullable
+     */
+  assigneeAccountId?: string | null;
+  /** Jira's own statusCategory === "indeterminate" — the same signal MemberStats.issuesInProgress counts against. Don't re-derive "in progress" from the status name string; category names vary a lot per project/workflow. */
+  isInProgress: boolean;
   /** @nullable */
   storyPoints?: number | null;
   createdAt: string;

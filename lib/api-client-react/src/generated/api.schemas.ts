@@ -335,9 +335,17 @@ export interface MemberStats {
   /** @nullable */
   avatarUrl?: string | null;
   issuesResolved: number;
+  /** Of issuesResolved, how many carried a story point estimate — bugs/support work often don't, so storyPoints alone understates their contribution. */
+  issuesResolvedWithPoints: number;
   storyPoints: number;
+  /** Mean time from first "in progress" transition to resolution (not from creation — that's avgLeadTime). */
   avgCycleTime: number;
+  /** Mean time from creation to resolution, including backlog wait time. */
+  avgLeadTime: number;
+  /** Currently open issues assigned to this member, regardless of when they were created. */
   issuesInProgress: number;
+  /** Of issuesInProgress, how many are blocked right now (status or Flagged field). */
+  issuesBlocked: number;
 }
 
 export interface Issue {
@@ -349,6 +357,13 @@ export interface Issue {
   priority: string;
   /** @nullable */
   assignee?: string | null;
+  /**
+     * Jira account ID — join key against MemberStats.accountId. Prefer this over the display name, which isn't guaranteed unique across an org.
+     * @nullable
+     */
+  assigneeAccountId?: string | null;
+  /** Jira's own statusCategory === "indeterminate" — the same signal MemberStats.issuesInProgress counts against. Don't re-derive "in progress" from the status name string; category names vary a lot per project/workflow. */
+  isInProgress: boolean;
   /** @nullable */
   storyPoints?: number | null;
   createdAt: string;

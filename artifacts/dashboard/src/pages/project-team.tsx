@@ -13,22 +13,6 @@ import { ProjectTabs } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
-function isWorkingStatus(status: string): boolean {
-  const normalized = status.trim().toLowerCase();
-
-  const doneLike = ["done", "listo", "terminado", "resuelto", "closed", "resolved"];
-  if (doneLike.some((value) => normalized.includes(value))) {
-    return false;
-  }
-
-  const todoLike = ["to do", "por hacer", "backlog", "pendiente"];
-  if (todoLike.some((value) => normalized.includes(value))) {
-    return false;
-  }
-
-  return true;
-}
-
 export default function ProjectTeam() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -50,20 +34,23 @@ export default function ProjectTeam() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectIssuesQueryKey(projectId!, period) }
   });
 
-  const memberWorkByName = useMemo(() => {
+  // Grouped by accountId, not display name — two people can share a display name in Jira, and
+  // doing this by name would silently mix their work together.
+  const memberWorkByAccountId = useMemo(() => {
     const grouped = new Map<string, { key: string; summary: string; status: string }[]>();
 
     for (const issue of issues ?? []) {
-      const assignee = issue.assignee?.trim();
-      if (!assignee) continue;
-      if (issue.resolvedAt) continue;
-      if (!isWorkingStatus(issue.status)) continue;
+      const accountId = issue.assigneeAccountId;
+      if (!accountId) continue;
+      // Same signal MemberStats.issuesInProgress counts against (Jira's own statusCategory),
+      // so this list and the WIP number in the table always agree on what counts as "working on".
+      if (!issue.isInProgress) continue;
 
-      if (!grouped.has(assignee)) {
-        grouped.set(assignee, []);
+      if (!grouped.has(accountId)) {
+        grouped.set(accountId, []);
       }
 
-      grouped.get(assignee)!.push({
+      grouped.get(accountId)!.push({
         key: issue.key,
         summary: issue.summary,
         status: issue.status,
@@ -153,12 +140,16 @@ export default function ProjectTeam() {
                   <TableHead className="text-right">{t('page.team.issuesResolved')}</TableHead>
                   <TableHead className="text-right">{t('page.team.storyPoints')}</TableHead>
                   <TableHead className="text-right">{t('page.team.avgCycleTime')}</TableHead>
+                  <TableHead className="text-right">{t('page.team.avgLeadTime')}</TableHead>
                   <TableHead className="text-right">{t('page.team.wip')}</TableHead>
+                  <TableHead className="text-right">{t('page.team.blocked')}</TableHead>
                   <TableHead>{t('page.team.workingOn')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredMembers.map((member) => (
+                {filteredMembers.map((member) => {
+                  const work = memberWorkByAccountId.get(member.accountId) ?? [];
+                  return (
                   <TableRow key={member.accountId} className="border-border hover:bg-accent/50">
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -169,15 +160,29 @@ export default function ProjectTeam() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono">{member.issuesResolved}</TableCell>
-                    <TableCell className="text-right font-mono text-primary">{member.storyPoints}</TableCell>
+                    <TableCell className="text-right font-mono text-primary">
+                      {member.storyPoints}
+                      {member.issuesResolved > 0 && (
+                        <div className="text-[11px] font-sans text-muted-foreground">
+                          {t('page.team.withPoints', { withPoints: member.issuesResolvedWithPoints, total: member.issuesResolved })}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-mono">{member.avgCycleTime.toFixed(1)}d</TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">{member.avgLeadTime.toFixed(1)}d</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{member.issuesInProgress}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {member.issuesBlocked > 0 ? (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400">
+                          {member.issuesBlocked}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="space-y-1 max-w-[440px]">
-                        {(showAllWorkItems
-                          ? memberWorkByName.get(member.displayName) ?? []
-                          : (memberWorkByName.get(member.displayName) ?? []).slice(0, 3)
-                        ).map((item) => (
+                        {(showAllWorkItems ? work : work.slice(0, 3)).map((item) => (
                           <div key={item.key} className="text-xs">
                             <span className="font-mono text-primary mr-2">{item.key}</span>
                             <span className="text-muted-foreground">{item.summary}</span>
@@ -186,21 +191,22 @@ export default function ProjectTeam() {
                             </span>
                           </div>
                         ))}
-                        {(memberWorkByName.get(member.displayName)?.length ?? 0) === 0 && (
+                        {work.length === 0 && (
                           <span className="text-xs text-muted-foreground">{t('page.team.noActive')}</span>
                         )}
-                        {!showAllWorkItems && (memberWorkByName.get(member.displayName)?.length ?? 0) > 3 && (
+                        {!showAllWorkItems && work.length > 3 && (
                           <span className="text-xs text-muted-foreground">
-                            +{(memberWorkByName.get(member.displayName)?.length ?? 0) - 3} {t('page.team.more')}
+                            +{work.length - 3} {t('page.team.more')}
                           </span>
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
                 {filteredMembers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {t('page.team.noMembers')}
                     </TableCell>
                   </TableRow>

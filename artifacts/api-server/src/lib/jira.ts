@@ -459,6 +459,35 @@ export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null>
   return getLeadTimeDays(issue);
 }
 
+/** Matches status names like "Blocked", "Bloqueado", "Impediment", "Obstáculo" (case-insensitive). */
+export function isBlockedStatus(name: string): boolean {
+  return /block|impediment|bloqueado|obstáculo/i.test(name.trim());
+}
+
+function isBlockedFlagValue(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /block|impediment|bloqueado|obstáculo/i.test(value.trim());
+}
+
+/** Whether the Jira "Flagged" field (customfield_10021) currently holds a blocked-like value. */
+export function isIssueCurrentlyFlagged(issue: JiraIssue): boolean {
+  const flagged = issue.fields.customfield_10021;
+  if (!Array.isArray(flagged)) return false;
+  return flagged.some((entry) => isBlockedFlagValue(entry?.value ?? null));
+}
+
+/** Blocked-time analysis only applies to work-item types that carry meaningful in-flight state. */
+export function isBlockedEligibleIssueType(issue: JiraIssue): boolean {
+  const normalized = mapIssueType(issue.fields.issuetype.name ?? "");
+  return normalized === "Story" || normalized === "Task" || normalized === "Bug";
+}
+
+/** Whether an issue is blocked right now (status or Flagged field), independent of history. */
+export function isIssueCurrentlyBlocked(issue: JiraIssue): boolean {
+  if (isIssueDone(issue)) return false;
+  return isBlockedStatus(issue.fields.status.name) || isIssueCurrentlyFlagged(issue);
+}
+
 export interface JiraSprint {
   id: number;
   name: string;
@@ -925,6 +954,56 @@ export async function getFlaggedJiraIssuesForProject(
       const expandParam = includeChangelog ? "&expand=changelog" : "";
       const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
         `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+      );
+
+      const pageIssues = result.issues ?? [];
+      issues.push(...pageIssues);
+      if (result.isLast || pageIssues.length < maxResults) break;
+      pageToken = result.nextPageToken ?? null;
+      if (!pageToken) break;
+    }
+
+    return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
+  }, { forceRefresh: options?.forceRefresh });
+}
+
+/** All currently unresolved issues for a project, with no age bound at all — unlike
+ * getJiraIssuesForProject(periodDays), which only ever returns an issue that's still open if it
+ * was ALSO created within the period window. That makes it unsuitable for "what's actually open
+ * right now": an issue opened 60 days ago and still in progress silently disappears from a 30-day
+ * view. Use this whenever you need true current WIP/blocked state, not period-scoped activity. */
+export async function getOpenIssuesForProject(
+  projectId: string,
+  options?: { forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId).filter((issue) => !isIssueDone(issue));
+  }
+
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  const cacheKey = `issues:${canonicalProjectId}:open`;
+
+  return withCache(cacheKey, async () => {
+    const fields =
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+
+    const maxResults = 100;
+    const MAX_PAGES = 50;
+    const issues: JiraIssue[] = [];
+    let pageToken: string | null = null;
+    let pageCount = 0;
+    const jql = encodeURIComponent(
+      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate is EMPTY ORDER BY updated DESC`
+    );
+
+    for (;;) {
+      if (++pageCount > MAX_PAGES) {
+        logger.warn({ projectId, total: issues.length }, "Too many pages while fetching open issues");
+        break;
+      }
+
+      const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
       );
 
       const pageIssues = result.issues ?? [];

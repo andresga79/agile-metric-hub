@@ -1,11 +1,14 @@
 import { Router, type IRouter } from "express";
 import {
   getJiraIssuesForProject,
+  getOpenIssuesForProject,
   getProjectBoardType,
   listJiraProjects,
   periodToDays,
   isIssueDone,
   isIssueInProgress,
+  isIssueCurrentlyBlocked,
+  isBlockedEligibleIssueType,
   getStoryPoints,
   getLeadTimeDays,
   getCycleTimeDays,
@@ -409,9 +412,14 @@ router.get(
       return;
     }
 
-    const [allProjects, issues, allowedIssueTypes, portfolioRows] = await Promise.all([
+    const [allProjects, issues, openIssues, allowedIssueTypes, portfolioRows] = await Promise.all([
       listJiraProjects(),
-      getJiraIssuesForProject(projectId, periodToDays(period)),
+      // includeChangelog is required for getCycleTimeDays() below to find the actual
+      // first-in-progress transition — without it, every issue silently falls back to lead time.
+      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
+      // Unbounded by period — an issue opened before the period window but still open/blocked
+      // today must still count against its assignee's current WIP.
+      getOpenIssuesForProject(projectId),
       getPortfolioAllowedIssueTypes(),
       db.select().from(portfolioCacheTable),
     ]);
@@ -447,13 +455,14 @@ router.get(
       return;
     }
 
-    // If no issues from Jira, return empty members list
-    if (issues.length === 0) {
+    // If there's truly nothing to show (no period activity and nothing currently open), bail out.
+    if (issues.length === 0 && openIssues.length === 0) {
       res.json([]);
       return;
     }
 
     const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+    const openFiltered = openIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const startDate = getStartDate(periodToDays(period));
 
     const memberMap = new Map<
@@ -463,66 +472,84 @@ router.get(
         displayName: string;
         avatarUrl: string | null;
         resolved: number;
+        resolvedWithPoints: number;
         storyPoints: number;
         cycleTimes: number[];
+        leadTimes: number[];
         inProgress: number;
+        blocked: number;
       }
     >();
 
-    for (const issue of filtered) {
-      const assignee = issue.fields.assignee;
-      if (!assignee) continue;
-
+    const getOrCreateMember = (assignee: { accountId: string; displayName: string; avatarUrls?: Record<string, string> }) => {
       if (!memberMap.has(assignee.accountId)) {
         memberMap.set(assignee.accountId, {
           accountId: assignee.accountId,
           displayName: assignee.displayName,
           avatarUrl: assignee.avatarUrls?.["48x48"] ?? null,
           resolved: 0,
+          resolvedWithPoints: 0,
           storyPoints: 0,
           cycleTimes: [],
+          leadTimes: [],
           inProgress: 0,
+          blocked: 0,
         });
       }
+      return memberMap.get(assignee.accountId)!;
+    };
 
-      const member = memberMap.get(assignee.accountId)!;
+    // --- Work completed in this period: resolved count, story points, cycle/lead time ---
+    for (const issue of filtered) {
+      const assignee = issue.fields.assignee;
+      if (!assignee) continue;
 
       const resolvedAt = await getResolutionDate(issue);
-      if (
-        isIssueDone(issue) &&
-        resolvedAt &&
-        resolvedAt >= startDate
-      ) {
-        member.resolved++;
-        member.storyPoints += getStoryPoints(issue);
+      if (!isIssueDone(issue) || !resolvedAt || resolvedAt < startDate) continue;
 
-        member.cycleTimes.push(
-          (resolvedAt!.getTime() - new Date(issue.fields.created).getTime()) /
-            (1000 * 60 * 60 * 24)
-        );
-      }
+      const member = getOrCreateMember(assignee);
+      member.resolved++;
+      const points = getStoryPoints(issue);
+      member.storyPoints += points;
+      if (points > 0) member.resolvedWithPoints++;
 
-      if (isIssueInProgress(issue)) {
-        member.inProgress++;
-      }
+      const [cycleTime, leadTime] = await Promise.all([getCycleTimeDays(issue), getLeadTimeDays(issue)]);
+      if (cycleTime !== null) member.cycleTimes.push(cycleTime);
+      if (leadTime !== null) member.leadTimes.push(leadTime);
     }
+
+    // --- Current state, unbounded by period: WIP and active blocks ---
+    for (const issue of openFiltered) {
+      const assignee = issue.fields.assignee;
+      if (!assignee) continue;
+
+      const member = getOrCreateMember(assignee);
+      if (isIssueInProgress(issue)) member.inProgress++;
+      if (isBlockedEligibleIssueType(issue) && isIssueCurrentlyBlocked(issue)) member.blocked++;
+    }
+
+    const avg = (values: number[]) =>
+      values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0;
 
     const members = Array.from(memberMap.values()).map((m) => ({
       accountId: m.accountId,
       displayName: m.displayName,
       avatarUrl: m.avatarUrl,
       issuesResolved: m.resolved,
+      issuesResolvedWithPoints: m.resolvedWithPoints,
       storyPoints: Math.round(m.storyPoints * 10) / 10,
-      avgCycleTime:
-        m.cycleTimes.length > 0
-          ? Math.round(
-              (m.cycleTimes.reduce((a, b) => a + b, 0) / m.cycleTimes.length) * 10
-            ) / 10
-          : 0,
+      avgCycleTime: avg(m.cycleTimes),
+      avgLeadTime: avg(m.leadTimes),
       issuesInProgress: m.inProgress,
+      issuesBlocked: m.blocked,
     }));
 
-    members.sort((a, b) => b.issuesResolved - a.issuesResolved);
+    // Whoever needs attention first: blocked work, then a heavy WIP load, then who's shipped most.
+    members.sort((a, b) =>
+      b.issuesBlocked - a.issuesBlocked
+      || b.issuesInProgress - a.issuesInProgress
+      || b.issuesResolved - a.issuesResolved
+    );
 
     res.json(members);
   }
@@ -603,23 +630,23 @@ router.get(
       return;
     }
 
-    const [issues, allowedIssueTypes] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodToDays(period)),
+    const [issues, openIssues, allowedIssueTypes] = await Promise.all([
+      // includeChangelog: required for getCycleTimeDays() to find the real first-in-progress
+      // transition — without it this silently degrades to lead time for every issue.
+      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
+      // Merged in below so "currently open" issues older than the period window still show up —
+      // otherwise a ticket opened 60 days ago and still in progress silently vanishes from a 1M view.
+      getOpenIssuesForProject(projectId),
       getPortfolioAllowedIssueTypes(),
     ]);
-    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+    const combined = Array.from(new Map([...issues, ...openIssues].map((i) => [i.id, i])).values());
+    const filtered = combined.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     const mapped = await Promise.all(
       filtered.map(async (i) => {
         const resolvedAt = await getResolutionDate(i);
-        const cycleTimeDays = resolvedAt
-          ? Math.round(
-              ((resolvedAt.getTime() -
-                new Date(i.fields.created).getTime()) /
-                (1000 * 60 * 60 * 24)) *
-                10
-            ) / 10
-          : null;
+        const rawCycleTime = await getCycleTimeDays(i);
+        const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
 
         return {
           id: i.id,
@@ -629,6 +656,8 @@ router.get(
           issueType: i.fields.issuetype.name,
           priority: i.fields.priority.name,
           assignee: i.fields.assignee?.displayName ?? null,
+          assigneeAccountId: i.fields.assignee?.accountId ?? null,
+          isInProgress: isIssueInProgress(i),
           storyPoints: getStoryPoints(i) || null,
           createdAt: i.fields.created,
           resolvedAt: resolvedAt?.toISOString() ?? null,
@@ -653,7 +682,9 @@ router.get(
       : req.params.period;
 
     const [issues, allowedIssueTypes] = await Promise.all([
-      getJiraIssuesForProject(projectId!, periodToDays(period ?? "1m")),
+      // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
+      // transition — without it this silently degrades to lead time for every issue.
+      getJiraIssuesForProject(projectId!, periodToDays(period ?? "1m"), { includeChangelog: true }),
       getPortfolioAllowedIssueTypes(),
     ]);
     const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
@@ -661,9 +692,8 @@ router.get(
     const rows = await Promise.all(
       filtered.map(async (i) => {
         const resolvedAt = await getResolutionDate(i);
-        const cycleTimeDays = resolvedAt
-          ? Math.round(((resolvedAt.getTime() - new Date(i.fields.created).getTime()) / (1000 * 60 * 60 * 24)) * 10) / 10
-          : null;
+        const rawCycleTime = await getCycleTimeDays(i);
+        const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
         return {
           key: i.key,
           summary: i.fields.summary,

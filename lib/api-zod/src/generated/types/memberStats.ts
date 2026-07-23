@@ -12,7 +12,15 @@ export interface MemberStats {
   /** @nullable */
   avatarUrl?: string | null;
   issuesResolved: number;
+  /** Of issuesResolved, how many carried a story point estimate — bugs/support work often don't, so storyPoints alone understates their contribution. */
+  issuesResolvedWithPoints: number;
   storyPoints: number;
+  /** Mean time from first "in progress" transition to resolution (not from creation — that's avgLeadTime). */
   avgCycleTime: number;
+  /** Mean time from creation to resolution, including backlog wait time. */
+  avgLeadTime: number;
+  /** Currently open issues assigned to this member, regardless of when they were created. */
   issuesInProgress: number;
+  /** Of issuesInProgress, how many are blocked right now (status or Flagged field). */
+  issuesBlocked: number;
 }

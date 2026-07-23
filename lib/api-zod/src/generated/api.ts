@@ -178,9 +178,12 @@ export const GetProjectMembersResponseItem = zod.object({
   "displayName": zod.string(),
   "avatarUrl": zod.string().nullish(),
   "issuesResolved": zod.number(),
+  "issuesResolvedWithPoints": zod.number().describe('Of issuesResolved, how many carried a story point estimate — bugs\/support work often don\'t, so storyPoints alone understates their contribution.'),
   "storyPoints": zod.number(),
-  "avgCycleTime": zod.number(),
-  "issuesInProgress": zod.number()
+  "avgCycleTime": zod.number().describe('Mean time from first \"in progress\" transition to resolution (not from creation — that\'s avgLeadTime).'),
+  "avgLeadTime": zod.number().describe('Mean time from creation to resolution, including backlog wait time.'),
+  "issuesInProgress": zod.number().describe('Currently open issues assigned to this member, regardless of when they were created.'),
+  "issuesBlocked": zod.number().describe('Of issuesInProgress, how many are blocked right now (status or Flagged field).')
 })
 export const GetProjectMembersResponse = zod.array(GetProjectMembersResponseItem)
 
@@ -201,6 +204,8 @@ export const GetProjectIssuesResponseItem = zod.object({
   "issueType": zod.string(),
   "priority": zod.string(),
   "assignee": zod.string().nullish(),
+  "assigneeAccountId": zod.string().nullish().describe('Jira account ID — join key against MemberStats.accountId. Prefer this over the display name, which isn\'t guaranteed unique across an org.'),
+  "isInProgress": zod.boolean().describe('Jira\'s own statusCategory === \"indeterminate\" — the same signal MemberStats.issuesInProgress counts against. Don\'t re-derive \"in progress\" from the status name string; category names vary a lot per project\/workflow.'),
   "storyPoints": zod.number().nullish(),
   "createdAt": zod.string(),
   "resolvedAt": zod.string().nullish(),
