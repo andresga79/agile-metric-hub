@@ -1,6 +1,16 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middleware/auth";
-import { getJiraIssuesForProject, isIssueDone, getResolutionDate, periodToDays, getStoryPoints, getLeadTimeDays } from "../lib/jira";
+import {
+  getJiraIssuesForProject,
+  isIssueDone,
+  getResolutionDate,
+  periodToDays,
+  getStoryPoints,
+  getLeadTimeDays,
+  getEffectiveIssueType,
+  capLookbackDays,
+} from "../lib/jira";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -76,8 +86,17 @@ router.post(
       return;
     }
 
-    const periodDays = body.windowDays ?? 180;
-    const issues = await getJiraIssuesForProject(projectId, periodDays);
+    // Jira fetches are hard-capped at JIRA_MAX_LOOKBACK_DAYS regardless of what's requested here,
+    // so windowDays must be clamped to the same value before it drives startDate/week-bucket math —
+    // otherwise a longer requested window silently gets fewer real weeks of data than the math
+    // assumes, skewing the throughput sample (verified: 180d and 90d produced materially different
+    // Monte Carlo results off the identical underlying 90-day dataset).
+    const periodDays = capLookbackDays(body.windowDays ?? 90);
+    const [allIssues, allowedIssueTypes] = await Promise.all([
+      getJiraIssuesForProject(projectId, periodDays),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+    const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 

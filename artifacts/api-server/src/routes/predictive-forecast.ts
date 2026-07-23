@@ -4,7 +4,10 @@ import {
   getJiraIssuesForProject,
   periodToDays,
   isIssueDone,
+  getResolutionDate,
+  getEffectiveIssueType,
 } from "../lib/jira";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -23,19 +26,27 @@ router.post(
     }
 
     const windowDays = windowWeeks * 7;
-    const issues = await getJiraIssuesForProject(projectId, windowDays);
+    const [allIssues, allowedIssueTypes] = await Promise.all([
+      // includeChangelog: required for getResolutionDate()'s changelog fallback — without it, a Done
+      // issue lacking an explicit resolutiondate field would silently drop out of every week's count.
+      getJiraIssuesForProject(projectId, windowDays, { includeChangelog: true }),
+      getPortfolioAllowedIssueTypes(),
+    ]);
+    const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
-    const resolved = issues.filter((i) => isIssueDone(i));
+    const resolvedDates = (
+      await Promise.all(
+        issues.filter((i) => isIssueDone(i)).map((i) => getResolutionDate(i))
+      )
+    ).filter((d): d is Date => d !== null);
+
     const weeklyThroughput: number[] = [];
     const now = new Date();
 
     for (let w = 0; w < windowWeeks; w++) {
       const weekEnd = new Date(now.getTime() - w * 7 * 24 * 60 * 60 * 1000);
       const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const count = resolved.filter((i) => {
-        const resolvedDate = i.fields.resolutiondate ? new Date(i.fields.resolutiondate) : null;
-        return resolvedDate && resolvedDate >= weekStart && resolvedDate < weekEnd;
-      }).length;
+      const count = resolvedDates.filter((d) => d >= weekStart && d < weekEnd).length;
       weeklyThroughput.push(count);
     }
 

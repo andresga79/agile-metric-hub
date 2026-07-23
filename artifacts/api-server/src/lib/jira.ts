@@ -839,9 +839,9 @@ export async function getSprintIssues(
   }
 }
 
-const JIRA_MAX_LOOKBACK_DAYS = 90;
+export const JIRA_MAX_LOOKBACK_DAYS = 90;
 
-function capLookbackDays(periodDays: number): number {
+export function capLookbackDays(periodDays: number): number {
   return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
 }
 

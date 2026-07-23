@@ -230,6 +230,7 @@
   "page.forecast.projected": "Projected",
   "page.forecast.pessimistic": "Pessimistic",
   "page.forecast.probability": "Confidence",
+  "page.forecast.probabilityWithinWeeks": "of finishing within {{weeks}} weeks",
   "page.forecast.median": "Median",
   "page.forecast.p50": "P50 (Median)",
   "page.forecast.weeks": "wk",

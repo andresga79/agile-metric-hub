@@ -19,7 +19,7 @@ export default function ProjectForecast() {
 
   const [forecastTarget, setForecastTarget] = useState(30);
   const [forecastUnit, setForecastUnit] = useState<"issues" | "story_points">("issues");
-  const [forecastWindow, setForecastWindow] = useState(180);
+  const [forecastWindow, setForecastWindow] = useState(90);
   const [forecastResult, setForecastResult] = useState<ForecastResponse | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
 
@@ -114,7 +114,6 @@ export default function ProjectForecast() {
               >
                 <option value={30}>{`30 ${t('page.forecast.days')}`}</option>
                 <option value={90}>{`90 ${t('page.forecast.days')}`}</option>
-                <option value={180}>{`180 ${t('page.forecast.days')}`}</option>
               </select>
             </div>
             <div className="mt-6">

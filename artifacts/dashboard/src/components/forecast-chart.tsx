@@ -13,6 +13,9 @@ export function ForecastChart({ forecast }: { forecast: ForecastResponse }) {
         <div className="bg-card/60 rounded-lg border border-border p-3 text-center">
           <div className="text-xs text-muted-foreground">{t('page.forecast.probability')}</div>
           <div className="text-xl font-bold text-primary">{forecast.probability}%</div>
+          <div className="text-[11px] text-muted-foreground">
+            {t('page.forecast.probabilityWithinWeeks', { weeks: forecast.medianWeeks })}
+          </div>
         </div>
         <div className="bg-card/60 rounded-lg border border-border p-3 text-center">
           <div className="text-xs text-muted-foreground">{t('page.forecast.p50')}</div>
