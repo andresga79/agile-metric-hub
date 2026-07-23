@@ -29,6 +29,8 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `616d329` | fix: correct portfolio WIP undercount and simplify dashboard summary (desde otra PC) |
 | `85cc7e5` | fix: correct Forecast window clamping and issue-type consistency (desde otra PC) |
 | `3242205` | fix: CFD in-progress band and Spanish bug-type detection in Health/metrics (desde otra PC) |
+| `b6f17bc` | docs: update session log with the other machine's commits |
+| `3756c10` | fix: correct WIP aging severity counts and time-in-status window on Flow page |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -141,17 +143,23 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     22 a 28 en curso al arreglarlo con `getOpenIssuesForProject()`.
 13. **Forecast dejaba elegir una ventana de 180 días** pero el fetch de Jira siempre corta en 90 —
     la matemática de baldes semanales usaba el 180 crudo contra datos de 90, sesgando los percentiles.
+14. **"WIP Aging" contaba severidad (crítico/advertencia/watch) solo sobre los 10 items mostrados**
+    (Flow) — no sobre el total real. OLI: 30 issues en WIP, desglose real 11/6/2, pero la pantalla
+    mostraba "10 crítico, 0, 0" porque los 10 más viejos mostrados resultaban ser todos críticos.
+15. **"Tiempo en Estado" (bottleneck) con la misma ventana angosta de período** (Flow) — mismo
+    patrón de la fila 3/12, ahora en el análisis de cuellos de botella.
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
 `portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
-y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` + `/analytics`,
+Flow, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` + `/analytics`,
 los primeros dos ya revisados a fondo; `/analytics` también).
 
+`FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
+arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
+
 **Todavía NO revisado con este mismo nivel de detalle** — candidatos naturales para continuar:
-- **Flow** (`project-flow.tsx` — tiempo en estado, WIP aging, bloqueados; ver si comparte los
-  mismos bugs de ventana angosta / regex de reopened que ya aparecieron en otros lados)
 - **Evolución** (`project-evolution.tsx`, la vista agregada por semana, commit `7e3e599` — nunca
   se le hizo ni siquiera una primera pasada)
 - **QA Rechazados** (`qa-rejected.ts` / `project-qa-rejected.tsx`)
@@ -181,8 +189,8 @@ los primeros dos ya revisados a fondo; `/analytics` también).
 2. Levantar el entorno (sección 1) — `docker compose up -d --build`.
 3. Confirmar que los 17 thresholds están sembrados: `GET /api/admin/metric-thresholds` (o mirar
    la pestaña Admin → Health en el navegador).
-4. Elegir una sección de la lista de "todavía no revisado" (sección 5: Flow, Evolución, QA
-   Rechazados, o el Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta"
-   — el proceso de la sección 2 se puede repetir tal cual.
+4. Elegir una sección de la lista de "todavía no revisado" (sección 5: Evolución, QA Rechazados,
+   o el Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta" — el proceso
+   de la sección 2 se puede repetir tal cual.
 5. Antes de cortar la sesión, **actualizar este archivo** (commits nuevos, bugs nuevos, qué quedó
    cubierto) y pushearlo — es lo que le permitió a la sesión anterior seguir sin perder contexto.
