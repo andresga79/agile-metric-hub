@@ -7,6 +7,7 @@ import {
   isIssueDone,
   getStoryPoints,
   getCycleTimeDays,
+  getStatusCategoryMap,
   mapIssueType,
   getEffectiveIssueType,
   periodToDays,
@@ -30,6 +31,10 @@ interface SprintMetric {
   completedIssues: number;
   completedStoryPoints: number;
   completionRate: number;
+  // Which base completionRate was computed on. Falls back to issue-count when the sprint has no
+  // story points logged — a rate computed one way isn't comparable to one computed the other way,
+  // so the UI needs to be able to say which is which instead of showing two bare percentages.
+  completionBasis: "storyPoints" | "issueCount";
   velocity: number;
   reopenedCount: number;
   avgCycleTimeDays: number | null;
@@ -45,12 +50,55 @@ interface SprintMetric {
 interface SprintMetricsResponse {
   sprints: SprintMetric[];
   summary: {
+    // Count of CLOSED sprints the averages below are computed from — an active sprint is, by
+    // definition, not finished yet, so folding its partial completion/velocity into these averages
+    // makes a normal in-progress sprint look like a decline. sprints.length (all sprints returned,
+    // including any active one) may be one higher than this.
     totalSprints: number;
     avgVelocity: number;
     avgCompletionRate: number;
     avgCycleTimeDays: number | null;
     totalCompletedStoryPoints: number;
+    // How many sprints actually fell inside the period, before capping to maxSprints below —
+    // lets the UI say "showing N of M" instead of silently dropping older sprints.
+    totalSprintsInPeriod: number;
   };
+}
+
+// Counts issues that were marked "done" at some point and later moved back out of done — a real
+// quality signal (premature "done", QA bounce-back). The previous version matched status
+// transitions against a literal /^done$/i regex, ignoring both Jira's own statusCategory and the
+// multi-language "done" names isIssueDone() already knows about (listo, terminado, resuelto,
+// cerrado...) — it only ever worked by coincidence on projects whose done column is named "Done".
+async function countReopenedIssues(issues: JiraIssue[]): Promise<number> {
+  const categoryMap = await getStatusCategoryMap();
+  const isDoneStatusName = (name: string | null | undefined): boolean => {
+    if (!name) return false;
+    const trimmed = name.trim();
+    const category = categoryMap.get(trimmed.toLowerCase());
+    if (category) return category === "done";
+    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(trimmed);
+  };
+
+  return issues.filter((issue) => {
+    const statusTransitions = (issue.changelog?.histories ?? [])
+      .map((h) => ({ at: new Date(h.created).getTime(), items: h.items.filter((it) => it.field === "status") }))
+      .filter((h) => h.items.length > 0)
+      .sort((a, b) => a.at - b.at);
+
+    let sawDone = false;
+    for (const transition of statusTransitions) {
+      for (const item of transition.items) {
+        if (sawDone && isDoneStatusName(item.fromString) && !isDoneStatusName(item.toString)) {
+          return true;
+        }
+        if (isDoneStatusName(item.toString)) {
+          sawDone = true;
+        }
+      }
+    }
+    return false;
+  }).length;
 }
 
 async function computeSprintMetrics(
@@ -75,22 +123,7 @@ async function computeSprintMetrics(
         }
       }
 
-  const reopenedCount = filtered.filter((i) => {
-    const histories = i.changelog?.histories ?? [];
-    const doneItems = histories
-      .flatMap((h) => h.items)
-      .filter((it) => it.field === "status" && it.toString && /^done$/i.test(it.toString));
-    if (doneItems.length === 0) return false;
-    // check if any transition after the first done moves out of done
-    const idx = histories.findIndex((h) =>
-      h.items.some((it) => it.field === "status" && it.toString && /^done$/i.test(it.toString))
-    );
-    if (idx < 0) return false;
-    const postDone = histories.slice(idx + 1);
-    return postDone.some((h) =>
-      h.items.some((it) => it.field === "status" && it.fromString && /^done$/i.test(it.fromString))
-    );
-  }).length;
+  const reopenedCount = await countReopenedIssues(filtered);
 
   const cycleTimes = await Promise.all(
     doneIssues.map((i) => getCycleTimeDays(i))
@@ -102,7 +135,10 @@ async function computeSprintMetrics(
 
   const completedIssues = doneIssues.length;
   const totalIssues = filtered.length;
-  const completionRate = totalSp > 0 ? (doneSp / totalSp) * 100 : totalIssues > 0 ? (completedIssues / totalIssues) * 100 : 0;
+  const completionBasis: SprintMetric["completionBasis"] = totalSp > 0 ? "storyPoints" : "issueCount";
+  const completionRate = completionBasis === "storyPoints"
+    ? (doneSp / totalSp) * 100
+    : totalIssues > 0 ? (completedIssues / totalIssues) * 100 : 0;
 
   return {
     sprintId: sprint.id,
@@ -115,6 +151,7 @@ async function computeSprintMetrics(
     completedIssues,
     completedStoryPoints: doneSp,
     completionRate,
+    completionBasis,
     velocity: doneSp,
     reopenedCount,
     avgCycleTimeDays,
@@ -149,8 +186,8 @@ router.get(
     }
 
     const sprints = await getJiraSprints(projectId, 50);
-    // Filter by endDate within the period, sort descending, limit to maxSprints
-    const filteredSprints = [...sprints]
+    // Sprints within the period, newest first, before capping to maxSprints below.
+    const sprintsInPeriod = [...sprints]
       .filter((s) => {
         const endDate = s.endDate ? new Date(s.endDate).getTime() : s.completeDate ? new Date(s.completeDate).getTime() : 0;
         return endDate >= startDate.getTime();
@@ -159,13 +196,13 @@ router.get(
         const aEnd = a.endDate ? new Date(a.endDate).getTime() : a.completeDate ? new Date(a.completeDate).getTime() : 0;
         const bEnd = b.endDate ? new Date(b.endDate).getTime() : b.completeDate ? new Date(b.completeDate).getTime() : 0;
         return bEnd - aEnd;
-      })
-      .slice(0, maxSprints)
-      .reverse();
+      });
+    const filteredSprints = sprintsInPeriod.slice(0, maxSprints).reverse();
 
     if (filteredSprints.length === 0) {
       res.json({ sprints: [], summary: {
-        totalSprints: 0, avgVelocity: 0, avgCompletionRate: 0, avgCycleTimeDays: null, totalCompletedStoryPoints: 0,
+        totalSprints: 0, avgVelocity: 0, avgCompletionRate: 0, avgCycleTimeDays: null,
+        totalCompletedStoryPoints: 0, totalSprintsInPeriod: sprintsInPeriod.length,
       } });
       return;
     }
@@ -178,11 +215,13 @@ router.get(
       })
     );
 
-    const doneIssues = sprintMetrics.flatMap((s) => s.completedIssues);
-    const totalCompleted = doneIssues.reduce((a, b) => a + b, 0);
-    const velocities = sprintMetrics.map((s) => s.velocity);
-    const completionRates = sprintMetrics.map((s) => s.completionRate);
-    const cycleTimes = sprintMetrics.map((s) => s.avgCycleTimeDays).filter((t): t is number => t !== null);
+    // Averages only reflect CLOSED sprints — an active sprint is partway through its timebox by
+    // definition, so its still-climbing completion/velocity numbers would otherwise drag the
+    // average down and read as a decline that isn't real.
+    const closedMetrics = sprintMetrics.filter((s) => s.state === "closed");
+    const velocities = closedMetrics.map((s) => s.velocity);
+    const completionRates = closedMetrics.map((s) => s.completionRate);
+    const cycleTimes = closedMetrics.map((s) => s.avgCycleTimeDays).filter((t): t is number => t !== null);
     const avgCycleTimeDays = cycleTimes.length > 0
       ? cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length
       : null;
@@ -190,7 +229,7 @@ router.get(
     const response: SprintMetricsResponse = {
       sprints: sprintMetrics,
       summary: {
-        totalSprints: sprintMetrics.length,
+        totalSprints: closedMetrics.length,
         avgVelocity: velocities.length > 0
           ? velocities.reduce((a, b) => a + b, 0) / velocities.length
           : 0,
@@ -198,7 +237,8 @@ router.get(
           ? completionRates.reduce((a, b) => a + b, 0) / completionRates.length
           : 0,
         avgCycleTimeDays,
-        totalCompletedStoryPoints: sprintMetrics.reduce((sum, s) => sum + s.completedStoryPoints, 0),
+        totalCompletedStoryPoints: closedMetrics.reduce((sum, s) => sum + s.completedStoryPoints, 0),
+        totalSprintsInPeriod: sprintsInPeriod.length,
       },
     };
 

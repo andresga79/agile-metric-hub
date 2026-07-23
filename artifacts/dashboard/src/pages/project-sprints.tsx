@@ -3,13 +3,15 @@ import { useGetProject, getGetProjectQueryKey, useGetProjectSprintMetrics, getGe
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
+
+const DEFAULT_COMPLETION_THRESHOLD = { good: 80, warning: 50 };
 
 function pct(value: number): string {
   return `${value.toFixed(1)}%`;
@@ -39,11 +41,32 @@ export default function ProjectSprints() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectSprintMetricsQueryKey(projectId!, period) },
   });
 
+  const [completionThreshold, setCompletionThreshold] = useState(DEFAULT_COMPLETION_THRESHOLD);
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+    ]).then(([globalRows, overrideRows]) => {
+      let merged = DEFAULT_COMPLETION_THRESHOLD;
+      for (const source of [globalRows, overrideRows]) {
+        if (!Array.isArray(source)) continue;
+        const row = source.find((t: any) => t.metric === "sprintCompletion");
+        if (row) merged = { good: Number(row.goodValue), warning: Number(row.warningValue) };
+      }
+      setCompletionThreshold(merged);
+    }).catch(() => {});
+  }, [projectId, token]);
+
   if (isLoading || loadingProject) return <div>{t('page.sprints.loading')}</div>;
   if (!project) return <div>{t('page.sprints.notFound')}</div>;
 
   const sprints = data?.sprints ?? [];
   const summary = data?.summary;
+  const activeSprint = sprints.find((s) => s.state === "active") ?? null;
+  const isTruncated = (summary?.totalSprintsInPeriod ?? 0) > sprints.length;
 
   const chartData = [...sprints].reverse().map((s) => ({
     name: s.sprintName.replace(/^.*\s/, "S"),
@@ -90,6 +113,11 @@ export default function ProjectSprints() {
         <EmptyState icon={Gauge} title={t('page.sprints.noSprints')} />
       ) : (
         <>
+          {isTruncated && (
+            <p className="text-xs text-muted-foreground">
+              {t('page.sprints.truncated', { shown: sprints.length, total: summary?.totalSprintsInPeriod ?? sprints.length })}
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
@@ -99,6 +127,9 @@ export default function ProjectSprints() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{summary?.totalSprints ?? 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {activeSprint ? t('page.sprints.closedPlusActive', { name: activeSprint.sprintName }) : t('page.sprints.closedOnly')}
+                </p>
               </CardContent>
             </Card>
 
@@ -189,6 +220,7 @@ export default function ProjectSprints() {
                     <TableHead className="text-right">{t('page.sprints.spDone')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.completion')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.cycleTime')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.reopened')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.breakdownCol')}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -215,20 +247,32 @@ export default function ProjectSprints() {
                         <TableCell className="text-right font-mono">{s.totalStoryPoints.toFixed(0)}</TableCell>
                         <TableCell className="text-right font-mono">{s.completedStoryPoints.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                            s.completionRate >= 80 ? "bg-green-500/20 text-green-400" :
-                            s.completionRate >= 50 ? "bg-orange-500/20 text-orange-400" :
-                            "bg-red-500/20 text-red-400"
-                          }`}>
+                          <span
+                            className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                              s.completionRate >= completionThreshold.good ? "bg-green-500/20 text-green-400" :
+                              s.completionRate >= completionThreshold.warning ? "bg-orange-500/20 text-orange-400" :
+                              "bg-red-500/20 text-red-400"
+                            }`}
+                            title={s.completionBasis === "storyPoints" ? t('page.sprints.basisPoints') : t('page.sprints.basisIssues')}
+                          >
                             {pct(s.completionRate)}
+                            <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{days(s.avgCycleTimeDays)}</TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">
+                        <TableCell className="text-right font-mono text-xs">
+                          {s.reopenedCount > 0 ? (
+                            <span className="px-1.5 py-0.5 rounded font-semibold bg-red-500/15 text-red-400">{s.reopenedCount}</span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
                           <span className="text-blue-400">{s.breakdown.Story}</span>S /
                           <span className="text-red-400">{s.breakdown.Bug}</span>B /
                           <span className="text-green-400">{s.breakdown.Task}</span>T /
                           <span className="text-purple-400">{s.breakdown.Epic}</span>E
+                          {s.breakdown.Other > 0 && <> / <span className="text-muted-foreground">{s.breakdown.Other}</span>{t('page.sprints.otherAbbrev')}</>}
                         </TableCell>
                       </TableRow>
                     ))}

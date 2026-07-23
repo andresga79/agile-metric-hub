@@ -7,10 +7,13 @@
  */
 
 export interface SprintMetricsSummary {
+  /** Closed sprints the averages below are computed from. An active sprint (if any) is included in the top-level `sprints` array but excluded here — it's still in progress, so folding its partial numbers into these averages would misrepresent them as a decline. */
   totalSprints: number;
   avgVelocity: number;
   avgCompletionRate: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
   totalCompletedStoryPoints: number;
+  /** How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off. */
+  totalSprintsInPeriod: number;
 }

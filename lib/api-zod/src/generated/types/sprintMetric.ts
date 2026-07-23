@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { IssueTypeBreakdown } from './issueTypeBreakdown';
+import type { SprintMetricCompletionBasis } from './sprintMetricCompletionBasis';
 
 export interface SprintMetric {
   sprintId: number;
@@ -21,6 +22,8 @@ export interface SprintMetric {
   completedStoryPoints: number;
   /** Percentage of issues completed (0-100) */
   completionRate: number;
+  /** Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches. */
+  completionBasis: SprintMetricCompletionBasis;
   /** Story points completed in this sprint */
   velocity: number;
   /** Number of issues reopened after being marked done */

@@ -44,7 +44,7 @@ interface AdminProjectVisibilityRow {
 type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
 const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging"];
-const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency"];
+const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency", "sprintCompletion"];
 
 const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   cycleTime: { label: "Cycle Time", unit: "d" },
@@ -57,6 +57,7 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   blocked: { label: "Issues Bloqueados", unit: "% del WIP" },
   flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
   wipAging: { label: "WIP Aging", unit: "d" },
+  sprintCompletion: { label: "Sprint Completion", unit: "%" },
 };
 
 const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [

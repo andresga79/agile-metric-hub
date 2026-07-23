@@ -10,16 +10,17 @@ export interface EffectiveThreshold {
 
 async function ensureGlobalDefaultsSeeded(): Promise<void> {
   const existing = await db
-    .select({ id: defaultMetricThresholdsTable.id })
+    .select({ metric: defaultMetricThresholdsTable.metric })
     .from(defaultMetricThresholdsTable)
-    .where(isNull(defaultMetricThresholdsTable.projectId))
-    .limit(1);
+    .where(isNull(defaultMetricThresholdsTable.projectId));
 
-  if (existing.length > 0) return;
+  const existingMetrics = new Set(existing.map((r) => r.metric));
+  const missing = DEFAULT_HEALTH_THRESHOLDS.filter((t) => !existingMetrics.has(t.metric));
+  if (missing.length === 0) return;
 
   await db
     .insert(defaultMetricThresholdsTable)
-    .values(DEFAULT_HEALTH_THRESHOLDS.map((threshold) => ({
+    .values(missing.map((threshold) => ({
       metric: threshold.metric,
       projectId: null,
       goodValue: String(threshold.goodValue),

@@ -419,6 +419,12 @@
   "page.sprints.startDate": "Inicio",
   "page.sprints.endDate": "Fin",
   "page.sprints.breakdownCol": "Desglose",
+  "page.sprints.truncated": "Mostrando {{shown}} de {{total}} sprints en el período.",
+  "page.sprints.closedOnly": "Sprints cerrados",
+  "page.sprints.closedPlusActive": "Sprints cerrados + {{name}} en curso",
+  "page.sprints.basisPoints": "Calculado sobre story points",
+  "page.sprints.basisIssues": "Calculado sobre cantidad de issues (sin story points cargados)",
+  "page.sprints.otherAbbrev": "Otro",
 
   "page.kanban.loading": "Cargando métricas Kanban...",
   "page.kanban.notFound": "Proyecto no encontrado",

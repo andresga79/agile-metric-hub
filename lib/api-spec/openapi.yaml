@@ -1404,8 +1404,8 @@ components:
       type: object
       required:
         [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
-         completedIssues, completedStoryPoints, completionRate, velocity, reopenedCount,
-         avgCycleTimeDays, breakdown]
+         completedIssues, completedStoryPoints, completionRate, completionBasis, velocity,
+         reopenedCount, avgCycleTimeDays, breakdown]
       properties:
         sprintId:
           type: integer
@@ -1428,6 +1428,10 @@ components:
         completionRate:
           type: number
           description: Percentage of issues completed (0-100)
+        completionBasis:
+          type: string
+          enum: [storyPoints, issueCount]
+          description: Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches.
         velocity:
           type: number
           description: Story points completed in this sprint
@@ -1456,10 +1460,11 @@ components:
 
     SprintMetricsSummary:
       type: object
-      required: [totalSprints, avgVelocity, avgCompletionRate, avgCycleTimeDays, totalCompletedStoryPoints]
+      required: [totalSprints, avgVelocity, avgCompletionRate, avgCycleTimeDays, totalCompletedStoryPoints, totalSprintsInPeriod]
       properties:
         totalSprints:
           type: integer
+          description: Closed sprints the averages below are computed from. An active sprint (if any) is included in the top-level `sprints` array but excluded here — it's still in progress, so folding its partial numbers into these averages would misrepresent them as a decline.
         avgVelocity:
           type: number
         avgCompletionRate:
@@ -1468,6 +1473,9 @@ components:
           type: ["number", "null"]
         totalCompletedStoryPoints:
           type: number
+        totalSprintsInPeriod:
+          type: integer
+          description: How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off.
 
     KanbanMetricsResponse:
       type: object

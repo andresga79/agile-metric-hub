@@ -52,4 +52,7 @@ export const DEFAULT_HEALTH_THRESHOLDS: {
   { metric: "blocked", goodValue: 0, warningValue: 15 },
   { metric: "flowLoad", goodValue: 1.2, warningValue: 2.0 },
   { metric: "wipAging", goodValue: 3, warningValue: 14 },
+  // % of committed story points (or issue count, if the sprint has none logged) completed by
+  // sprint close. Previously hardcoded in project-sprints.tsx.
+  { metric: "sprintCompletion", goodValue: 80, warningValue: 50 },
 ];

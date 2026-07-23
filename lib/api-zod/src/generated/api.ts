@@ -444,6 +444,7 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "completedIssues": zod.number(),
   "completedStoryPoints": zod.number(),
   "completionRate": zod.number().describe('Percentage of issues completed (0-100)'),
+  "completionBasis": zod.enum(['storyPoints', 'issueCount']).describe('Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints\' rates aren\'t comparable unless the basis matches.'),
   "velocity": zod.number().describe('Story points completed in this sprint'),
   "reopenedCount": zod.number().describe('Number of issues reopened after being marked done'),
   "avgCycleTimeDays": zod.number().nullable(),
@@ -456,11 +457,12 @@ export const GetProjectSprintMetricsResponse = zod.object({
 })
 })),
   "summary": zod.object({
-  "totalSprints": zod.number(),
+  "totalSprints": zod.number().describe('Closed sprints the averages below are computed from. An active sprint (if any) is included in the top-level `sprints` array but excluded here — it\'s still in progress, so folding its partial numbers into these averages would misrepresent them as a decline.'),
   "avgVelocity": zod.number(),
   "avgCompletionRate": zod.number(),
   "avgCycleTimeDays": zod.number().nullable(),
-  "totalCompletedStoryPoints": zod.number()
+  "totalCompletedStoryPoints": zod.number(),
+  "totalSprintsInPeriod": zod.number().describe('How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off.')
 })
 })
 

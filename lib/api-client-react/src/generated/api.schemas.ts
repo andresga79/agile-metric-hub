@@ -525,6 +525,17 @@ export interface QaRejectedResponse {
   linkedBugs: LinkedBug[];
 }
 
+/**
+ * Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches.
+ */
+export type SprintMetricCompletionBasis = typeof SprintMetricCompletionBasis[keyof typeof SprintMetricCompletionBasis];
+
+
+export const SprintMetricCompletionBasis = {
+  storyPoints: 'storyPoints',
+  issueCount: 'issueCount',
+} as const;
+
 export interface IssueTypeBreakdown {
   Story: number;
   Bug: number;
@@ -547,6 +558,8 @@ export interface SprintMetric {
   completedStoryPoints: number;
   /** Percentage of issues completed (0-100) */
   completionRate: number;
+  /** Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches. */
+  completionBasis: SprintMetricCompletionBasis;
   /** Story points completed in this sprint */
   velocity: number;
   /** Number of issues reopened after being marked done */
@@ -557,12 +570,15 @@ export interface SprintMetric {
 }
 
 export interface SprintMetricsSummary {
+  /** Closed sprints the averages below are computed from. An active sprint (if any) is included in the top-level `sprints` array but excluded here — it's still in progress, so folding its partial numbers into these averages would misrepresent them as a decline. */
   totalSprints: number;
   avgVelocity: number;
   avgCompletionRate: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
   totalCompletedStoryPoints: number;
+  /** How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off. */
+  totalSprintsInPeriod: number;
 }
 
 export interface SprintMetricsResponse {

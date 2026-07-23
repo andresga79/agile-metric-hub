@@ -12,17 +12,23 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
     .where(isNull(defaultMetricThresholdsTable.projectId))
     .orderBy(defaultMetricThresholdsTable.metric);
 
-  if (rows.length === 0) {
+  // Seed only the metrics that aren't already there yet, not just on a fully-empty table — a
+  // metric added to DEFAULT_HEALTH_THRESHOLDS after this table was first seeded (e.g.
+  // sprintCompletion) would otherwise never appear until someone truncates the whole table.
+  const existingMetrics = new Set(rows.map((r) => r.metric));
+  const missing = DEFAULT_HEALTH_THRESHOLDS.filter((t) => !existingMetrics.has(t.metric));
+
+  if (missing.length > 0) {
     const inserted = await db
       .insert(defaultMetricThresholdsTable)
-      .values(DEFAULT_HEALTH_THRESHOLDS.map((threshold) => ({
+      .values(missing.map((threshold) => ({
         metric: threshold.metric,
         projectId: null,
         goodValue: String(threshold.goodValue),
         warningValue: String(threshold.warningValue),
       })))
       .returning();
-    res.json(inserted);
+    res.json([...rows, ...inserted].sort((a, b) => a.metric.localeCompare(b.metric)));
     return;
   }
 
