@@ -1,5 +1,10 @@
 # Session Log — Agile Metric Hub (2026-07-21 al 2026-07-24)
 
+> **Estado al último corte (2026-07-24):** todas las secciones de la UI revisadas y corregidas.
+> Se hizo una auditoría crítica del proyecto → `MEJORAS-PROPUESTAS.md` (27 mejoras priorizadas) y
+> se implementó el Tier 1 y Tier 2 (ver sección 8). Único pendiente inmediato: activar el CI
+> (QA-2, parkeado por permisos — sección 8). Backlog restante: Tier 3 (Seguridad) y Tier 4.
+
 Registro de todo lo hecho para poder continuar entre sesiones y entre PCs sin perder
 contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión, y qué
 queda pendiente. **Este archivo se actualiza cada vez que se retoma el trabajo** —
@@ -37,6 +42,19 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `0840b72` | fix: remove broken PDF export from project report |
 | `cdaf17c` | feat: add Health Score and QA rejection rate to project report |
 | `b64980a` | feat: add risk/health/QA KPIs and fix 90d mislabel on Resumen Ejecutivo |
+| `3b3adcf` | docs: add critical improvement audit (MEJORAS-PROPUESTAS.md) |
+| `acf719a` | docs: add adjusted priority plan for demo + trust-the-numbers context |
+| `1b6808a` | fix: repair broken period-over-period comparison in Analytics (DAT-2) |
+| `5ad1436` | refactor: rename "DORA Score" to Flow Health Score, remove dead DORA object (MET-1) |
+| `3edb795` | docs: add FE-6 (Report stuck on Cargando... after failed fetch) |
+| `5fb063b` | test: add first unit test suite for pure metrics logic — vitest (QA-1) |
+| `57af2bc` | docs: add METRICS.md documenting every metric's real formula (DOC-1) |
+| `8f31da0` | fix: don't overwrite good portfolio rows with nulls on timeout/error (DAT-4) |
+| `7bb2ac4` | fix: model jira_cache in Drizzle schema so drizzle-kit won't drop it (DAT-3) |
+| `2a74f53` | feat: add global Express error handler + JSON 404 (QA-4) |
+| `a9cec98` | chore: enable TypeScript strict mode (QA-3, part 1) |
+| `f2a3282` | chore: add ESLint baseline (QA-3, part 2) |
+| *(parkeado en rama `ci-workflow`, no en main)* | ci: GitHub Actions workflow typecheck+test (QA-2) — ver sección 8 |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -57,8 +75,8 @@ Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p 
 - **pnpm 12 (reescrito en Rust) necesita `ca-certificates`** — si corrés `pnpm install` dentro de una imagen `node:*-slim` y falla con "No CA certificates were loaded", instalar `ca-certificates` primero. Ya está arreglado dentro de `docker/api/Dockerfile` y `docker/web/Dockerfile`.
 - **`pnpm-workspace.yaml` referencia `lib/integrations/*`** pero esa carpeta no existe en el repo (ver sección "Pendiente" — vale la pena que el equipo la cree o saque la referencia). Los Dockerfiles ya tienen un `mkdir -p lib/integrations` como parche; si corrés `pnpm install` fuera de Docker, hacé lo mismo a mano.
 - **El script `codegen` de `lib/api-spec/package.json`** termina con `pnpm -w run typecheck:libs`, y esa sintaxis `-w` no la reconoce esta versión de pnpm (error "unexpected argument '-w'"). El propio `orval` (la generación de tipos) sí corre bien antes de ese error — simplemente correr `pnpm run typecheck:libs` a mano después si hace falta.
-- **`drizzle-kit push` es peligroso en este repo**: la tabla `jira_cache` se crea con SQL crudo en `artifacts/api-server/src/lib/jira-cache.ts`, no está en el schema de Drizzle. Cualquier `drizzle-kit push` va a proponer **borrarla** (con todos sus datos cacheados). Si hay que migrar el schema, mejor usar SQL dirigido (`ALTER TABLE ...`) contra la tabla puntual que cambió, no `drizzle-kit push` a ciegas.
-- **`pnpm install` (sin `--frozen-lockfile`) puede escribir un `pnpm-lock.yaml` que el propio `pnpm install --frozen-lockfile` rechaza después** — visto al sacar la dependencia `jspdf`: el install normal agregó una entrada espuria `react: specifier '>=18'` bajo `lib/api-client-react` (que solo lo declara como `peerDependencies`, nunca como dependency directa), y esa entrada rompía el chequeo estricto de Docker (`ERR_PNPM_OUTDATED_LOCKFILE`, "1 dependency was removed: react@>=18") aunque `--lockfile-only` la "confirmara" como al día. Se arregló borrando esas 3 líneas a mano del lockfile. Después de tocar dependencias, correr `pnpm install --frozen-lockfile` localmente (no solo `pnpm install` a secas) antes de buildear Docker, para agarrar esto temprano.
+- **`drizzle-kit push` ya NO borra `jira_cache`** (arreglado en DAT-3, commit `7bb2ac4`): ahora la tabla está modelada en `lib/db/src/schema/jira-cache.ts`. Igual seguir con cuidado con `drizzle-kit push` en general (revisar el diff que propone antes de aplicar).
+- **⚠️ Gotcha recurrente del lockfile (pasa CADA vez que se toca una dependencia):** `pnpm install` (sin `--frozen-lockfile`) reinyecta una entrada espuria `react: specifier '>=18'` bajo `lib/api-client-react` en `pnpm-lock.yaml` (ese paquete solo declara `react` como `peerDependencies`, nunca como dependency directa). Esa entrada hace **fallar** `pnpm install --frozen-lockfile` — la ruta que usa el build de Docker — con `ERR_PNPM_OUTDATED_LOCKFILE` ("1 dependency was removed: react@>=18"). **Ya pasó 4+ veces** (al sacar jspdf, al agregar vitest, al agregar eslint x2). Fix: borrar a mano las 3 líneas `react:` / `specifier: '>=18'` / `version: 19.1.0` del bloque `lib/api-client-react:` en el lockfile, y confirmar con `pnpm install --frozen-lockfile`. **Siempre** correr `--frozen-lockfile` localmente después de tocar deps, antes de commitear.
 
 ## 2. Metodología seguida en cada revisión de sección
 
@@ -236,9 +254,11 @@ se agrega una pestaña, seguir la misma dinámica de la sección 2.
   si se vuelve a tocar alguno de los tres.
 - `lib/integrations/` referenciada en `pnpm-workspace.yaml` pero inexistente en el repo — o se crea
   con algo real, o se saca la referencia del workspace glob.
-- No hay tests automatizados que hubieran atrapado ninguno de los bugs de la sección 4 — vale la
-  pena considerar agregar al menos tests unitarios para `getCycleTimeDays`, `countReopenedIssues`,
-  y el merge de `getEffectiveThresholds`, ya que son los puntos que más se repitieron rotos.
+- ~~No hay tests automatizados~~ — **resuelto parcialmente** (QA-1): ya hay 22 tests unitarios de
+  la lógica pura de métricas en `artifacts/api-server/src/lib/__tests__/metrics-logic.test.ts`
+  (`pnpm --filter @workspace/api-server test`). Faltan los que dependen de estado async
+  (`getCycleTimeDays`, `getLeadTimeDays`, `countReopenedIssues`) — necesitan mockear
+  `getStatusCategoryMap`; quedaron para una segunda tanda.
 
 ## 7. Cómo retomar
 
@@ -247,8 +267,54 @@ se agrega una pestaña, seguir la misma dinámica de la sección 2.
 2. Levantar el entorno (sección 1) — `docker compose up -d --build`.
 3. Confirmar que los 17 thresholds están sembrados: `GET /api/admin/metric-thresholds` (o mirar
    la pestaña Admin → Health en el navegador).
-4. Elegir una sección de la lista de "todavía no revisado" (sección 5: QA Rechazados, o el
-   Reporte/PDF en sí) y pedir la misma dinámica: "revisa X y hazme una propuesta" — el proceso
-   de la sección 2 se puede repetir tal cual.
+4. Todas las secciones de la UI ya fueron revisadas (sección 5). El trabajo pendiente ahora es el
+   **backlog de mejoras** en `MEJORAS-PROPUESTAS.md` (ver sección 8): elegir un ítem del plan
+   ajustado (Tier 3 Seguridad, o Tier 4) y seguir la misma dinámica de la sección 2.
 5. Antes de cortar la sesión, **actualizar este archivo** (commits nuevos, bugs nuevos, qué quedó
    cubierto) y pushearlo — es lo que le permitió a la sesión anterior seguir sin perder contexto.
+
+## 8. Fase de auditoría crítica y mejoras (2026-07-24)
+
+Después de revisar todas las secciones, se hizo una **auditoría crítica de todo el proyecto**
+(seguridad, fiabilidad de datos, testing/CI, arquitectura frontend, metodología de métricas, ops,
+deuda técnica), documentada en **`MEJORAS-PROPUESTAS.md`** (27 hallazgos con impacto/esfuerzo y
+evidencia `archivo:línea`). Contexto acordado con el usuario: **app en demo, sin desplegar, objetivo
+= confiar en los números**, así que se reordenó en 4 tiers (ver "Plan ajustado" en ese archivo) —
+Seguridad pasa a ser un **gate previo al primer deploy real**, no lo urgente ahora.
+
+**Implementado y subido en esta fase:**
+- **DAT-2** (`1b6808a`) — comparación período-anterior de Analíticas estaba rota en "3m" (el fetch
+  `periodDays*2=180` se capaba a 90); ahora usa `getResolvedJiraIssuesInRange`.
+- **MET-1** (`5ad1436`) — "DORA Score" era un nombre engañoso (no es DORA real, solo flujo de Jira):
+  renombrado a **Flow Health Score**; además se eliminó el objeto `dora` muerto de `metrics.ts` +
+  del contrato OpenAPI + se regeneró el cliente. Ver `METRICS.md`.
+- **QA-1** (`5fb063b`) — primer suite de tests del repo: **vitest** en `artifacts/api-server`, 22
+  tests de la lógica pura de métricas (incl. guard de regresión del sign-bug de `normalize`).
+- **DOC-1** (`57af2bc`) — **`METRICS.md`**: documenta la fórmula REAL de cada métrica + caveats
+  transversales (tope 90d, dependencia del changelog, truncamiento ~100/semana, Flow Health ≠ DORA).
+- **DAT-4** (`8f31da0`) — timeout/error de portfolio ya no pisa las filas buenas con `null` (se
+  filtran antes del upsert; se loguean los proyectos saltados).
+- **DAT-3** (`7bb2ac4`) — `jira_cache` modelada en el schema de Drizzle → `drizzle-kit push` ya no
+  propone borrarla.
+- **QA-4** (`2a74f53`) — error handler global de Express + 404 JSON (antes: HTML 500/404 que el
+  cliente no sabía parsear).
+- **QA-3** (`a9cec98` + `f2a3282`) — `strict: true` de TS (compilaba limpio, faltaba solo
+  `strictFunctionTypes`) + **baseline de ESLint** (`pnpm lint` → 0 errores / 114 warnings; lenient
+  a propósito, no fuerza limpiar los ~45 `any` de golpe).
+
+**⏸️ QA-2 (CI) — PENDIENTE, parkeado:** el workflow de GitHub Actions (typecheck + test) está
+escrito y verificado localmente, pero **NO se pudo pushear**: el token OAuth de `gh` no tiene el
+scope `workflow` (probablemente requiere aprobación de admin de la org). El commit quedó guardado
+en la **rama local `ci-workflow`** (no en `main`), y el contenido está para pegar por la UI web de
+GitHub (Add file → `.github/workflows/ci.yml`). **Cómo retomar:** o se aprueba el scope `workflow`
+para la app de `gh` y se pushea desde una terminal, o se crea el archivo por la web. Cuando se
+active, conviene que el workflow corra **typecheck + test + lint** (el `ci.yml` parkeado solo tiene
+typecheck+test; falta sumar `pnpm lint`).
+
+**Nuevos comandos útiles:** `pnpm --filter @workspace/api-server test` (tests), `pnpm lint`
+(ESLint). Ambos pasan hoy.
+
+**Backlog restante** (en `MEJORAS-PROPUESTAS.md`, no empezado): Tier 3 = Seguridad (SEC-1 secreto
+JWT hardcodeado, SEC-2 admin/admin123, SEC-3 RBAC solo client-side, SEC-4 rate limit/helmet/CORS) —
+gate antes de exponer. Tier 4 = FE-1/2/3 (cliente tipado esquivado, `any`, duplicación),
+DEU-1/2/4 (god-files, `getISOWeek` x5, mockup-sandbox muerto), OPS-1/2, DAT-1/5, FE-4/5/6.
