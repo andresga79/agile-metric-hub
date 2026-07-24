@@ -1,4 +1,4 @@
-# Session Log — Agile Metric Hub (2026-07-21 al 2026-07-23)
+# Session Log — Agile Metric Hub (2026-07-21 al 2026-07-24)
 
 Registro de todo lo hecho para poder continuar entre sesiones y entre PCs sin perder
 contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión, y qué
@@ -34,6 +34,9 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `5f02cf1` | docs: mark Flow review as done in session log |
 | `16e502f` | fix: Evolution page ignoring a project's own admin threshold override |
 | `afc3981` | fix: QA Rechazados — acotar transiciones al período y no perder issues abiertos de larga duración |
+| `0840b72` | fix: remove broken PDF export from project report |
+| `cdaf17c` | feat: add Health Score and QA rejection rate to project report |
+| `b64980a` | feat: add risk/health/QA KPIs and fix 90d mislabel on Resumen Ejecutivo |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -184,17 +187,40 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     duplicara Cycle Time/CFR dos veces) y `overallRejectionRate` de `/qa-rejected/:period` (la métrica
     recién corregida en la fila 17). Verificado en vivo: OLP muestra Health Score 21/100 y Tasa de
     Rechazo QA 8.8%, coincidiendo con lo que muestran Health y QA Rechazados por separado.
+20. **Resumen Ejecutivo: "Throughput (30d)" y el tooltip de la tabla decían 30 días**, siendo que
+    el dato real siempre fue de 90 (`PORTFOLIO_METRICS_PERIOD_DAYS` en `portfolio-cache.ts`). Solo
+    texto, corregido en ambos locales.
+21. **`getJiraIssuesForProject` tiene un límite duro de 90 días** (`JIRA_MAX_LOOKBACK_DAYS`) que
+    trunca en silencio cualquier ventana más larga — no es un bug nuevo (Forecast ya lo respeta a
+    propósito, `forecast.ts:89-93`), pero es la primera vez que alguien pidió más de 90 días
+    (`getJiraIssuesForProject(id, 180, ...)` al construir la comparación "período anterior" del
+    Resumen Ejecutivo) y el resultado fue silencioso: `throughputPrevious` daba 0 para OLP aunque
+    Jira mostraba decenas de issues resueltos en la ventana 90-180d. **Ojo con esto para cualquier
+    trabajo futuro que necesite mirar más de 90 días atrás** — la solución no fue subir el límite
+    global (arriesgaba cambiar Forecast/Analíticas sin probarlos) sino agregar
+    `getResolvedJiraIssuesInRange(projectId, fromDaysAgo, toDaysAgo, options)` en `lib/jira.ts`,
+    una función aparte que sí permite un rango arbitrario, pensada solo para comparaciones
+    históricas tipo "período anterior".
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
-`portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
-Flow, Evolución, QA Rechazados, y Reporte (`project-report.tsx` — CFD + `/members` + `/analytics`
-ya revisados a fondo por separado; se eliminó la exportación a PDF y se agregaron tarjetas de Health
-Score/tasa de rechazo QA, ver filas 18–19 de la sección 4).
+`portfolio-cache.ts` — segunda pasada: se corrigió el mislabel de 30d/90d y se agregaron 3 KPIs
+nuevos con tendencia vs. período anterior, filas 20-21 de la sección 4), Health, Team, Sprints,
+Analíticas (incluye SLA), Kanban Weekly, Forecast, Flow, Evolución, QA Rechazados, y Reporte
+(`project-report.tsx` — CFD + `/members` + `/analytics` ya revisados a fondo por separado; se
+eliminó la exportación a PDF y se agregaron tarjetas de Health Score/tasa de rechazo QA, ver filas
+18–19 de la sección 4).
 
 `FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
 arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
+
+`portfolio_cache` ahora tiene 7 columnas nuevas (`health_score`, `qa_rejection_rate`, y las 5
+variantes `*_previous`) — se migran solas al arrancar el API, mismo patrón idempotente de siempre.
+`normalize()` (proyecta un valor crudo a un score 0-100 contra los umbrales de Admin) y
+`computeQaRejectionRate()` (tasa de rechazo de QA acotada a una ventana) ahora viven como helpers
+compartidos en `health-thresholds.ts` y `jira.ts` respectivamente — `project-health.ts` y
+`portfolio-cache.ts` usan la misma implementación de `normalize()`, en vez de cada uno con su copia.
 
 **Todas las secciones de la lista original ya fueron revisadas.** Si aparece una sección nueva o
 se agrega una pestaña, seguir la misma dinámica de la sección 2.
