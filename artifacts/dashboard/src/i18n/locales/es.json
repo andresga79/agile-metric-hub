@@ -335,9 +335,7 @@
 
   "page.report.loading": "Cargando...",
   "page.report.title": "Reporte",
-  "page.report.subtitle": "Exportar métricas del proyecto como PDF",
-  "page.report.generating": "Generando...",
-  "page.report.pdf": "PDF",
+  "page.report.subtitle": "Resumen de métricas del proyecto",
   "page.report.reportTitle": "Reporte del Proyecto",
   "page.report.throughput": "Throughput",
   "page.report.cycleTime": "Cycle Time",

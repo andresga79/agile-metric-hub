@@ -1,13 +1,10 @@
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey, useGetProjectMetrics, getGetProjectMetricsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Download, Users } from "lucide-react";
+import { ArrowLeft, Users } from "lucide-react";
 import CfdChart from "@/components/cfd-chart";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
-import { toast } from "@/hooks/use-toast";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
 
@@ -17,8 +14,6 @@ export default function ProjectReport() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
-  const [generating, setGenerating] = useState(false);
-  const reportRef = useRef<HTMLDivElement>(null);
   const [cfdData, setCfdData] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
@@ -103,47 +98,6 @@ export default function ProjectReport() {
     };
   }, [projectId, period, token]);
 
-  const handleExport = async () => {
-    if (!reportRef.current) return;
-    setGenerating(true);
-    try {
-      await new Promise((r) => setTimeout(r, 300));
-
-      const canvas = await html2canvas(reportRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * pageWidth) / canvas.width;
-
-      let heightLeft = imgHeight;
-      let pos = 0;
-      pdf.addImage(imgData, "PNG", 0, pos, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        pos = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, pos, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`${project?.key ?? projectId}-report-${period}.pdf`);
-      toast({ title: "PDF exported successfully" });
-    } catch (e) {
-      console.error("PDF generation failed", e);
-      toast({ title: "PDF export failed", description: "Check the console for details", variant: "destructive" });
-    }
-    setGenerating(false);
-  };
-
   if (loading) return <div>{t('common.loading')}</div>;
   if (!project) return <div>{t('page.team.notFound')}</div>;
   if (error) return <div>{error}</div>;
@@ -176,20 +130,12 @@ export default function ProjectReport() {
               </button>
             ))}
           </div>
-          <button
-            onClick={handleExport}
-            disabled={generating || !metrics}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Download size={14} />
-            {generating ? t('page.report.generating') : t('page.report.pdf')}
-          </button>
         </div>
       </div>
 
       <ProjectTabs projectId={projectId!} active="report" />
 
-      <div ref={reportRef} className="space-y-4 bg-white text-black p-8 rounded-lg">
+      <div className="space-y-4 bg-white text-black p-8 rounded-lg">
         <div className="text-center border-b border-gray-300 pb-4 mb-4">
           <h2 className="text-2xl font-bold">{project.name}</h2>
           <p className="text-sm text-gray-500">{t('page.report.reportTitle')} — {period.toUpperCase()}</p>
