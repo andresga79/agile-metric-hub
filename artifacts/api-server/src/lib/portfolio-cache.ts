@@ -245,6 +245,11 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
       await listJiraProjects({ forceRefresh: options?.forceRefresh })
     );
     const portfolio: Array<Record<string, unknown>> = [];
+    // Projects whose calc timed out or threw. We deliberately do NOT upsert these:
+    // writing an all-null placeholder row would overwrite the project's last known-good
+    // cached values with zeros/blanks on a transient Jira hiccup. Skipping the write
+    // preserves the previous row instead. Tracked here so the skip is logged, not silent.
+    const failedProjectIds: string[] = [];
 
     // Keep concurrency low so Jira searches don't trip the upstream 30s abort.
     const batchSize = 3;
@@ -283,9 +288,21 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
 
       for (const result of results) {
         if (result.status === "fulfilled" && result.value !== null) {
-          portfolio.push(result.value);
+          const row = result.value;
+          if (row.error) {
+            failedProjectIds.push(String(row.projectId));
+          } else {
+            portfolio.push(row);
+          }
         }
       }
+    }
+
+    if (failedProjectIds.length > 0) {
+      logger.warn(
+        { failedProjectIds, count: failedProjectIds.length },
+        "Portfolio calc: some projects timed out or errored; keeping their previous cached rows (not overwriting with nulls)"
+      );
     }
 
     // Sort by throughput (highest first)
