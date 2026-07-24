@@ -26,6 +26,13 @@ router.get("/portfolio", requireAuth, async (_req, res): Promise<void> => {
       throughput: item.throughput,
       cycleTimeP50: item.cycleTimeP50 ? Number(item.cycleTimeP50) : null,
       leadTimeAvg: item.leadTimeAvg ? Number(item.leadTimeAvg) : null,
+      healthScore: item.healthScore ?? null,
+      qaRejectionRate: item.qaRejectionRate ? Number(item.qaRejectionRate) : null,
+      throughputPrevious: item.throughputPrevious ?? null,
+      cycleTimeP50Previous: item.cycleTimeP50Previous ? Number(item.cycleTimeP50Previous) : null,
+      leadTimeAvgPrevious: item.leadTimeAvgPrevious ? Number(item.leadTimeAvgPrevious) : null,
+      healthScorePrevious: item.healthScorePrevious ?? null,
+      qaRejectionRatePrevious: item.qaRejectionRatePrevious ? Number(item.qaRejectionRatePrevious) : null,
       error: item.error,
       cachedAt: item.calculatedAt,
     }));

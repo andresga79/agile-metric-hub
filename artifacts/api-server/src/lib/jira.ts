@@ -360,6 +360,49 @@ export function countStandaloneBugs(
   ).length;
 }
 
+/** Lightweight QA rejection rate for a bounded [since, until) window — bounds BOTH the "entered
+ *  QA" transitions and the rejections themselves to the window, unlike a naive scan of full
+ *  issue-level changelogs (which lets stale, out-of-window transitions leak into the rate; see
+ *  qa-rejected.ts's fixed logic, which this mirrors for portfolio-wide/summary use). */
+export function computeQaRejectionRate(
+  issues: JiraIssue[],
+  qaStatusSet: Set<string>,
+  devStatusSet: Set<string>,
+  since: Date,
+  until?: Date
+): { totalIssuesThatEnteredQa: number; totalIssuesRejected: number; overallRejectionRate: number } {
+  const enteredKeys = new Set<string>();
+  const rejectedKeys = new Set<string>();
+
+  for (const issue of issues) {
+    const histories = issue.changelog?.histories ?? [];
+    for (const h of histories) {
+      const created = new Date(h.created);
+      if (created < since || (until && created >= until)) continue;
+      for (const item of h.items) {
+        if (item.field !== "status") continue;
+        const to = item.toString?.trim() ?? "";
+        if (to && qaStatusSet.has(to.toLowerCase())) {
+          enteredKeys.add(issue.key);
+        }
+      }
+    }
+    for (const r of findQaRejections(issue, qaStatusSet, devStatusSet)) {
+      if (r.transitionedAt < since || (until && r.transitionedAt >= until)) continue;
+      rejectedKeys.add(issue.key);
+    }
+  }
+
+  const totalIssuesThatEnteredQa = enteredKeys.size;
+  const totalIssuesRejected = rejectedKeys.size;
+  const overallRejectionRate =
+    totalIssuesThatEnteredQa > 0
+      ? Math.round((totalIssuesRejected / totalIssuesThatEnteredQa) * 1000) / 10
+      : 0;
+
+  return { totalIssuesThatEnteredQa, totalIssuesRejected, overallRejectionRate };
+}
+
 // --- End QA rejection detection ---
 
 /** Best effort resolution date: use resolutiondate, or find the last changelog
@@ -954,6 +997,92 @@ export async function getJiraIssuesForProject(
     const deduped = Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
 
     return deduped;
+  }, { forceRefresh: options?.forceRefresh });
+}
+
+/** Resolved issues only, in an arbitrary [now - fromDaysAgo, now - toDaysAgo) historical slice —
+ *  deliberately bypasses capLookbackDays/JIRA_MAX_LOOKBACK_DAYS (unlike getJiraIssuesForProject),
+ *  since that 90-day ceiling is specifically about "how far back a *current* activity fetch looks"
+ *  (Forecast and Analytics both build on it and were tuned to respect it). This is for a genuinely
+ *  historical comparison window instead — e.g. "the 90 days before the current period" — so it
+ *  needs to reach further back than 90 days without touching that shared constant. */
+export async function getResolvedJiraIssuesInRange(
+  projectId: string,
+  fromDaysAgo: number,
+  toDaysAgo: number,
+  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId);
+  }
+
+  const includeChangelog = options?.includeChangelog === true;
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  const cacheKey = `issues:${canonicalProjectId}:range:${fromDaysAgo}-${toDaysAgo}${includeChangelog ? ":changelog" : ""}`;
+
+  return withCache(cacheKey, async () => {
+    const now = new Date();
+    const rangeStart = new Date(now);
+    rangeStart.setDate(rangeStart.getDate() - fromDaysAgo);
+    const rangeEnd = new Date(now);
+    rangeEnd.setDate(rangeEnd.getDate() - toDaysAgo);
+
+    const fields =
+      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+    const maxResults = 100;
+    const MAX_PAGES = 5;
+    const CHUNK_DAYS = 7;
+    const CONCURRENCY = 4;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
+
+    const expandParam = includeChangelog ? "&expand=changelog" : "";
+
+    const fetchPage = async (from: string, to: string): Promise<JiraIssue[]> => {
+      const jql = encodeURIComponent(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate <= "${to}"`
+      );
+      const issues: JiraIssue[] = [];
+      let pageToken: string | null = null;
+      let pageCount = 0;
+      let lastSeenKey: string | null = null;
+
+      for (;;) {
+        if (++pageCount > MAX_PAGES) break;
+        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        );
+        const pageIssues = result.issues ?? [];
+        const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
+        if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
+          logger.warn({ projectId, from, to }, "Pagination stalled (Jira returned the same page again), stopping");
+          break;
+        }
+        issues.push(...pageIssues);
+        if (result.isLast || pageIssues.length < maxResults) break;
+        lastSeenKey = newLastKey;
+        pageToken = result.nextPageToken ?? null;
+        if (!pageToken) break;
+      }
+      return issues;
+    };
+
+    const chunks: Array<[Date, Date]> = [];
+    let chunkStart = rangeStart;
+    while (chunkStart <= rangeEnd) {
+      const chunkEnd = new Date(Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * ONE_DAY_MS, rangeEnd.getTime()));
+      chunks.push([chunkStart, chunkEnd]);
+      chunkStart = new Date(chunkEnd.getTime() + ONE_DAY_MS);
+    }
+
+    const allIssues: JiraIssue[] = [];
+    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+      const batch = chunks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(([from, to]) => fetchPage(formatDate(from), formatDate(to))));
+      for (const r of results) allIssues.push(...r);
+    }
+
+    return Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
   }, { forceRefresh: options?.forceRefresh });
 }
 

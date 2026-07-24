@@ -145,6 +145,16 @@ async function initDb() {
     `);
 
     await db.execute(sql`
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS health_score INTEGER;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS qa_rejection_rate NUMERIC;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS throughput_previous INTEGER;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS cycle_time_p50_previous NUMERIC;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS lead_time_avg_previous NUMERIC;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS health_score_previous INTEGER;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS qa_rejection_rate_previous NUMERIC;
+    `);
+
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS portfolio_metric_settings (
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL UNIQUE DEFAULT 'default',

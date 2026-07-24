@@ -4,6 +4,7 @@ import {
   listJiraProjects,
   getJiraIssuesForProject,
   getOpenIssuesForProject,
+  getResolvedJiraIssuesInRange,
   getLeadTimeDays,
   getCycleTimeDays,
   getResolutionDate,
@@ -11,13 +12,23 @@ import {
   isIssueInProgress,
   mapIssueType,
   getEffectiveIssueType,
+  getQaStatusSet,
+  getDevReturnStatusSet,
+  computeQaRejectionRate,
+  type JiraIssue,
 } from "./jira";
 import { filterVisibleProjects } from "./project-visibility";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
+import { getEffectiveThresholds, normalize } from "./health-thresholds";
 import { logger } from "./logger";
 import { desc, sql } from "drizzle-orm";
 
 const PORTFOLIO_METRICS_PERIOD_DAYS = 90;
+// getJiraIssuesForProject is hard-capped at 90 days back (JIRA_MAX_LOOKBACK_DAYS — Forecast and
+// Analytics both build on that cap and were tuned to respect it), so the "previous period" slice
+// (91-180 days ago) is fetched separately via getResolvedJiraIssuesInRange, which deliberately
+// bypasses that cap instead of trying to stretch a single fetch across both windows.
+const PORTFOLIO_TREND_WINDOW_DAYS = PORTFOLIO_METRICS_PERIOD_DAYS * 2;
 let isPortfolioRecalculating = false;
 let portfolioRecalculationStartedAt: Date | null = null;
 let portfolioRecalculationFinishedAt: Date | null = null;
@@ -32,86 +43,101 @@ export interface PortfolioRecalculationStatus {
   lastError: string | null;
 }
 
-async function getLightweightPortfolioMetrics(
-  issues: Awaited<ReturnType<typeof getJiraIssuesForProject>>,
-  allowedIssueTypes: string[]
-) {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - PORTFOLIO_METRICS_PERIOD_DAYS);
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = (sorted.length - 1) * 0.5;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  const value = lo === hi ? sorted[lo] : sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
+  return Math.round(value * 10) / 10;
+}
 
-  const filteredIssues = issues.filter((issue) =>
-    allowedIssueTypes.includes(getEffectiveIssueType(issue))
-  );
-
+/** Resolved-issue metrics for a single bounded [windowStart, windowEnd) slice. Called twice per
+ *  project — once for the current 90-day period, once for the previous one — so the KPI trend
+ *  arrows on the executive dashboard have something to compare against. */
+async function computeWindowMetrics(filteredIssues: JiraIssue[], windowStart: Date, windowEnd: Date) {
   const resolvedWithDates = await Promise.all(
     filteredIssues
       .filter((issue) => isIssueDone(issue))
-      .map(async (issue) => ({
-        issue,
-        resolvedAt: await getResolutionDate(issue),
-      }))
+      .map(async (issue) => ({ issue, resolvedAt: await getResolutionDate(issue) }))
   );
 
-  // Count only allowed issue types so portfolio totals match the Admin filter.
-  const allDone = resolvedWithDates.filter(
-    (entry) => entry.resolvedAt && entry.resolvedAt >= startDate
+  const inWindow = resolvedWithDates.filter(
+    (entry) => entry.resolvedAt && entry.resolvedAt >= windowStart && entry.resolvedAt < windowEnd
   );
-  const doneCount = allDone.length;
-
-  // Keep portfolio overview aligned with project detail metrics.
-  const resolved = allDone.map((entry) => entry.issue);
+  const resolved = inWindow.map((entry) => entry.issue);
 
   const leadTimes = (
     await Promise.all(resolved.map((issue) => getLeadTimeDays(issue)))
   ).filter((value): value is number => value !== null);
-
   const cycleTimes = (
     await Promise.all(resolved.map((issue) => getCycleTimeDays(issue)))
   ).filter((value): value is number => value !== null);
 
-  const averageLeadTime =
+  const leadTimeAvg =
     leadTimes.length > 0
-      ? Math.round(
-          (leadTimes.reduce((sum, value) => sum + value, 0) / leadTimes.length) * 10
-        ) / 10
+      ? Math.round((leadTimes.reduce((sum, value) => sum + value, 0) / leadTimes.length) * 10) / 10
       : null;
+  const cycleTimeP50 = median(cycleTimes);
 
-  const cycleTimeP50 = (() => {
-    if (cycleTimes.length === 0) return null;
-    const sorted = [...cycleTimes].sort((a, b) => a - b);
-    const idx = (sorted.length - 1) * 0.5;
-    const lo = Math.floor(idx);
-    const hi = Math.ceil(idx);
-    const value =
-      lo === hi
-        ? sorted[lo]
-        : sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
-    return Math.round(value * 10) / 10;
-  })();
+  const bugCount = resolved.filter((i) => mapIssueType(i.fields.issuetype.name) === "Bug").length;
+  const cfr = resolved.length > 0 ? (bugCount / resolved.length) * 100 : 0;
 
-  return {
-    doneCount,
-    resolvedCount: resolved.length,
-    cycleTimeP50,
-    leadTimeAvg: averageLeadTime,
-  };
+  const windowDays = Math.max(1, (windowEnd.getTime() - windowStart.getTime()) / 86400000);
+  const weeks = Math.max(1, Math.ceil(windowDays / 7));
+  const throughputPerWeek = resolved.length > 0 ? Math.round((resolved.length / weeks) * 10) / 10 : 0;
+
+  return { resolvedCount: resolved.length, cycleTimeP50, leadTimeAvg, cfr, throughputPerWeek };
+}
+
+/** Same DORA-style formula as project-health.ts's per-project score (throughput + cycle time +
+ *  CFR normalized against Admin -> Health thresholds, averaged) — kept in lockstep so a project's
+ *  row on the executive dashboard isn't measuring something different from its own Health tab. */
+function computeHealthScore(
+  throughputPerWeek: number,
+  cycleTimeP50: number | null,
+  cfr: number,
+  thresholds: Record<string, { goodValue: number; warningValue: number }>
+): number {
+  const throughputThreshold = thresholds.throughput ?? { goodValue: 10, warningValue: 5 };
+  const cycleTimeThreshold = thresholds.cycleTime ?? { goodValue: 15, warningValue: 25 };
+  const cfrThreshold = thresholds.cfr ?? { goodValue: 10, warningValue: 25 };
+
+  const freqScore = normalize(throughputPerWeek, throughputThreshold.warningValue, throughputThreshold.goodValue);
+  const ltScore = normalize(
+    cycleTimeP50 ?? cycleTimeThreshold.warningValue,
+    cycleTimeThreshold.warningValue,
+    cycleTimeThreshold.goodValue
+  );
+  const cfrScore = normalize(cfr, cfrThreshold.warningValue, cfrThreshold.goodValue);
+  return Math.round((freqScore + ltScore + cfrScore) / 3);
 }
 
 async function processProject(
   p: { id: string; key: string; name: string },
   allowedIssueTypes: string[],
+  qaStatusSet: Set<string>,
   options?: { forceRefresh?: boolean }
 ) {
   try {
-    // Merged with getOpenIssuesForProject (no date bound) so a ticket opened more than 90 days
-    // ago and still in progress doesn't silently vanish from the portfolio's WIP count — same fix
-    // already applied to the per-project pages (see metrics.ts's /issues/:period route).
-    const [issues, openIssues] = await Promise.all([
+    // Current period (0-90 days back, within getJiraIssuesForProject's hard cap) merged with
+    // getOpenIssuesForProject (no date bound, now with changelog too) so a ticket opened more
+    // than 90 days ago and still in progress or still cycling through QA doesn't silently vanish
+    // — same fix already applied to the per-project pages. Previous period (91-180 days back)
+    // needs its own fetch since the shared cap can't reach that far back in one call.
+    const [issues, openIssues, previousResolvedIssues, devStatusSet, thresholds] = await Promise.all([
       getJiraIssuesForProject(p.id, PORTFOLIO_METRICS_PERIOD_DAYS, {
         includeChangelog: true,
         forceRefresh: options?.forceRefresh,
       }),
-      getOpenIssuesForProject(p.id, { forceRefresh: options?.forceRefresh }),
+      getOpenIssuesForProject(p.id, { includeChangelog: true, forceRefresh: options?.forceRefresh }),
+      getResolvedJiraIssuesInRange(p.id, PORTFOLIO_TREND_WINDOW_DAYS, PORTFOLIO_METRICS_PERIOD_DAYS, {
+        includeChangelog: true,
+        forceRefresh: options?.forceRefresh,
+      }),
+      getDevReturnStatusSet(p.id),
+      getEffectiveThresholds(p.id),
     ]);
     const combinedIssues = Array.from(
       new Map([...issues, ...openIssues].map((issue) => [issue.id, issue])).values()
@@ -119,23 +145,60 @@ async function processProject(
     const filteredIssues = combinedIssues.filter((issue) =>
       allowedIssueTypes.includes(getEffectiveIssueType(issue))
     );
+    const previousFilteredIssues = previousResolvedIssues.filter((issue) =>
+      allowedIssueTypes.includes(getEffectiveIssueType(issue))
+    );
     const issueCount = filteredIssues.length;
     const inProgressCount = filteredIssues.filter((issue) => isIssueInProgress(issue)).length;
-    const { doneCount, resolvedCount, cycleTimeP50, leadTimeAvg } = await getLightweightPortfolioMetrics(
-      filteredIssues,
-      allowedIssueTypes
+
+    const now = new Date();
+    const currentStart = new Date(now);
+    currentStart.setDate(currentStart.getDate() - PORTFOLIO_METRICS_PERIOD_DAYS);
+    const previousStart = new Date(now);
+    previousStart.setDate(previousStart.getDate() - PORTFOLIO_TREND_WINDOW_DAYS);
+
+    const [current, previous] = await Promise.all([
+      computeWindowMetrics(filteredIssues, currentStart, now),
+      computeWindowMetrics(previousFilteredIssues, previousStart, currentStart),
+    ]);
+
+    // Health score and QA rejection rate mirror what a project's own /health and /qa-rejected
+    // tabs show (both work off ALL issue types, no Admin issue-type filter), so these use the
+    // unfiltered issue pools rather than the Admin issue-type filter to stay comparable with the
+    // per-project view. QA rejection scanning merges in the previous-period resolved issues too —
+    // an issue rejected from QA 100 days ago but resolved more recently would otherwise be missed
+    // by the current-period pool alone (approximation: an issue rejected long before the 180-day
+    // window and resolved even later would still be missed, but that's a rare shape in practice).
+    const healthScore = computeHealthScore(current.throughputPerWeek, current.cycleTimeP50, current.cfr, thresholds);
+    const healthScorePrevious = computeHealthScore(
+      previous.throughputPerWeek,
+      previous.cycleTimeP50,
+      previous.cfr,
+      thresholds
     );
+    const allIssuesForQaScan = Array.from(
+      new Map([...combinedIssues, ...previousResolvedIssues].map((issue) => [issue.id, issue])).values()
+    );
+    const currentQa = computeQaRejectionRate(allIssuesForQaScan, qaStatusSet, devStatusSet, currentStart, now);
+    const previousQa = computeQaRejectionRate(allIssuesForQaScan, qaStatusSet, devStatusSet, previousStart, currentStart);
 
     return {
       projectId: p.id,
       projectKey: p.key,
       projectName: p.name,
       issueCount,
-      doneCount,
+      doneCount: current.resolvedCount,
       inProgressCount,
-      throughput: resolvedCount,
-      cycleTimeP50,
-      leadTimeAvg,
+      throughput: current.resolvedCount,
+      cycleTimeP50: current.cycleTimeP50,
+      leadTimeAvg: current.leadTimeAvg,
+      healthScore,
+      qaRejectionRate: currentQa.overallRejectionRate,
+      throughputPrevious: previous.resolvedCount,
+      cycleTimeP50Previous: previous.cycleTimeP50,
+      leadTimeAvgPrevious: previous.leadTimeAvg,
+      healthScorePrevious,
+      qaRejectionRatePrevious: previousQa.overallRejectionRate,
       error: null,
     };
   } catch (err) {
@@ -150,6 +213,13 @@ async function processProject(
       throughput: 0,
       cycleTimeP50: null,
       leadTimeAvg: null,
+      healthScore: null,
+      qaRejectionRate: null,
+      throughputPrevious: null,
+      cycleTimeP50Previous: null,
+      leadTimeAvgPrevious: null,
+      healthScorePrevious: null,
+      qaRejectionRatePrevious: null,
       error: String(err),
     };
   }
@@ -169,6 +239,8 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
 
   try {
     const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
+    // Global (not per-project), so fetch once instead of once per project in the loop below.
+    const qaStatusSet = await getQaStatusSet();
     const jiraProjects = await filterVisibleProjects(
       await listJiraProjects({ forceRefresh: options?.forceRefresh })
     );
@@ -181,7 +253,7 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
       const results = await Promise.allSettled(
         batch.map((p) =>
           Promise.race<Record<string, unknown> | null>([
-            processProject(p, allowedIssueTypes, options),
+            processProject(p, allowedIssueTypes, qaStatusSet, options),
               new Promise<null>((resolve) =>
                 setTimeout(() => resolve(null), 120000)
               ).then(() => {
@@ -195,6 +267,13 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
                 throughput: 0,
                 cycleTimeP50: null,
                 leadTimeAvg: null,
+                healthScore: null,
+                qaRejectionRate: null,
+                throughputPrevious: null,
+                cycleTimeP50Previous: null,
+                leadTimeAvgPrevious: null,
+                healthScorePrevious: null,
+                qaRejectionRatePrevious: null,
                 error: "timeout",
               } as Record<string, unknown>;
             }),
@@ -228,6 +307,13 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
             throughput: item.throughput as number,
             cycleTimeP50: item.cycleTimeP50 as string,
             leadTimeAvg: item.leadTimeAvg as string,
+            healthScore: item.healthScore as number,
+            qaRejectionRate: item.qaRejectionRate as string,
+            throughputPrevious: item.throughputPrevious as number,
+            cycleTimeP50Previous: item.cycleTimeP50Previous as string,
+            leadTimeAvgPrevious: item.leadTimeAvgPrevious as string,
+            healthScorePrevious: item.healthScorePrevious as number,
+            qaRejectionRatePrevious: item.qaRejectionRatePrevious as string,
             error: item.error as string,
             calculatedAt: new Date(),
             updatedAt: new Date(),

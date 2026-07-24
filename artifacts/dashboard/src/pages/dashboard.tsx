@@ -7,7 +7,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MetricTooltip } from "@/components/metric-tooltip";
-import { Activity, Target, Clock, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal, Gauge } from "lucide-react";
+import { Activity, Target, Clock, AlertTriangle, LayoutDashboard, RefreshCw, MoreHorizontal, Gauge, HeartPulse, Ban, TrendingUp, TrendingDown } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useMemo } from "react";
@@ -58,6 +58,32 @@ function actionFromDims(dims: HealthDimension[]): string {
 
 function dimStatusIcon(s: DimStatus): string {
   return s === "ok" ? "✓" : s === "warn" ? "⚠" : "✗";
+}
+
+/** Small "vs. período anterior" delta shown under a KPI card. `lowerIsBetter` decides whether an
+ *  increase reads as green (e.g. Health Score) or red (e.g. Cycle Time, QA Rejection Rate). */
+function TrendIndicator({
+  current,
+  previous,
+  lowerIsBetter,
+}: {
+  current: number | null;
+  previous: number | null;
+  lowerIsBetter: boolean;
+}) {
+  if (current === null || previous === null || previous === 0) return null;
+  const deltaPct = ((current - previous) / Math.abs(previous)) * 100;
+  if (Math.abs(deltaPct) < 1) {
+    return <span className="text-muted-foreground">· sin cambios vs. período anterior</span>;
+  }
+  const improved = lowerIsBetter ? deltaPct < 0 : deltaPct > 0;
+  const Icon = deltaPct > 0 ? TrendingUp : TrendingDown;
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${improved ? "text-green-500" : "text-red-400"}`}>
+      <Icon size={11} />
+      {Math.abs(Math.round(deltaPct))}% vs. período anterior
+    </span>
+  );
 }
 
 export default function Dashboard() {
@@ -206,6 +232,7 @@ export default function Dashboard() {
     .sort((a, b) => b.doneCount - a.doneCount);
 
   const totalThroughput = filteredPortfolio.reduce((s, p) => s + p.doneCount, 0);
+  const totalThroughputPrevious = filteredPortfolio.reduce((s, p) => s + (p.throughputPrevious ?? 0), 0);
   const totalWip = filteredPortfolio.reduce((s, p) => s + p.inProgressCount, 0);
   const portfolioFlowLoad = totalThroughput > 0 ? totalWip / totalThroughput : null;
   const avgCycleP50 = (() => {
@@ -213,10 +240,35 @@ export default function Dashboard() {
     if (valid.length === 0) return null;
     return valid.reduce((s, p) => s + p.cycleTimeP50, 0) / valid.length;
   })();
+  const avgCycleP50Previous = (() => {
+    const valid = visiblePortfolio.filter((p) => p.cycleTimeP50Previous !== null && p.cycleTimeP50Previous !== undefined);
+    if (valid.length === 0) return null;
+    return valid.reduce((s, p) => s + p.cycleTimeP50Previous, 0) / valid.length;
+  })();
   const avgLeadTime = (() => {
     const valid = visiblePortfolio.filter((p) => p.leadTimeAvg !== null);
     if (valid.length === 0) return null;
     return valid.reduce((s, p) => s + p.leadTimeAvg, 0) / valid.length;
+  })();
+  const avgHealthScore = (() => {
+    const valid = visiblePortfolio.filter((p) => p.healthScore !== null && p.healthScore !== undefined);
+    if (valid.length === 0) return null;
+    return Math.round(valid.reduce((s, p) => s + p.healthScore, 0) / valid.length);
+  })();
+  const avgHealthScorePrevious = (() => {
+    const valid = visiblePortfolio.filter((p) => p.healthScorePrevious !== null && p.healthScorePrevious !== undefined);
+    if (valid.length === 0) return null;
+    return Math.round(valid.reduce((s, p) => s + p.healthScorePrevious, 0) / valid.length);
+  })();
+  const avgQaRejectionRate = (() => {
+    const valid = visiblePortfolio.filter((p) => p.qaRejectionRate !== null && p.qaRejectionRate !== undefined);
+    if (valid.length === 0) return null;
+    return Math.round((valid.reduce((s, p) => s + p.qaRejectionRate, 0) / valid.length) * 10) / 10;
+  })();
+  const avgQaRejectionRatePrevious = (() => {
+    const valid = visiblePortfolio.filter((p) => p.qaRejectionRatePrevious !== null && p.qaRejectionRatePrevious !== undefined);
+    if (valid.length === 0) return null;
+    return Math.round((valid.reduce((s, p) => s + p.qaRejectionRatePrevious, 0) / valid.length) * 10) / 10;
   })();
 
   const enrichedPortfolio = useMemo(() => {
@@ -306,6 +358,16 @@ export default function Dashboard() {
     });
   }, [filteredPortfolio, avgCycleP50, avgLeadTime, thresholds]);
 
+  const atRiskCounts = useMemo(() => {
+    let critical = 0;
+    let warning = 0;
+    for (const p of enrichedPortfolio) {
+      if (p.semaphor === "Rojo") critical++;
+      else if (p.semaphor === "Amarillo") warning++;
+    }
+    return { critical, warning };
+  }, [enrichedPortfolio]);
+
   return (
     <div className="space-y-8">
       {isMockData && (
@@ -350,7 +412,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t('page.dashboard.activeProjects')}<MetricTooltip description={t('tooltip.activeProjects')} /></CardTitle>
@@ -383,7 +445,10 @@ export default function Dashboard() {
                   : "-"}
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.startToFinish')}</p>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span>{t('page.dashboard.startToFinish')}</span>
+              <TrendIndicator current={avgCycleP50} previous={avgCycleP50Previous} lowerIsBetter={true} />
+            </p>
           </CardContent>
         </Card>
 
@@ -398,7 +463,10 @@ export default function Dashboard() {
             ) : (
               <div className="text-2xl font-bold">{totalThroughput}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">{t('page.dashboard.acrossProjects')}</p>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span>{t('page.dashboard.acrossProjects')}</span>
+              <TrendIndicator current={totalThroughput} previous={totalThroughputPrevious} lowerIsBetter={false} />
+            </p>
           </CardContent>
         </Card>
 
@@ -434,6 +502,69 @@ export default function Dashboard() {
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-1">Carga relativa del sistema (menor es mejor)</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Proyectos en Riesgo
+              <MetricTooltip description="Proyectos visibles cuyo semáforo está en Rojo o Amarillo en la tabla de abajo — necesitan atención." />
+            </CardTitle>
+            <AlertTriangle className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16 mb-1" />
+            ) : (
+              <div className="text-2xl font-bold">
+                <span className={atRiskCounts.critical > 0 ? "text-red-400" : ""}>{atRiskCounts.critical}</span>
+                {" Rojo · "}
+                <span className={atRiskCounts.warning > 0 ? "text-amber-600 dark:text-yellow-300" : ""}>{atRiskCounts.warning}</span>
+                {" Amarillo"}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">de {enrichedPortfolio.length} proyectos visibles</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Health Score Prom.
+              <MetricTooltip description="Promedio del DORA Score (Throughput + Cycle Time + Change Failure Rate, normalizados contra los umbrales de Admin -> Health) entre los proyectos visibles." />
+            </CardTitle>
+            <HeartPulse className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16 mb-1" />
+            ) : (
+              <div className="text-2xl font-bold">{avgHealthScore === null ? "—" : `${avgHealthScore}/100`}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <TrendIndicator current={avgHealthScore} previous={avgHealthScorePrevious} lowerIsBetter={false} />
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Tasa Rechazo QA Prom.
+              <MetricTooltip description="Promedio de la tasa de rechazo de QA (issues devueltos a desarrollo desde QA / issues que entraron a QA) entre los proyectos visibles." />
+            </CardTitle>
+            <Ban className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16 mb-1" />
+            ) : (
+              <div className="text-2xl font-bold">{avgQaRejectionRate === null ? "—" : `${avgQaRejectionRate}%`}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <TrendIndicator current={avgQaRejectionRate} previous={avgQaRejectionRatePrevious} lowerIsBetter={true} />
+            </p>
           </CardContent>
         </Card>
       </div>

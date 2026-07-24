@@ -12,7 +12,7 @@ import {
   mapIssueType,
   type JiraIssue,
 } from "../lib/jira";
-import { getEffectiveThresholds } from "../lib/health-thresholds";
+import { getEffectiveThresholds, normalize } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
 
@@ -24,19 +24,6 @@ interface HealthDimension {
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
-}
-
-// worst/best are reference points, not numerically ordered — worst maps to score 0, best to
-// score 100, regardless of whether worst > best (lower-is-better metric) or worst < best
-// (higher-is-better metric). The value is clamped into [worst, best] BEFORE computing the ratio,
-// so a value past the worst anchor can't wrap the fraction's sign and read back out as 100 — the
-// previous (bad, good, invert) version did exactly that for every lower-is-better metric whenever
-// the actual value was worse than the "warning" anchor.
-function normalize(value: number, worst: number, best: number): number {
-  if (worst === best) return 100;
-  const clampedValue = clamp(value, Math.min(worst, best), Math.max(worst, best));
-  const raw = ((clampedValue - worst) / (best - worst)) * 100;
-  return Math.round(clamp(raw, 0, 100));
 }
 
 router.get(
