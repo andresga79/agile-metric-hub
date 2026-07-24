@@ -55,6 +55,7 @@ Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p 
 - **`pnpm-workspace.yaml` referencia `lib/integrations/*`** pero esa carpeta no existe en el repo (ver sección "Pendiente" — vale la pena que el equipo la cree o saque la referencia). Los Dockerfiles ya tienen un `mkdir -p lib/integrations` como parche; si corrés `pnpm install` fuera de Docker, hacé lo mismo a mano.
 - **El script `codegen` de `lib/api-spec/package.json`** termina con `pnpm -w run typecheck:libs`, y esa sintaxis `-w` no la reconoce esta versión de pnpm (error "unexpected argument '-w'"). El propio `orval` (la generación de tipos) sí corre bien antes de ese error — simplemente correr `pnpm run typecheck:libs` a mano después si hace falta.
 - **`drizzle-kit push` es peligroso en este repo**: la tabla `jira_cache` se crea con SQL crudo en `artifacts/api-server/src/lib/jira-cache.ts`, no está en el schema de Drizzle. Cualquier `drizzle-kit push` va a proponer **borrarla** (con todos sus datos cacheados). Si hay que migrar el schema, mejor usar SQL dirigido (`ALTER TABLE ...`) contra la tabla puntual que cambió, no `drizzle-kit push` a ciegas.
+- **`pnpm install` (sin `--frozen-lockfile`) puede escribir un `pnpm-lock.yaml` que el propio `pnpm install --frozen-lockfile` rechaza después** — visto al sacar la dependencia `jspdf`: el install normal agregó una entrada espuria `react: specifier '>=18'` bajo `lib/api-client-react` (que solo lo declara como `peerDependencies`, nunca como dependency directa), y esa entrada rompía el chequeo estricto de Docker (`ERR_PNPM_OUTDATED_LOCKFILE`, "1 dependency was removed: react@>=18") aunque `--lockfile-only` la "confirmara" como al día. Se arregló borrando esas 3 líneas a mano del lockfile. Después de tocar dependencias, correr `pnpm install --frozen-lockfile` localmente (no solo `pnpm install` a secas) antes de buildear Docker, para agarrar esto temprano.
 
 ## 2. Metodología seguida en cada revisión de sección
 
@@ -164,21 +165,29 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     antigüedad. Además, issues abiertos creados antes de la ventana (pero todavía activos en QA)
     eran invisibles por completo, mismo patrón de la fila 3/12/15. Tras el fix: 7→3 rechazados,
     28→34 entraron a QA, tasa 25%→8.8% (número real de los últimos 30 días).
+18. **Exportar a PDF (Reporte) estaba completamente roto** (`project-report.tsx`) — usaba
+    `html2canvas` (sin mantenimiento) para capturar el DOM y `jsPDF` para pegarlo como imagen.
+    Confirmado en vivo: al hacer clic en "PDF" no generaba nada — consola tiraba
+    `Error: Attempting to parse an unsupported color function "oklch"`, porque Tailwind v4 (usado en
+    este proyecto) genera sus colores con `oklch()` y esa versión de `html2canvas` no lo soporta.
+    Se decidió **eliminar la función sin reemplazo** (el equipo no la necesita seguido; para un
+    reporte puntual alcanza con imprimir la página del navegador). Se sacó `handleExport`, el botón,
+    los imports de `html2canvas`/`jsPDF`, y la dependencia `jspdf` de `package.json` (se dejó
+    `html2canvas`, que todavía usa `project-detail.tsx` para descargar el gráfico como PNG — feature
+    aparte, no tocada).
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
 `portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
-Flow, Evolución, QA Rechazados, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD +
-`/members` + `/analytics`, los primeros dos ya revisados a fondo; `/analytics` también).
+Flow, Evolución, QA Rechazados, y Reporte (`project-report.tsx` — CFD + `/members` + `/analytics`
+ya revisados a fondo por separado; se eliminó la exportación a PDF, ver fila 18 de la sección 4).
 
 `FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
 arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
 
-**Todavía NO revisado con este mismo nivel de detalle** — candidato natural para continuar:
-- **Reporte** propiamente dicho más allá de CFD/members/analytics — la exportación a PDF en sí
-  (¿arma bien el layout con los datos ya corregidos? ¿hay algo hardcodeado ahí que no capturamos
-  al revisar los endpoints por separado?)
+**Todas las secciones de la lista original ya fueron revisadas.** Si aparece una sección nueva o
+se agrega una pestaña, seguir la misma dinámica de la sección 2.
 
 ## 6. Otras cosas que quedaron anotadas pero sin resolver (menor prioridad)
 
