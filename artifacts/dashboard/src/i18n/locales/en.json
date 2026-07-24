@@ -340,6 +340,8 @@
   "page.report.cycleTime": "Cycle Time",
   "page.report.leadTime": "Lead Time",
   "page.report.resolved": "Resolved",
+  "page.report.healthScore": "Health Score (DORA)",
+  "page.report.qaRejectionRate": "QA Rejection Rate",
   "page.report.percentiles": "Percentiles",
 
   "page.qa.loading": "Loading QA Quality data...",

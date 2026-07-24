@@ -17,6 +17,8 @@ export default function ProjectReport() {
   const [cfdData, setCfdData] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
+  const [healthScore, setHealthScore] = useState<number | null>(null);
+  const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const token = getAuthToken();
@@ -35,6 +37,8 @@ export default function ProjectReport() {
       setCfdData([]);
       setMembers([]);
       setTimeInStatus([]);
+      setHealthScore(null);
+      setQaRejectionRate(null);
       return;
     }
     if (!token) {
@@ -43,6 +47,8 @@ export default function ProjectReport() {
       setCfdData([]);
       setMembers([]);
       setTimeInStatus([]);
+      setHealthScore(null);
+      setQaRejectionRate(null);
       return;
     }
 
@@ -74,11 +80,30 @@ export default function ProjectReport() {
         if (!r.ok) throw new Error(`Analytics request failed: ${r.status}`);
         return r.json();
       }),
+      fetch(`/api/projects/${projectId}/health/${period}`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Health request failed: ${r.status}`);
+        return r.json();
+      }),
+      fetch(`/api/projects/${projectId}/qa-rejected/${period}`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`QA rejected request failed: ${r.status}`);
+        return r.json();
+      }),
     ])
-      .then(([cfd, memberRows, analytics]) => {
+      .then(([cfd, memberRows, analytics, health, qaRejected]) => {
         setCfdData(cfd?.dataPoints ?? []);
         setMembers(Array.isArray(memberRows) ? memberRows : []);
         setTimeInStatus(analytics?.timeInStatus ?? []);
+        const doraDimension = health?.dimensions?.find((d: any) => d.name === "DORA Score");
+        setHealthScore(typeof doraDimension?.value === "number" ? doraDimension.value : null);
+        setQaRejectionRate(
+          typeof qaRejected?.overallRejectionRate === "number" ? qaRejected.overallRejectionRate : null
+        );
       })
       .catch((err) => {
         console.error(err);
@@ -86,6 +111,8 @@ export default function ProjectReport() {
         setCfdData([]);
         setMembers([]);
         setTimeInStatus([]);
+        setHealthScore(null);
+        setQaRejectionRate(null);
       })
       .finally(() => {
         clearTimeout(timeout);
@@ -158,6 +185,14 @@ export default function ProjectReport() {
           <div className="border border-gray-200 rounded p-3">
             <div className="text-xs text-gray-500">{t('page.report.resolved')}</div>
             <div className="text-xl font-bold">{metrics?.resolvedCount ?? "—"}</div>
+          </div>
+          <div className="border border-gray-200 rounded p-3">
+            <div className="text-xs text-gray-500">{t('page.report.healthScore')}</div>
+            <div className="text-xl font-bold">{healthScore ?? "—"}{healthScore !== null ? "/100" : ""}</div>
+          </div>
+          <div className="border border-gray-200 rounded p-3">
+            <div className="text-xs text-gray-500">{t('page.report.qaRejectionRate')}</div>
+            <div className="text-xl font-bold">{qaRejectionRate ?? "—"}{qaRejectionRate !== null ? "%" : ""}</div>
           </div>
         </div>
 
