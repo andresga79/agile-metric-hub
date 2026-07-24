@@ -237,65 +237,6 @@ export interface Percentiles {
   p95: number;
 }
 
-export type DoraClassificationDeploymentFrequency = typeof DoraClassificationDeploymentFrequency[keyof typeof DoraClassificationDeploymentFrequency];
-
-
-export const DoraClassificationDeploymentFrequency = {
-  elite: 'elite',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-} as const;
-
-export type DoraClassificationLeadTimeForChanges = typeof DoraClassificationLeadTimeForChanges[keyof typeof DoraClassificationLeadTimeForChanges];
-
-
-export const DoraClassificationLeadTimeForChanges = {
-  elite: 'elite',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-} as const;
-
-export type DoraClassificationChangeFailureRate = typeof DoraClassificationChangeFailureRate[keyof typeof DoraClassificationChangeFailureRate];
-
-
-export const DoraClassificationChangeFailureRate = {
-  elite: 'elite',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-} as const;
-
-export type DoraClassificationMttr = typeof DoraClassificationMttr[keyof typeof DoraClassificationMttr];
-
-
-export const DoraClassificationMttr = {
-  elite: 'elite',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-} as const;
-
-export interface DoraClassification {
-  deploymentFrequency: DoraClassificationDeploymentFrequency;
-  leadTimeForChanges: DoraClassificationLeadTimeForChanges;
-  changeFailureRate: DoraClassificationChangeFailureRate;
-  mttr: DoraClassificationMttr;
-}
-
-export interface DoraMetrics {
-  /** Issues completed per week (proxy for deploy frequency) */
-  deploymentFrequency: number;
-  /** Average lead time in days */
-  leadTimeForChanges: number;
-  /** Percentage of resolved issues that are bugs */
-  changeFailureRate: number;
-  /** Mean time to restore — average cycle time of bugs in days */
-  mttr: number;
-  classification: DoraClassification;
-}
-
 export interface ProjectMetrics {
   projectId: string;
   period: string;
@@ -326,7 +267,6 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
-  dora: DoraMetrics;
 }
 
 export interface MemberStats {

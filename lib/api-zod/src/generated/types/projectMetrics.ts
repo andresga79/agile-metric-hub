@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CycleTimeDataPoint } from './cycleTimeDataPoint';
-import type { DoraMetrics } from './doraMetrics';
 import type { Percentiles } from './percentiles';
 import type { ProjectMetricsBoardType } from './projectMetricsBoardType';
 import type { WeeklyDataPoint } from './weeklyDataPoint';
@@ -41,5 +40,4 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
-  dora: DoraMetrics;
 }

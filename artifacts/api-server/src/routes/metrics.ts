@@ -60,50 +60,6 @@ function computePercentiles(
   return { p50: p(0.5), p75: p(0.75), p85: p(0.85), p95: p(0.95) };
 }
 
-type DoraLevel = "elite" | "high" | "medium" | "low";
-
-function classifyDora(
-  deploymentFreq: number,
-  leadTime: number,
-  cfr: number,
-  mttr: number
-): Record<string, DoraLevel> {
-  const freq = (): DoraLevel => {
-    if (deploymentFreq >= 5) return "elite";
-    if (deploymentFreq >= 1) return "high";
-    if (deploymentFreq >= 0.25) return "medium";
-    return "low";
-  };
-  const lt = (): DoraLevel => {
-    if (leadTime < 1) return "elite";
-    if (leadTime < 7) return "high";
-    if (leadTime < 30) return "medium";
-    return "low";
-  };
-  const failure = (): DoraLevel => {
-    if (cfr < 5) return "elite";
-    if (cfr < 10) return "high";
-    if (cfr < 15) return "medium";
-    return "low";
-  };
-  const restore = (): DoraLevel => {
-    if (mttr < 1) return "elite";
-    if (mttr < 7) return "high";
-    if (mttr < 30) return "medium";
-    return "low";
-  };
-  return {
-    deploymentFrequency: freq(),
-    leadTimeForChanges: lt(),
-    changeFailureRate: failure(),
-    mttr: restore(),
-  };
-}
-
-function isBugIssue(issue: JiraIssue): boolean {
-  return mapIssueType(issue.fields.issuetype.name) === "Bug";
-}
-
 async function computeMetrics(
   issues: JiraIssue[],
   period: Period,
@@ -174,23 +130,7 @@ async function computeMetrics(
 
   const weeks = Math.max(1, Math.ceil(periodDays / 7));
   const throughput = resolved.length;
-  const deploymentFrequency = Math.round((resolved.length / weeks) * 10) / 10;
-
-  // DORA: change failure rate = bugs / total resolved
-  const bugIssues = resolved.filter((i) => isBugIssue(i));
   const totalResolved = resolved.length;
-  const cfr =
-    totalResolved > 0
-      ? Math.round((bugIssues.length / totalResolved) * 1000) / 10
-      : 0;
-
-  // DORA: MTTR = avg cycle time of bugs only
-  const bugCycleTimes = (
-    await Promise.all(bugIssues.map((i) => getCycleTimeDays(i)))
-  ).filter((v): v is number => v !== null);
-  const mttr = avg(bugCycleTimes);
-
-  const doraClassification = classifyDora(deploymentFrequency, avgLeadTime, cfr, mttr);
 
   const resolvedMap = new Map<string, Date>(
     resolvedWithDates
@@ -248,13 +188,6 @@ async function computeMetrics(
     cycleTimeDistribution,
     cycleTimePercentiles,
     leadTimePercentiles,
-    dora: {
-      deploymentFrequency,
-      leadTimeForChanges: avgLeadTime,
-      changeFailureRate: cfr,
-      mttr,
-      classification: doraClassification,
-    },
   };
 }
 
@@ -364,7 +297,6 @@ router.get(
       // If no issues from Jira, return estimated metrics from portfolio cache
       if (issues.length === 0 && portfolioRow) {
         const periodDays = periodToDays(period);
-        const weeks = Math.max(1, Math.ceil(periodDays / 7));
         const throughput = portfolioRow.doneCount > 0 ? Math.ceil(portfolioRow.doneCount / 4) : 0; // Estimate for 1 week
         
         res.json({
@@ -372,10 +304,6 @@ router.get(
           cycleTime: 3, // Default estimate
           throughput: throughput,
           velocity: 0,
-          deploymentFrequency: throughput / weeks,
-          changeFailureRate: 0,
-          mttr: 0,
-          dora: { deploymentFrequency: "low", leadTimeForChanges: "low", changeFailureRate: "low", mttr: "low" },
           percentiles: {
             leadTime: { p50: 5, p75: 7, p85: 10, p95: 15 },
             cycleTime: { p50: 3, p75: 5, p85: 7, p95: 12 },

@@ -934,7 +934,7 @@ components:
 
     ProjectMetrics:
       type: object
-      required: [projectId, period, boardType, isScrum, velocity, cycleTime, leadTime, throughput, resolvedCount, velocityTrend, throughputTrend, velocityByWeek, cycleTimePercentiles, leadTimePercentiles, dora]
+      required: [projectId, period, boardType, isScrum, velocity, cycleTime, leadTime, throughput, resolvedCount, velocityTrend, throughputTrend, velocityByWeek, cycleTimePercentiles, leadTimePercentiles]
       properties:
         projectId:
           type: string
@@ -984,8 +984,6 @@ components:
           allOf:
             - $ref: "#/components/schemas/Percentiles"
           description: P50/P75/P85/P95 lead time percentiles
-        dora:
-          $ref: "#/components/schemas/DoraMetrics"
 
     WeeklyDataPoint:
       type: object
@@ -1124,42 +1122,6 @@ components:
         p95:
           type: number
           description: 95th percentile
-
-    DoraClassification:
-      type: object
-      required: [deploymentFrequency, leadTimeForChanges, changeFailureRate, mttr]
-      properties:
-        deploymentFrequency:
-          type: string
-          enum: [elite, high, medium, low]
-        leadTimeForChanges:
-          type: string
-          enum: [elite, high, medium, low]
-        changeFailureRate:
-          type: string
-          enum: [elite, high, medium, low]
-        mttr:
-          type: string
-          enum: [elite, high, medium, low]
-
-    DoraMetrics:
-      type: object
-      required: [deploymentFrequency, leadTimeForChanges, changeFailureRate, mttr, classification]
-      properties:
-        deploymentFrequency:
-          type: number
-          description: Issues completed per week (proxy for deploy frequency)
-        leadTimeForChanges:
-          type: number
-          description: Average lead time in days
-        changeFailureRate:
-          type: number
-          description: Percentage of resolved issues that are bugs
-        mttr:
-          type: number
-          description: Mean time to restore — average cycle time of bugs in days
-        classification:
-          $ref: "#/components/schemas/DoraClassification"
 
     ForecastRequest:
       type: object

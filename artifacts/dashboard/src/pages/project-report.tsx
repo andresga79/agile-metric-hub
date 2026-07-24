@@ -99,8 +99,8 @@ export default function ProjectReport() {
         setCfdData(cfd?.dataPoints ?? []);
         setMembers(Array.isArray(memberRows) ? memberRows : []);
         setTimeInStatus(analytics?.timeInStatus ?? []);
-        const doraDimension = health?.dimensions?.find((d: any) => d.name === "DORA Score");
-        setHealthScore(typeof doraDimension?.value === "number" ? doraDimension.value : null);
+        const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
+        setHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
         setQaRejectionRate(
           typeof qaRejected?.overallRejectionRate === "number" ? qaRejected.overallRejectionRate : null
         );

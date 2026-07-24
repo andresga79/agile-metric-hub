@@ -149,19 +149,7 @@ export const GetProjectMetricsResponse = zod.object({
   "p75": zod.number().describe('75th percentile'),
   "p85": zod.number().describe('85th percentile'),
   "p95": zod.number().describe('95th percentile')
-}).describe('P50\/P75\/P85\/P95 lead time percentiles'),
-  "dora": zod.object({
-  "deploymentFrequency": zod.number().describe('Issues completed per week (proxy for deploy frequency)'),
-  "leadTimeForChanges": zod.number().describe('Average lead time in days'),
-  "changeFailureRate": zod.number().describe('Percentage of resolved issues that are bugs'),
-  "mttr": zod.number().describe('Mean time to restore — average cycle time of bugs in days'),
-  "classification": zod.object({
-  "deploymentFrequency": zod.enum(['elite', 'high', 'medium', 'low']),
-  "leadTimeForChanges": zod.enum(['elite', 'high', 'medium', 'low']),
-  "changeFailureRate": zod.enum(['elite', 'high', 'medium', 'low']),
-  "mttr": zod.enum(['elite', 'high', 'medium', 'low'])
-})
-})
+}).describe('P50\/P75\/P85\/P95 lead time percentiles')
 })
 
 

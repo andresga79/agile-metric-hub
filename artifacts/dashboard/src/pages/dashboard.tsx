@@ -532,7 +532,7 @@ export default function Dashboard() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Health Score Prom.
-              <MetricTooltip description="Promedio del DORA Score (Throughput + Cycle Time + Change Failure Rate, normalizados contra los umbrales de Admin -> Health) entre los proyectos visibles." />
+              <MetricTooltip description="Índice de salud de flujo (Flow Health Score): promedio de Throughput + Cycle Time + tasa de bugs (CFR), normalizados contra los umbrales de Admin -> Health, promediado entre los proyectos visibles. Se calcula solo desde Jira — no son las métricas DORA reales." />
             </CardTitle>
             <HeartPulse className="h-4 w-4 text-primary" />
           </CardHeader>

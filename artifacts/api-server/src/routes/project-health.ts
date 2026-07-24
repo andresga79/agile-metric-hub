@@ -110,7 +110,11 @@ router.get(
       ? Math.round(clamp(100 - (throughputStdDev / throughputAvg) * 50, 0, 100))
       : 50;
 
-    const doraScore = (() => {
+    // Composite flow-health index: the mean of throughput, cycle time and change-failure-rate
+    // each normalized 0-100 against the admin thresholds. NOT the DORA metrics (this is sourced
+    // purely from Jira issue flow — no deployment/CI data — so it can't be deployment frequency
+    // or true change failure rate); named accordingly to stay honest.
+    const flowHealthScore = (() => {
       const freqScore = normalize(throughput, throughputThreshold.warningValue, throughputThreshold.goodValue);
       const ltScore = normalize(avgCycleTime, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue);
       const cfrScore = normalize(cfr, cfrThreshold.warningValue, cfrThreshold.goodValue);
@@ -129,9 +133,9 @@ router.get(
         description: `${avgCycleTime.toFixed(1)}d avg`,
       },
       {
-        name: "DORA Score",
-        value: doraScore,
-        description: `CFR ${cfr.toFixed(1)}%`,
+        name: "Flow Health Score",
+        value: flowHealthScore,
+        description: `Throughput + Cycle Time + CFR (${cfr.toFixed(1)}%)`,
       },
       {
         name: "WIP Balance",
