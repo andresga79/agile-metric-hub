@@ -174,14 +174,24 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     reporte puntual alcanza con imprimir la página del navegador). Se sacó `handleExport`, el botón,
     los imports de `html2canvas`/`jsPDF`, y la dependencia `jspdf` de `package.json` (se dejó
     `html2canvas`, que todavía usa `project-detail.tsx` para descargar el gráfico como PNG — feature
-    aparte, no tocada).
+    aparte, no tocada). Al sacar `jspdf` del `package.json`, `pnpm install` (sin `--frozen-lockfile`)
+    escribió una entrada espuria en el lockfile — ver gotcha nuevo en la sección 1.
+19. **Reporte no mostraba Health Score ni tasa de rechazo QA** — mejora (no bug): se revisó el resto
+    de `project-report.tsx` contra los 4 endpoints que ya usaba (metrics, cfd, members, analytics) y
+    coincidía exactamente con los datos en vivo, sin bugs. Como mejora, se agregaron 2 tarjetas más:
+    `DORA Score` de `/health/:period` (ya es el único campo de ese endpoint pensado como "resumen
+    compuesto" — se evitó promediar las 7 dimensiones a mano para no inventar una métrica nueva que
+    duplicara Cycle Time/CFR dos veces) y `overallRejectionRate` de `/qa-rejected/:period` (la métrica
+    recién corregida en la fila 17). Verificado en vivo: OLP muestra Health Score 21/100 y Tasa de
+    Rechazo QA 8.8%, coincidiendo con lo que muestran Health y QA Rechazados por separado.
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
 `portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
 Flow, Evolución, QA Rechazados, y Reporte (`project-report.tsx` — CFD + `/members` + `/analytics`
-ya revisados a fondo por separado; se eliminó la exportación a PDF, ver fila 18 de la sección 4).
+ya revisados a fondo por separado; se eliminó la exportación a PDF y se agregaron tarjetas de Health
+Score/tasa de rechazo QA, ver filas 18–19 de la sección 4).
 
 `FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
 arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
