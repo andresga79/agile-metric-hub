@@ -33,6 +33,7 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `3756c10` | fix: correct WIP aging severity counts and time-in-status window on Flow page |
 | `5f02cf1` | docs: mark Flow review as done in session log |
 | `16e502f` | fix: Evolution page ignoring a project's own admin threshold override |
+| `afc3981` | fix: QA Rechazados — acotar transiciones al período y no perder issues abiertos de larga duración |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
 `git show <hash>` para el diff exacto.
@@ -154,19 +155,27 @@ si aparece un bug parecido en una sección todavía no revisada (ver sección 6)
     propia consulta (no usaba `getEffectiveThresholds`), traía **toda** la tabla de thresholds sin
     filtrar por proyecto y elegía el primer match con `.find()`. Confirmado en vivo: STRIDER AI con
     `leadTime=999` configurado como override propio seguía mostrando 25 (el global) como su "Meta".
+17. **QA Rechazados contaba transiciones sin acotar al período** (`qa-rejected.ts`) — el filtro de
+    período (`created`/`resolutiondate` dentro de N días) se aplicaba solo a nivel de *issue*; una
+    vez que un issue calificaba, se escaneaba **todo su historial** sin límite de fecha, así que
+    rechazos de hace meses se contaban como "del último mes". `metric-snapshots.ts` (Evolución) ya
+    tenía el fix correcto (un `windowStart` explícito) que `qa-rejected.ts` nunca replicó. Confirmado
+    en vivo: OLP `/qa-rejected/10003/1m` mostraba 10 transiciones de rechazo, 8 con 50–86 días de
+    antigüedad. Además, issues abiertos creados antes de la ventana (pero todavía activos en QA)
+    eran invisibles por completo, mismo patrón de la fila 3/12/15. Tras el fix: 7→3 rechazados,
+    28→34 entraron a QA, tasa 25%→8.8% (número real de los últimos 30 días).
 
 ## 5. Qué se revisó y qué no (todavía)
 
 **Revisado y corregido en profundidad**: Resumen Ejecutivo / Portfolio (`dashboard.tsx` +
 `portfolio-cache.ts`), Health, Team, Sprints, Analíticas (incluye SLA), Kanban Weekly, Forecast,
-Flow, Evolución, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD + `/members` +
-`/analytics`, los primeros dos ya revisados a fondo; `/analytics` también).
+Flow, Evolución, QA Rechazados, y el CFD que vive dentro de Reporte (`project-report.tsx` usa CFD +
+`/members` + `/analytics`, los primeros dos ya revisados a fondo; `/analytics` también).
 
 `FlowHealthCard` (componente ya construido pero huérfano, sin usar en ningún lado) quedó integrado
 arriba de las tablas de Flow como resumen ejecutivo de esa pestaña.
 
-**Todavía NO revisado con este mismo nivel de detalle** — candidatos naturales para continuar:
-- **QA Rechazados** (`qa-rejected.ts` / `project-qa-rejected.tsx`)
+**Todavía NO revisado con este mismo nivel de detalle** — candidato natural para continuar:
 - **Reporte** propiamente dicho más allá de CFD/members/analytics — la exportación a PDF en sí
   (¿arma bien el layout con los datos ya corregidos? ¿hay algo hardcodeado ahí que no capturamos
   al revisar los endpoints por separado?)
