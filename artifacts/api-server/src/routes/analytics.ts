@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache";
 import {
   getJiraIssuesForProject,
+  getResolvedJiraIssuesInRange,
   getFlaggedJiraIssuesForProject,
   getOpenIssuesForProject,
   getEffectiveIssueType,
@@ -511,10 +512,16 @@ router.get(
     if (compareTo) {
       const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
       const prevEndDate = new Date(startDate.getTime());
-      const prevIssues = await getJiraIssuesForProject(projectId, periodDays * 2).catch(() => [] as JiraIssue[]);
-      // Not filtered by created date — an issue created before prevStartDate but resolved inside
-      // [prevStartDate, prevEndDate) still belongs in the previous period's throughput. The actual
-      // resolved-in-window selection happens inside computePeriodMetrics via startDate/endDate.
+      // Must use getResolvedJiraIssuesInRange, NOT getJiraIssuesForProject(periodDays * 2):
+      // the latter is hard-capped at JIRA_MAX_LOOKBACK_DAYS (90), so for period "3m" (periodDays=90)
+      // the requested 180 days silently collapses to 90, leaving the entire previous window
+      // [180d, 90d) outside the fetched data and the comparison empty. This range fetch bypasses
+      // that cap and returns exactly the issues resolved in [prevStartDate, prevEndDate). Changelog
+      // is included so the previous period's cycle time / flow efficiency are real (they'd otherwise
+      // degrade to lead time). computePeriodMetrics still does the precise resolved-in-window filter.
+      const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
+        includeChangelog: true,
+      }).catch(() => [] as JiraIssue[]);
       const prevFiltered = prevIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
       if (prevFiltered.length > 0) {
         previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate, prevEndDate);
