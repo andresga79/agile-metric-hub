@@ -66,6 +66,9 @@ export function getSyncStatus(): SyncStatus {
   };
 }
 
+// Keep this in sync with the Drizzle model in lib/db/src/schema/jira-cache.ts.
+// This raw CREATE is what actually provisions the table at runtime; the Drizzle
+// model exists so `drizzle-kit push` knows about the table and won't drop it.
 export async function ensureCacheTable() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS jira_cache (
