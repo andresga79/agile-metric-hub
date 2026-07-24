@@ -81,6 +81,7 @@ madura en features, inmadura en robustez.
 | FE-3 | Lógica duplicada (formato, thresholds, colores) en 4+ páginas | 🟡 Bajo | 🟢 Bajo | Frontend |
 | FE-4 | i18n: locales desincronizados + strings en español hardcodeados | 🟡 Bajo | 🟢 Bajo | Frontend |
 | FE-5 | Accesibilidad casi nula (2 `aria-*` en todo `pages/`) | 🟡 Bajo | 🟡 Medio | Frontend |
+| FE-6 | Reporte: un fetch fallido/abortado se queda en "Cargando..." para siempre | 🟠 Medio | 🟢 Bajo | Frontend |
 | OPS-1 | Sin endpoint de liveness/readiness del API | 🟠 Medio | 🟢 Bajo | Ops |
 | OPS-2 | Estado de sync solo en memoria (se pierde al reiniciar) | 🟡 Bajo | 🟡 Medio | Ops |
 | DEU-1 | `lib/jira.ts` (1410 líneas) y `admin.tsx` (1162) son god-files | 🟡 Bajo | 🔴 Alto | Deuda |
@@ -330,6 +331,19 @@ interactivos de Recharts (`onClick` en `<Line>`) sin affordance accesible. Las t
 tienen mayormente `overflow-x-auto` (bien para móvil), pero conviene verificar cada una.
 **Recomendación:** `aria-label` en botones de ícono, revisar navegación por teclado, y
 completar los wrappers de scroll en tablas.
+
+### FE-6 — Reporte se queda en "Cargando..." ante un fetch fallido · Impacto Medio · Esfuerzo Bajo
+`artifacts/dashboard/src/pages/project-report.tsx`: el `catch` del bloque de fetch hace
+`setError(t("common.loading"))` — es decir, ante cualquier fallo o abort setea el mensaje
+de error **al mismo texto que el estado de carga** ("Cargando..."). Como además
+`if (error) return <div>{error}</div>`, un fetch que falla o se aborta (p.ej. timeout de
+20s, o navegación rápida) deja la página mostrando **"Cargando..." indefinidamente**, sin
+señal de que algo salió mal ni forma de reintentar. Detectado en vivo durante la revisión
+de MET-1. (Es un patrón que probablemente se repite en las otras páginas que copian el
+mismo bloque manual de fetch — ver FE-1.)
+**Recomendación:** en el `catch`, distinguir error real de carga (mensaje de error propio
++ botón de reintento), y no reusar la clave `common.loading` como texto de error. Encaja
+con la extracción de un hook de fetch compartido (FE-1/FE-3).
 
 ---
 
