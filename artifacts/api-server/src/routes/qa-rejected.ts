@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import {
   getJiraProject,
   getJiraIssuesForProject,
+  getOpenIssuesForProject,
   getJiraSprints,
   getQaStatusSet,
   getDevReturnStatusSet,
@@ -30,13 +31,15 @@ function isValidPeriod(p: string): p is Period {
 
 function countQaEntries(
   issues: JiraIssue[],
-  qaStatusSet: Set<string>
+  qaStatusSet: Set<string>,
+  since: Date
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const issue of issues) {
     const histories = issue.changelog?.histories ?? [];
     let entries = 0;
     for (const h of histories) {
+      if (new Date(h.created) < since) continue;
       for (const item of h.items) {
         if (item.field !== "status") continue;
         const to = item.toString?.trim() ?? "";
@@ -170,31 +173,46 @@ router.get(
     }
 
     const periodDays = periodToDays(period);
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
 
-    const [issues, sprints, qaStatusSet, devStatusSet] = await Promise.all([
+    const [periodIssues, openIssues, sprints, qaStatusSet, devStatusSet] = await Promise.all([
       getJiraIssuesForProject(projectId, periodDays, {
         includeChangelog: true,
         includeIssueLinks: true,
       }),
+      // getJiraIssuesForProject only returns an unresolved issue if it was ALSO
+      // created within the period - an issue opened before the window but still
+      // cycling through QA today would otherwise be invisible here. Merge in
+      // every currently-open issue regardless of age to cover that case.
+      getOpenIssuesForProject(projectId, { includeChangelog: true, includeIssueLinks: true }),
       getJiraSprints(projectId),
       getQaStatusSet(),
       getDevReturnStatusSet(projectId),
     ]);
 
+    const issues = Array.from(
+      new Map([...periodIssues, ...openIssues].map((issue) => [issue.id, issue])).values()
+    );
+
     // --- Rejection detection (existing) ---
+    // Only transitions inside the selected period should count toward "1m"/"3m"
+    // totals - an issue can qualify for inclusion (e.g. resolved this month)
+    // while carrying QA transitions from months earlier in its changelog.
     const allRejections: (QaRejection & { sprintName: string | null })[] = [];
     const rejectedIssueKeys = new Set<string>();
 
     for (const issue of issues) {
       const rejections = findQaRejections(issue, qaStatusSet, devStatusSet);
       for (const r of rejections) {
+        if (r.transitionedAt < since) continue;
         rejectedIssueKeys.add(r.issueKey);
         const sprint = findSprintForDate(r.transitionedAt, sprints);
         allRejections.push({ ...r, sprintName: sprint?.name ?? null });
       }
     }
 
-    const qaEntries = countQaEntries(issues, qaStatusSet);
+    const qaEntries = countQaEntries(issues, qaStatusSet, since);
     const totalIssuesThatEnteredQa = qaEntries.size;
     const totalIssuesRejected = rejectedIssueKeys.size;
     const totalRejectedReversions = allRejections.length;
@@ -246,6 +264,7 @@ router.get(
     for (const issue of issues) {
       const histories = issue.changelog?.histories ?? [];
       for (const h of histories) {
+        if (new Date(h.created) < since) continue;
         for (const item of h.items) {
           if (item.field !== "status") continue;
           const to = item.toString?.trim() ?? "";

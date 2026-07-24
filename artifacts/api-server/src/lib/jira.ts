@@ -1012,20 +1012,22 @@ export async function getFlaggedJiraIssuesForProject(
  * view. Use this whenever you need true current WIP/blocked state, not period-scoped activity. */
 export async function getOpenIssuesForProject(
   projectId: string,
-  options?: { forceRefresh?: boolean; includeChangelog?: boolean }
+  options?: { forceRefresh?: boolean; includeChangelog?: boolean; includeIssueLinks?: boolean }
 ): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) {
     return getMockIssues(projectId).filter((issue) => !isIssueDone(issue));
   }
 
   const includeChangelog = options?.includeChangelog === true;
+  const includeIssueLinks = options?.includeIssueLinks === true;
   const canonicalProjectId = await getCanonicalProjectId(projectId);
   const cacheKeyBase = `issues:${canonicalProjectId}:open`;
-  const cacheKey = includeChangelog ? `${cacheKeyBase}:changelog` : cacheKeyBase;
+  const cacheKey = `${cacheKeyBase}${includeChangelog ? ":changelog" : ""}${includeIssueLinks ? ":links" : ""}`;
 
   return withCache(cacheKey, async () => {
-    const fields =
+    const baseFields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+    const fields = includeIssueLinks ? `${baseFields},issuelinks` : baseFields;
 
     const maxResults = 100;
     const MAX_PAGES = 50;
