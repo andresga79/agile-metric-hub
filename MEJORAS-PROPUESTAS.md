@@ -21,6 +21,42 @@ madura en features, inmadura en robustez.
 
 ---
 
+## Plan ajustado · contexto: demo (sin desplegar) + objetivo = confiar en los números
+
+> Reordenamiento acordado el 2026-07-24 según el contexto real de uso. La tabla resumen
+> de más abajo conserva la priorización original (útil como referencia cuando el contexto
+> cambie — p.ej. cuando la app se vaya a exponer, Seguridad vuelve a ser lo primero).
+>
+> Dos ajustes de criterio respecto de la evaluación original, mirando los datos reales:
+> - **DAT-1** baja de 🔴 a 🟠: el truncamiento a ~100 issues/ventana de 7 días es un riesgo
+>   real de correctitud, pero **latente** con los volúmenes actuales (OLI ~16 issues/semana,
+>   OLP ~8) — no está produciendo números malos hoy.
+> - **MET-2** baja a 🟡: en *esta* instancia los campos custom funcionan (los story points
+>   cargan correctamente, `customfield_10016` es el campo válido acá). Es deuda de
+>   portabilidad, no un número incorrecto hoy.
+> - **Seguridad (SEC-*)** deja de ser lo primero mientras sea demo interno: pasa a ser un
+>   **gate obligatorio antes del primer deploy real**, no un pendiente inmediato.
+
+**Tier 1 — Correctitud de los números (hacer primero)**
+1. **DAT-2** — arreglar la comparación período-anterior rota en Analíticas (bug activo mostrando un número incorrecto hoy · esfuerzo bajo).
+2. **MET-1** — renombrar "DORA Score" a algo honesto + documentar la fórmula (defendibilidad ante líderes técnicos).
+3. **QA-1 (acotado)** — tests unitarios de la lógica pura de métricas (`normalize`, `getCycleTimeDays`, `computeQaRejectionRate`, `getISOWeek`…); la red que evita regresiones de las correcciones ya hechas.
+4. **DOC-1 (parte METRICS.md)** — definir cada métrica y su fórmula con precisión.
+
+**Tier 2 — Prevenir regresiones / integridad de datos**
+5. **QA-2** — CI mínimo (typecheck + tests) en cada PR. Barato, habilita todo lo demás.
+6. **DAT-4** — que timeout/error no pise datos buenos con `null`.
+7. **DAT-3** — llevar `jira_cache` al schema de Drizzle.
+8. **QA-3 / QA-4** — lint + `strict`, y error handler global.
+
+**Tier 3 — Gate antes del primer deploy real (no ahora, pero bloqueante para exponer)**
+9. **SEC-1, SEC-2, SEC-3, SEC-4** — resolver todo Seguridad antes de abrir a más gente.
+
+**Tier 4 — Cuando haya aire (velocidad de desarrollo / limpieza)**
+10. DAT-1 (surfacear truncamiento), DAT-5, FE-1, FE-2, FE-3, FE-4, FE-5, DEU-1, DEU-2, DEU-3, DEU-4, OPS-1, OPS-2.
+
+---
+
 ## Tabla resumen (priorización)
 
 | ID | Mejora | Impacto | Esfuerzo | Tipo |
