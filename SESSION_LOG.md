@@ -2,8 +2,10 @@
 
 > **Estado al último corte (2026-07-24):** todas las secciones de la UI revisadas y corregidas.
 > Se hizo una auditoría crítica del proyecto → `MEJORAS-PROPUESTAS.md` (27 mejoras priorizadas) y
-> se implementó el Tier 1 y Tier 2 (ver sección 8). Único pendiente inmediato: activar el CI
-> (QA-2, parkeado por permisos — sección 8). Backlog restante: Tier 3 (Seguridad) y Tier 4.
+> se implementó el Tier 1 y Tier 2 (ver sección 8). Se **preparó el deploy** (Vercel + Render + Neon)
+> pero **todavía NO está desplegado** — falta que el usuario haga los pasos manuales en las
+> plataformas (ver sección 9 y `DEPLOY.md`). Pendientes: activar el CI (QA-2), hacer el deploy.
+> Backlog restante: Tier 3 (resto de Seguridad) y Tier 4.
 
 Registro de todo lo hecho para poder continuar entre sesiones y entre PCs sin perder
 contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión, y qué
@@ -318,3 +320,44 @@ typecheck+test; falta sumar `pnpm lint`).
 JWT hardcodeado, SEC-2 admin/admin123, SEC-3 RBAC solo client-side, SEC-4 rate limit/helmet/CORS) —
 gate antes de exponer. Tier 4 = FE-1/2/3 (cliente tipado esquivado, `any`, duplicación),
 DEU-1/2/4 (god-files, `getISOWeek` x5, mockup-sandbox muerto), OPS-1/2, DAT-1/5, FE-4/5/6.
+
+## 9. Preparación del deploy (2026-07-24) — Opción B: Vercel + Render + Neon
+
+Se decidió publicar **gratis** con la arquitectura **B**: frontend en **Vercel**, backend
+(Express, proceso persistente por el sync) en **Render** (Docker, free), Postgres en **Neon**
+(free). Motivo: el backend NO es serverless (tiene sync en background + estado en memoria), así
+que Vercel solo no alcanza — necesita una plataforma que corra un proceso siempre vivo.
+
+**Ya implementado y en `main`:**
+- **Gate de seguridad SEC-1/2/4** (commit `2d2c158`) — en producción (`NODE_ENV=production`) el
+  backend **no arranca** si `JWT_SECRET` falta/es débil o si `DEFAULT_ADMIN_PASSWORD` es
+  `admin123`/ausente; CORS restringible por `CORS_ORIGIN`; algoritmo JWT fijado a HS256. Local
+  sin cambios (NODE_ENV no es production → fallbacks de dev siguen).
+- **Config de deploy** (commit `b34e5cf`): `render.yaml` (backend Docker, Render genera el
+  `JWT_SECRET`, `NODE_ENV=production`, secretos como `sync:false`), `vercel.json` (build del
+  dashboard desde el workspace, output `dist/public`, rewrite `/api/* → Render` así el navegador
+  no ve CORS), `DEPLOY.md` (paso a paso), `.env.example` actualizado.
+- Nombres elegidos: Render = `agile-metric-hub-api` (→ `https://agile-metric-hub-api.onrender.com`),
+  Vercel = `agile-metric-hub` (→ `https://agile-metric-hub.vercel.app`). Ya cableados en ambos
+  configs; si al crear los servicios tocan otras URLs, ajustar 1 línea en cada archivo.
+- `sync-cron.yml` (Action de sync diario opcional) quedó en la rama **`ci-workflow`** (junto al
+  `ci.yml`), fuera de `main` por el mismo bloqueo de scope `workflow`.
+
+**Verificado local:** el build de Vercel (`pnpm --filter @workspace/dashboard run build`) produce
+`artifacts/dashboard/dist/public`; el fail-fast de producción funciona (imagen con `NODE_ENV=production`
++ `JWT_SECRET` débil/ausente se niega a arrancar con mensaje claro).
+
+**NO desplegado todavía** — faltan los pasos manuales (los hace el usuario, no se pueden automatizar
+desde acá): crear el proyecto en Neon, el Blueprint en Render (+ pegar secretos), y el import en
+Vercel. Todo en `DEPLOY.md`.
+
+**Gotchas anotados para el deploy:**
+- El build de Vercel es la parte con más riesgo (monorepo + pnpm `12.0.0-alpha.17`): el
+  `installCommand` replica lo de Docker (`npm i -g pnpm@... && mkdir -p lib/integrations && pnpm
+  install --frozen-lockfile`). Si falla por versión de pnpm o lockfile, ajustar en Settings de Vercel.
+- Neon exige SSL: el `DATABASE_URL` debe incluir `?sslmode=require`.
+- Render free se duerme a los ~15 min (cold start ~30-60s); el sync corre en cada arranque, y el
+  cron opcional (`sync-cron.yml`) lo complementa.
+
+**Cómo retomar el deploy:** abrir `DEPLOY.md` y seguir Neon → Render → Vercel. Una vez conectados,
+Render y Vercel hacen auto-deploy en cada push a `main` (ese es el CI/CD del deploy).
