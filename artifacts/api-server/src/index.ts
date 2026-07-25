@@ -5,6 +5,11 @@ import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { logger } from "./lib/logger";
 import { ensureCacheTable } from "./lib/jira-cache";
+import { assertJwtConfig } from "./lib/jwt";
+
+// Fail fast at boot if the auth signing key is missing/weak (production), before
+// the server ever accepts a request.
+assertJwtConfig();
 
 const rawPort = process.env["PORT"];
 
@@ -183,7 +188,16 @@ async function initDb() {
       .limit(1);
 
     if (!existing) {
-      const defaultPassword = process.env["DEFAULT_ADMIN_PASSWORD"] ?? "admin123";
+      const isProduction = process.env["NODE_ENV"] === "production";
+      const configuredPassword = process.env["DEFAULT_ADMIN_PASSWORD"];
+      // Never bootstrap the admin with a known/weak password in production. Local
+      // dev keeps the convenience fallback (NODE_ENV is not "production").
+      if (isProduction && (!configuredPassword || configuredPassword.length < 8 || configuredPassword === "admin123")) {
+        throw new Error(
+          "DEFAULT_ADMIN_PASSWORD must be set to a strong value (>=8 chars, not 'admin123') to bootstrap the admin user in production.",
+        );
+      }
+      const defaultPassword = configuredPassword ?? "admin123";
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
       await db.insert(usersTable).values({
         username: "admin",

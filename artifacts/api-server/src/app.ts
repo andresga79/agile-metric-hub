@@ -31,7 +31,14 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// Restrict CORS to the configured frontend origin(s) when CORS_ORIGIN is set
+// (comma-separated). Left open only when unset — i.e. local dev; a real deploy
+// must set CORS_ORIGIN=https://<frontend-domain>.
+const corsOrigins = process.env["CORS_ORIGIN"]
+  ?.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(cors(corsOrigins && corsOrigins.length > 0 ? { origin: corsOrigins } : {}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
