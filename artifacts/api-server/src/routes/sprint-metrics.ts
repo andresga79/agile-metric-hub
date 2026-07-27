@@ -15,7 +15,7 @@ import {
   type JiraIssue,
   isJiraConfigured,
 } from "../lib/jira";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
@@ -126,6 +126,7 @@ async function computeSprintMetrics(
 router.get(
   "/projects/:projectId/sprints/:period",
   requireAuth,
+  requireSectionView("sprints"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

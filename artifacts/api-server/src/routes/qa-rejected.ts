@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
   getJiraProject,
   getJiraIssuesForProject,
@@ -144,6 +144,7 @@ function getMockQaQuality(): {
 router.get(
   "/projects/:projectId/qa-rejected/:period",
   requireAuth,
+  requireSectionView("qa-rejected", "report"),
   async (req, res): Promise<void> => {
     const rawId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

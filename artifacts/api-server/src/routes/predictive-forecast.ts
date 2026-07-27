@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
   getJiraIssuesForProject,
   periodToDays,
@@ -14,6 +14,7 @@ const router: IRouter = Router();
 router.post(
   "/projects/:projectId/predictive-forecast",
   requireAuth,
+  requireSectionView("forecast"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

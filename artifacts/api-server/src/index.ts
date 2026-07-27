@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { logger } from "./lib/logger";
 import { ensureCacheTable } from "./lib/jira-cache";
 import { assertJwtConfig } from "./lib/jwt";
+import { BCRYPT_ROUNDS } from "./lib/security";
 
 // Fail fast at boot if the auth signing key is missing/weak (production), before
 // the server ever accepts a request.
@@ -198,7 +199,7 @@ async function initDb() {
         );
       }
       const defaultPassword = configuredPassword ?? "admin123";
-      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      const passwordHash = await bcrypt.hash(defaultPassword, BCRYPT_ROUNDS);
       await db.insert(usersTable).values({
         username: "admin",
         email: "admin@example.com",

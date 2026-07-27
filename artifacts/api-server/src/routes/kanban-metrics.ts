@@ -17,7 +17,7 @@ import {
   getPortfolioAllowedIssueTypes,
   KANBAN_EXCLUDED_ISSUE_TYPES,
 } from "../lib/portfolio-metric-settings";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 
 const router: IRouter = Router();
 const KANBAN_EXCLUDED_ISSUE_TYPES_SET: Set<string> = new Set(KANBAN_EXCLUDED_ISSUE_TYPES);
@@ -79,6 +79,7 @@ function formatWeekLabel(weekStartStr: string): string {
 router.get(
   "/projects/:projectId/kanban/:period",
   requireAuth,
+  requireSectionView("kanban"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

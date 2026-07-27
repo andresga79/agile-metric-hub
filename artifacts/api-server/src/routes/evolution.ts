@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, metricTargetsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import { getJiraProject } from "../lib/jira";
 import { getProjectSnapshots } from "../lib/metric-snapshots";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
@@ -26,6 +26,7 @@ function pickTarget(
 router.get(
   "/projects/:projectId/evolution",
   requireAuth,
+  requireSectionView("evolution"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

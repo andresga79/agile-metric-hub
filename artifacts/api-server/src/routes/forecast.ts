@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
   getJiraIssuesForProject,
   isIssueDone,
@@ -74,6 +74,7 @@ function monteCarlo(
 router.post(
   "/projects/:projectId/forecast",
   requireAuth,
+  requireSectionView("forecast"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0] : req.params.projectId;
     const body = req.body as ForecastRequest;

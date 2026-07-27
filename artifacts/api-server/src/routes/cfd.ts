@@ -10,7 +10,7 @@ import {
   isIssueInProgress,
   type JiraIssue,
 } from "../lib/jira";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -106,6 +106,7 @@ async function computeCfd(
 router.get(
   "/projects/:projectId/cfd/:period",
   requireAuth,
+  requireSectionView("report"),
   async (req, res): Promise<void> => {
     const rawId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

@@ -9,8 +9,19 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { securityHeaders } from "./lib/security";
 
 const app: Express = express();
+
+// Trust the first proxy hop in production (Render terminates TLS and forwards
+// via X-Forwarded-For) so req.ip is the real client IP — the login rate limiter
+// keys on it, and without this every request would look like it came from the
+// proxy and share one bucket. Left off in local dev (direct connection).
+if (process.env["NODE_ENV"] === "production") {
+  app.set("trust proxy", 1);
+}
+
+app.use(securityHeaders());
 
 app.use(
   pinoHttp({
@@ -39,8 +50,10 @@ const corsOrigins = process.env["CORS_ORIGIN"]
   .map((o) => o.trim())
   .filter(Boolean);
 app.use(cors(corsOrigins && corsOrigins.length > 0 ? { origin: corsOrigins } : {}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Cap request body size (SEC-4) — the API only ever receives small JSON
+// payloads, so 1mb is generous and blocks memory-exhaustion via huge bodies.
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", router);
 

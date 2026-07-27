@@ -1,11 +1,13 @@
-# Session Log — Agile Metric Hub (2026-07-21 al 2026-07-24)
+# Session Log — Agile Metric Hub (2026-07-21 al 2026-07-26)
 
-> **Estado al último corte (2026-07-24):** todas las secciones de la UI revisadas y corregidas.
+> **Estado al último corte (2026-07-26):** todas las secciones de la UI revisadas y corregidas.
 > Se hizo una auditoría crítica del proyecto → `MEJORAS-PROPUESTAS.md` (27 mejoras priorizadas) y
-> se implementó el Tier 1 y Tier 2 (ver sección 8). Se **preparó el deploy** (Vercel + Render + Neon)
-> pero **todavía NO está desplegado** — falta que el usuario haga los pasos manuales en las
-> plataformas (ver sección 9 y `DEPLOY.md`). Pendientes: activar el CI (QA-2), hacer el deploy.
-> Backlog restante: Tier 3 (resto de Seguridad) y Tier 4.
+> se implementó el Tier 1, Tier 2 y ahora el **Tier 3 de Seguridad (backend)** (ver secciones 8 y 10):
+> SEC-3 (RBAC server-side), SEC-4 (headers/rate-limit/body) y SEC-2 parcial (bcrypt 12). Se
+> **preparó el deploy** (Vercel + Render + Neon) pero **todavía NO está desplegado** — falta que el
+> usuario haga los pasos manuales en las plataformas (ver sección 9 y `DEPLOY.md`). Pendientes:
+> activar el CI (QA-2), hacer el deploy, y el residuo de SEC-2 (forced password change, necesita UI).
+> Backlog restante: Tier 4.
 
 Registro de todo lo hecho para poder continuar entre sesiones y entre PCs sin perder
 contexto: qué se hizo, por qué, qué metodología se siguió en cada revisión, y qué
@@ -56,6 +58,10 @@ si seguís desde acá, actualizalo de nuevo antes de cortar.
 | `2a74f53` | feat: add global Express error handler + JSON 404 (QA-4) |
 | `a9cec98` | chore: enable TypeScript strict mode (QA-3, part 1) |
 | `f2a3282` | chore: add ESLint baseline (QA-3, part 2) |
+| `2d2c158` | fix: harden auth secrets and CORS for public deploy (SEC-1/2/4) |
+| `b34e5cf` | chore: add deploy config for Vercel + Render + Neon (Option B) |
+| `f0610fe` | docs: log deploy preparation (Vercel+Render+Neon) and its not-yet-deployed state |
+| *(este commit — `git log --oneline -1`)* | fix: enforce section RBAC server-side + login rate limit/headers/bcrypt (SEC-3/4/2) — ver sección 10 |
 | *(parkeado en rama `ci-workflow`, no en main)* | ci: GitHub Actions workflow typecheck+test (QA-2) — ver sección 8 |
 
 Cada mensaje de commit tiene el detalle completo del "por qué" — `git log -p <hash>` o
@@ -361,3 +367,76 @@ Vercel. Todo en `DEPLOY.md`.
 
 **Cómo retomar el deploy:** abrir `DEPLOY.md` y seguir Neon → Render → Vercel. Una vez conectados,
 Render y Vercel hacen auto-deploy en cada push a `main` (ese es el CI/CD del deploy).
+
+## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
+
+Se retomó el backlog por el **Tier 3 (Seguridad)**, que era el *gate* previo a exponer la app.
+Estado de partida: SEC-1 ya estaba cerrado (JWT, commit `2d2c158`); SEC-2/SEC-4 estaban parciales
+(fail-fast de prod + CORS por env, mismo commit); **SEC-3 sin hacer**. Esta tanda cerró todo lo
+que es **backend-only y verificable con `curl`** (decisión acordada con el usuario: dejar el
+forced-password-change de SEC-2 para después porque necesita UI).
+
+**SEC-3 — RBAC de lectura server-side (el hueco grande):**
+- Nuevo middleware `requireSectionView(...secciones)` en `middleware/auth.ts`. Corre **después** de
+  `requireAuth`. `admin` pasa siempre; el resto necesita `role_permissions.can_view = true` en **al
+  menos una** de las secciones pasadas. 403 si no hay ninguna fila en `true`.
+- **Por qué "al menos una":** varios endpoints alimentan más de una sección del frontend (ej. el
+  Reporte reusa los datos de Health/QA/miembros), así que quien pueda ver *cualquier* consumidor
+  legítimo del endpoint debe poder leerlo. Mapeo endpoint→secciones derivado de las páginas reales
+  (`App.tsx` `SectionRoute` + qué API consume cada página).
+- **Endpoints gateados** (con su/s sección/es): `members`→[team,report], `issues` + `issues/csv` +
+  `team/in-progress`→[team], `health`→[health,report], `sla`→[analytics], `cfd`→[report],
+  `qa-rejected`→[qa-rejected,report], `sprints`→[sprints], `kanban`→[kanban], `forecast` +
+  `predictive-forecast`→[forecast], `evolution`→[evolution].
+- **Baseline abierto a propósito** (siguen solo con `requireAuth`): `metrics`, `analytics`,
+  `portfolio`, `targets`-GET. **Motivo (decisión del usuario):** el **overview del proyecto**
+  (`/projects/:id`, `ProjectDetail`) y el **Resumen Ejecutivo** (dashboard) NO están gateados por
+  sección en el frontend — los ve cualquier autenticado — y consumen `/metrics` y `/analytics`.
+  Restringirlos server-side rompería esas dos páginas para roles sin esas secciones, y habría que
+  gatearlas también en la UI (sale del scope backend-only). Se dejaron como "baseline" que todos ven,
+  replicando exactamente lo que el frontend ya muestra. **Ojo para el futuro:** si algún día se quiere
+  cerrar de verdad `/metrics`+`/analytics`, hay que gatear el overview y el Resumen en el frontend
+  a la vez.
+- `evolution` es un `SectionRoute` en el frontend pero su sección **no está en el seed** de
+  `role_permissions` (SECTIONS de `role-permissions.ts` no la incluye), así que para no-admin da 403
+  server-side — consistente con que la UI ya la esconde para no-admin. Si se quiere que roles
+  no-admin vean Evolución, hay que **agregar "evolution" al seed** de secciones.
+
+**SEC-4 — hardening (sin dependencias nuevas):** se decidió NO agregar `helmet` ni
+`express-rate-limit` para no tocar `package.json`/lockfile (el gotcha del lockfile de la sección 1 ya
+mordió 4+ veces y el build de Docker/Render usa `--frozen-lockfile`). En su lugar, todo en
+`lib/security.ts`:
+- `securityHeaders()` — `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `X-DNS-Prefetch-Control: off`, `Content-Security-Policy:
+  default-src 'none'` (seguro para una API JSON), quita `X-Powered-By`, y `Strict-Transport-Security`
+  **solo en producción** (mandarlo en dev por HTTP envenena el cache de localhost).
+- `rateLimit()` — limiter fixed-window en memoria; aplicado a `/auth/login` (10 intentos / 15 min por
+  IP → 429 + `Retry-After`). Es per-proceso (ok para una sola instancia de Render; se resetea al
+  reiniciar). Si el deploy escala a varias instancias, cambiar por algo distribuido o `helmet` +
+  `express-rate-limit`.
+- Body limit `1mb` en `express.json`/`urlencoded`.
+- `app.set("trust proxy", 1)` **solo en producción** — Render termina TLS y reenvía por
+  `X-Forwarded-For`; sin esto `req.ip` sería la IP del proxy y el rate-limit metería a todos en el
+  mismo bucket.
+
+**SEC-2 — parcial:** bcrypt subido de cost 10 → **12** (`BCRYPT_ROUNDS` en `lib/security.ts`, usado en
+`index.ts` bootstrap del admin y en `admin/users.ts` alta/edición). **Pendiente** (necesita UI, quedó
+fuera): marcar la password inicial como temporal + forzar cambio en el primer login (columna DB +
+flujo de login + pantalla de cambio de contraseña).
+
+**Verificación en vivo** (`docker compose up -d --build api`, proyecto 10848, usuario `viewer` de
+prueba con `can_view=false` en todo — creado y **borrado** al terminar):
+- 10 endpoints gateados → viewer **403**, admin pasa el middleware (los 400 de `sprints`/
+  `predictive-forecast` son del handler —board sin sprints / body `{}`—, no 403).
+- Baseline (`metrics`/`analytics`/`portfolio`/`targets`) → **200/200** (overview intacto).
+- Camino positivo: dar `can_view` a viewer en `health` → 403 **→ 200**; `kanban` (no otorgado) sigue 403.
+- Login: 11º intento → **429** con `Retry-After`. Headers de seguridad presentes; HSTS ausente en dev.
+- typecheck limpio · 22/22 tests (`pnpm --filter @workspace/api-server test`) · `pnpm lint` 0 errores.
+
+> ⚠️ El testeo del rate-limit deja el login de esa IP throttleado ~15 min (se resetea solo). Si al
+> retomar el login da 429, esperar o reiniciar el contenedor `api`.
+
+**Qué queda de Seguridad:** solo el residuo de SEC-2 (forced password change, necesita UI) y SEC-3 no
+tiene más deuda salvo la nota del baseline `/metrics`+`/analytics` de arriba. Con esto el gate de
+seguridad para el deploy está sustancialmente cubierto. Backlog restante del proyecto: Tier 4
+(FE-*, DEU-*, OPS-*, DAT-1/5) y activar el CI (QA-2).

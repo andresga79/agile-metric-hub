@@ -4,6 +4,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { type AuthRequest } from "../../middleware/auth";
 import { VALID_ROLES } from "./constants";
+import { BCRYPT_ROUNDS } from "../../lib/security";
 
 const router: IRouter = Router();
 
@@ -36,7 +37,7 @@ router.post("/users", async (req, res): Promise<void> => {
   }
 
   const normalizedRole = VALID_ROLES.includes(role) ? role : "member";
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   try {
     const [user] = await db
@@ -99,7 +100,7 @@ router.put("/users/:id", async (req, res): Promise<void> => {
   const updateData: Record<string, string> = {};
   if (username) updateData.username = username;
   if (email) updateData.email = email;
-  if (password) updateData.passwordHash = await bcrypt.hash(password, 10);
+  if (password) updateData.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   if (role) updateData.role = VALID_ROLES.includes(role) ? role : "member";
 
   if (Object.keys(updateData).length === 0) {

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
   getJiraIssuesForProject,
   isIssueDone,
@@ -29,6 +29,7 @@ function clamp(val: number, min: number, max: number): number {
 router.get(
   "/projects/:projectId/health/:period",
   requireAuth,
+  requireSectionView("health", "report"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0] : req.params.projectId;
     const rawPeriod = Array.isArray(req.params.period) ? req.params.period[0] : req.params.period;

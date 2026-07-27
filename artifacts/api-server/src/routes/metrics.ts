@@ -20,7 +20,7 @@ import {
   type JiraSprint,
   type ProjectBoardType,
 } from "../lib/jira";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireSectionView } from "../middleware/auth";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { db, portfolioCacheTable } from "@workspace/db";
@@ -325,6 +325,7 @@ router.get(
 router.get(
   "/projects/:projectId/members/:period",
   requireAuth,
+  requireSectionView("team", "report"),
   async (req, res): Promise<void> => {
     const rawId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
@@ -487,6 +488,7 @@ router.get(
 router.get(
   "/team/in-progress/:period",
   requireAuth,
+  requireSectionView("team"),
   async (req, res): Promise<void> => {
     const rawPeriod = Array.isArray(req.params.period)
       ? req.params.period[0]
@@ -543,6 +545,7 @@ router.get(
 router.get(
   "/projects/:projectId/issues/:period",
   requireAuth,
+  requireSectionView("team"),
   async (req, res): Promise<void> => {
     const rawId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
@@ -602,6 +605,7 @@ router.get(
 router.get(
   "/projects/:projectId/issues/:period/csv",
   requireAuth,
+  requireSectionView("team"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
