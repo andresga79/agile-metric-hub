@@ -477,6 +477,52 @@ Dos ajustes chicos de backend para que "member solo ve" sea 100%:
 **Qué queda del proyecto (post-deploy):** el usuario crea la cuenta `member` en Admin → Usuarios;
 activar el CI (QA-2, bloqueado por scope `workflow`); y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5).
 
+### Migración del frontend Vercel → Render Static (2026-07-27)
+
+**Motivo:** el plan **Hobby de Vercel prohíbe el uso comercial** (definición amplia: cualquier
+despliegue para beneficio económico de alguien involucrado). Como esto es una herramienta interna
+de la empresa, se decidió mover el frontend a un host cuyo free tier **sí** permite comercial.
+Render y Neon free no tienen esa restricción; Vercel Hobby es el único que la tiene. Enforcement de
+Vercel: email de aviso → período de gracia → pausa del deployment si se ignora (sin cargos sorpresa
+ni borrado). Se eligió **Render Static** para consolidar todo en un proveedor (frontend + backend).
+
+**Enfoque:** proxy, **cero cambios de código** en el frontend. El dashboard sigue llamando `/api/*`
+relativo; el Static Site de Render hace de proxy hacia el backend vía una regla de Rewrite, igual
+que hacía Vercel — el navegador ve un solo origen, sin CORS.
+
+**Qué se hizo:**
+- Se creó un **Static Site en Render por el dashboard** (`agile-metric-hub` →
+  `https://agile-metric-hub.onrender.com`), root = raíz, publish `artifacts/dashboard/dist/public`.
+- **Gotcha del build (EROFS):** el Build Command original (`npm i -g pnpm@...`) **falló** porque el
+  dir global de npm (`/usr/lib/node_modules`) es **read-only** en el build de Render Static. **Fix:**
+  usar `npx` en vez de instalar pnpm global. Build Command final:
+  `mkdir -p lib/integrations && npx --yes pnpm@12.0.0-alpha.17 install --frozen-lockfile && npx --yes pnpm@12.0.0-alpha.17 --filter @workspace/dashboard run build`
+- **2 reglas de Rewrite** (dashboard → Redirects/Rewrites, en orden): (1) `/api/*` →
+  `https://agile-metric-hub-api.onrender.com/api/*`, (2) `/*` → `/index.html` (SPA fallback). El
+  `/api/*` debe ir **antes** del `/*`. Las reglas de un Static Site **solo** se configuran por el
+  dashboard, no por `render.yaml`.
+- **Verificado con `curl`** en la URL nueva: home 200 HTML, `/api/healthz` 200 `{status:ok}` vía
+  proxy (35s por cold start del backend), `/api/sync/status` con datos reales, `/admin` 200 HTML
+  (SPA fallback OK). Login real confirmado por el usuario.
+- **Vercel decomisionado** por el usuario (proyecto borrado) → se elimina la exposición comercial.
+- **Repo:** se borró `vercel.json` (ya no se usa), se reescribió `DEPLOY.md` con la nueva
+  arquitectura (Render Static + API + Neon), y se documentó acá.
+
+**⚠️ La URL de producción cambió:** ahora es **`https://agile-metric-hub.onrender.com`** (antes
+`agile-metric-hub.vercel.app`). El `CORS_ORIGIN` del backend conviene apuntarlo a la URL nueva
+(dashboard de Render, backend → Environment); con el proxy no es estrictamente necesario, pero es
+lo prolijo. Render auto-deploya ambos servicios (backend y static) en cada push a `main`.
+
+### Revisión de capacidad de los planes free (2026-07-27)
+
+Se revisaron los límites (fuente: búsquedas web julio 2026) vs. el consumo real de la app (dashboard
+interno, ~2-3 cuentas, tráfico bajo, sync de 29 proyectos, datos chicos):
+- **Neon free:** 0.5 GB storage · 100 CU-hrs/mes · 5 GB transfer · escala a cero a los 5 min → **sobra**.
+- **Render free:** 512 MB RAM · 0.1 CPU · 750 hs/mes · duerme a los 15 min (cold start 30-60s) · 100 GB
+  BW. Funciona (el sync de 29 proyectos ya corrió dentro de 512 MB). Watch: cold starts, y no intentar
+  mantenerlo always-on con pinger (750 hs ≈ 1 servicio 24/7 justo). Plan Starter (~$7/mes) saca el sleep.
+- **Vercel Hobby:** 100 GB BW · **solo uso NO comercial** → por eso se migró (arriba).
+
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
 Se retomó el backlog por el **Tier 3 (Seguridad)**, que era el *gate* previo a exponer la app.
