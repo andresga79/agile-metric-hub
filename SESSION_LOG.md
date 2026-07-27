@@ -421,8 +421,37 @@ pública en `https://agile-metric-hub.vercel.app`.
 >   en Neon. El sync procesa 29 proyectos de Jira, tarda unos minutos en completar.
 > - Auto-deploy: cada push a `main` redespliega Render y Vercel solos.
 
-**Qué queda del proyecto (post-deploy):** SEC-2 residuo (forced password change, necesita UI),
-activar el CI (QA-2, bloqueado por scope `workflow`), y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5).
+### Bug post-deploy (2026-07-27): thresholds de Health triplicados en prod
+
+Al abrir Admin → Health en producción, **cada métrica salía 3 veces**. Causa raíz: el seed de
+`default_metric_thresholds` (`routes/admin/health.ts`) hacía **leer→insertar sin atomicidad y sin
+unique constraint** (la tabla nunca tuvo uno porque `project_id` es nullable y Postgres trata los
+NULL como distintos en un unique index normal). El frontend pide `/api/admin/metric-thresholds`
+desde **varias páginas a la vez**; en la **primera carga contra la DB de Neon vacía**, 3 requests
+concurrentes leyeron la tabla vacía y cada uno insertó las 17 métricas → 3 copias de cada una. No
+se reprodujo en local porque ahí el endpoint solo se había pegado con `curl` secuencial.
+
+**Fix (backend-only, se auto-repara solo en el próximo deploy):**
+- `initDb()` (`index.ts`): migración idempotente que (1) **deduplica** las filas existentes
+  (`DELETE ... USING ... WHERE a.id > b.id AND project_id IS NOT DISTINCT FROM`), y (2) crea un
+  índice **`UNIQUE ... NULLS NOT DISTINCT`** en `(metric, project_id)` (PG 15+; Neon 18 y local 16
+  lo soportan) para que las filas globales (`project_id NULL`) no puedan volver a duplicarse. Orden
+  importa: dedup antes del índice. Ambos pasos idempotentes.
+- Seed (`routes/admin/health.ts`): ahora usa `onConflictDoNothing()` + **re-consulta** tras insertar
+  (no confía en `RETURNING`), así una carrera no duplica y la respuesta siempre es completa.
+- **Verificado en local** simulando el estado de prod: se metieron 51 filas (3×17) a mano →
+  rebuild/restart → `initDb` dejó 17 (1 c/u), el índice único quedó creado y un INSERT duplicado a
+  mano es rechazado por el constraint. typecheck limpio, 22/22 tests.
+- **Cómo se aplica a prod:** al pushear a `main`, Render redespliega y corre `initDb` al bootear →
+  Neon se deduplica sola. El usuario confirma recargando Admin → Health (cada métrica 1 vez).
+
+> Nota: `role_permissions` tiene el mismo patrón de seed perezoso pero **sí** tiene unique constraint
+> real en `(role, section)` (ambos non-null), así que no puede duplicar — no le pasa esto.
+
+**Qué queda del proyecto (post-deploy):** definir modelo de usuarios (en charla: 2 niveles →
+admin + member solo-lectura; viewer queda dormido), activar el CI (QA-2, bloqueado por scope
+`workflow`), y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5). SEC-2 forced-password-change **descartado** (con
+cuenta member compartida sería contraproducente).
 
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 

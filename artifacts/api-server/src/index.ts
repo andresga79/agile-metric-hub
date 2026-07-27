@@ -113,6 +113,25 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS default_metric_thresholds_metric_project_idx
         ON default_metric_thresholds (metric, project_id);
     `);
+    // Heal + prevent duplicate threshold rows. The seed (routes/admin/health.ts) did
+    // read-then-insert with no atomicity and no unique constraint, so concurrent first-load
+    // requests against a fresh DB each inserted the full default set — production ended up
+    // with 3 copies of every metric. Dedup keeping the lowest id per (metric, project_id),
+    // then enforce uniqueness. NULLS NOT DISTINCT (Postgres 15+) is required so the global
+    // rows (project_id IS NULL) can't be duplicated — a plain unique index treats NULLs as
+    // distinct. Both steps are idempotent: the DELETE is a no-op once clean, and the index
+    // uses IF NOT EXISTS. Order matters — dedup must run before the unique index is created.
+    await db.execute(sql`
+      DELETE FROM default_metric_thresholds a
+      USING default_metric_thresholds b
+      WHERE a.metric = b.metric
+        AND a.project_id IS NOT DISTINCT FROM b.project_id
+        AND a.id > b.id;
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS default_metric_thresholds_metric_project_uq
+        ON default_metric_thresholds (metric, project_id) NULLS NOT DISTINCT;
+    `);
 
     await ensureCacheTable();
 

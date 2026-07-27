@@ -19,7 +19,13 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
   const missing = DEFAULT_HEALTH_THRESHOLDS.filter((t) => !existingMetrics.has(t.metric));
 
   if (missing.length > 0) {
-    const inserted = await db
+    // onConflictDoNothing guards against the race that previously duplicated rows: two
+    // concurrent first-load requests both read an empty table and both tried to insert the
+    // full set. With the unique index on (metric, project_id) NULLS NOT DISTINCT, the losing
+    // insert is now a no-op instead of a duplicate. We then re-read rather than trusting the
+    // insert's RETURNING, so the response is always the complete, correct set regardless of
+    // which concurrent request won.
+    await db
       .insert(defaultMetricThresholdsTable)
       .values(missing.map((threshold) => ({
         metric: threshold.metric,
@@ -27,8 +33,13 @@ router.get("/metric-thresholds", async (_req, res): Promise<void> => {
         goodValue: String(threshold.goodValue),
         warningValue: String(threshold.warningValue),
       })))
-      .returning();
-    res.json([...rows, ...inserted].sort((a, b) => a.metric.localeCompare(b.metric)));
+      .onConflictDoNothing();
+    const seeded = await db
+      .select()
+      .from(defaultMetricThresholdsTable)
+      .where(isNull(defaultMetricThresholdsTable.projectId))
+      .orderBy(defaultMetricThresholdsTable.metric);
+    res.json(seeded);
     return;
   }
 
