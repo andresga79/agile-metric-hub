@@ -9,12 +9,16 @@ import { requireAuth, type AuthRequest } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-// Brute-force throttle on login (SEC-4): 10 attempts per 15 min per IP. bcrypt
-// was previously the only cost on guessing; this caps the attempt rate outright.
+// Brute-force throttle on login (SEC-4): 10 FAILED attempts per 15 min per IP.
+// skipSuccessfulRequests means successful sign-ins don't consume the budget, so a
+// shared account behind one office IP isn't throttled by normal logins — only
+// wrong-password attempts (the brute-force vector) count. bcrypt was previously
+// the only cost on guessing; this caps the failed-attempt rate outright.
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: "Too many login attempts. Please try again in a few minutes.",
+  skipSuccessfulRequests: true,
 });
 
 router.post("/auth/login", loginRateLimit, async (req, res): Promise<void> => {

@@ -48,9 +48,25 @@ interface WindowState {
  * with a `Retry-After` header once `max` requests are seen within `windowMs`.
  * State is per-process (fine for a single instance); it resets on restart and
  * self-prunes expired windows so the map can't grow unbounded.
+ *
+ * With `skipSuccessfulRequests`, only requests that end in a failure (response
+ * status >= 400) keep their tick — successful ones are refunded when the
+ * response finishes. Used on login so a shared account behind one office IP
+ * can't be throttled by legitimate sign-ins, while wrong-password attempts
+ * (the brute-force vector) still accumulate toward the limit.
  */
-export function rateLimit(options: { windowMs: number; max: number; message?: string }): RequestHandler {
-  const { windowMs, max, message = "Too many requests, please try again later." } = options;
+export function rateLimit(options: {
+  windowMs: number;
+  max: number;
+  message?: string;
+  skipSuccessfulRequests?: boolean;
+}): RequestHandler {
+  const {
+    windowMs,
+    max,
+    message = "Too many requests, please try again later.",
+    skipSuccessfulRequests = false,
+  } = options;
   const hits = new Map<string, WindowState>();
 
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -77,6 +93,19 @@ export function rateLimit(options: { windowMs: number; max: number; message?: st
       res.status(429).json({ error: message });
       return;
     }
+
+    if (skipSuccessfulRequests) {
+      // Refund the tick once we know the outcome, so only failures (>= 400)
+      // count. `state` is captured by reference; if its window has since rolled
+      // over this decrements an orphaned object, which is harmless.
+      const counted = state;
+      res.on("finish", () => {
+        if (res.statusCode < 400) {
+          counted.count = Math.max(0, counted.count - 1);
+        }
+      });
+    }
+
     next();
   };
 }

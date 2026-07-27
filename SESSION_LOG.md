@@ -448,10 +448,34 @@ se reprodujo en local porque ahí el endpoint solo se había pegado con `curl` s
 > Nota: `role_permissions` tiene el mismo patrón de seed perezoso pero **sí** tiene unique constraint
 > real en `(role, section)` (ambos non-null), así que no puede duplicar — no le pasa esto.
 
-**Qué queda del proyecto (post-deploy):** definir modelo de usuarios (en charla: 2 niveles →
-admin + member solo-lectura; viewer queda dormido), activar el CI (QA-2, bloqueado por scope
-`workflow`), y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5). SEC-2 forced-password-change **descartado** (con
-cuenta member compartida sería contraproducente).
+### Modelo de usuarios decidido + hardening asociado (2026-07-27)
+
+Se acordó el **modelo de acceso**: **2 niveles** — `admin` (el usuario, con todo el poder de
+configuración: visibilidad de proyectos, thresholds de health, tipos de artefacto, settings,
+usuarios) y `member` (**solo lectura**, ve todas las secciones). El rol `viewer` **queda dormido**
+(existe en el enum + seed de `role_permissions`, pero sin cuentas asignadas; inofensivo). No se creó
+ningún usuario `viewer` en prod — el único `viewer` fue un usuario de prueba local, ya borrado. La
+cuenta `member` la crea el usuario desde Admin → Usuarios.
+
+Se verificó en código que el borde admin/member es real: **todo `/api/admin/*` tiene `requireAuth +
+requireAdmin`** (incl. la visibilidad de proyectos en `user-project-settings.ts`), y el único write
+no-admin (`targets`) está gateado por `can_edit`, que para `member` es `false` por default ⇒ member
+es solo-lectura. **SEC-2 forced-password-change: descartado** (con cuenta `member` compartida sería
+contraproducente — el primero que entra la cambia y deja afuera al resto).
+
+Dos ajustes chicos de backend para que "member solo ve" sea 100%:
+- **`POST /sync/run` → solo admin** (`sync-status.ts`): antes tenía solo `requireAuth`, así que un
+  member podía disparar un sync manual. Ahora `requireAuth + requireAdmin`.
+- **Rate-limit de login → solo cuenta fallidos** (`security.ts` opción `skipSuccessfulRequests` +
+  `res.on("finish")` que reembolsa el tick si el status < 400; activado en `auth.ts`). Así una
+  cuenta `member` compartida detrás de una IP de oficina no se auto-bloquea con logins legítimos;
+  solo los intentos con password incorrecta (fuerza bruta) acumulan hacia el límite de 10/15min.
+- **Verificado local con `curl`:** member `/sync/run` → 403, admin → 202, member `/sync/status` →
+  200; 15 logins exitosos seguidos → 0 bloqueados, y a partir del 11º login **fallido** → 429.
+  typecheck limpio, 22/22 tests.
+
+**Qué queda del proyecto (post-deploy):** el usuario crea la cuenta `member` en Admin → Usuarios;
+activar el CI (QA-2, bloqueado por scope `workflow`); y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5).
 
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
