@@ -368,6 +368,40 @@ Vercel. Todo en `DEPLOY.md`.
 **Cómo retomar el deploy:** abrir `DEPLOY.md` y seguir Neon → Render → Vercel. Una vez conectados,
 Render y Vercel hacen auto-deploy en cada push a `main` (ese es el CI/CD del deploy).
 
+### Progreso del deploy — sesión 2026-07-26 (noche, cortada a mitad)
+
+Se empezó a ejecutar el deploy real de la sección 9. Estado al cortar:
+
+- ✅ **Neon (paso 1) — HECHO.** Proyecto creado: nombre `agile-metric-hub`, org/cuenta `maya.ia`
+  (free), branch `production`, database `neondb`, región **AWS US West 2 (Oregon)**, Postgres 18.
+  **Neon Auth quedó APAGADO** a propósito (usamos nuestro propio auth JWT + tabla `users`; el de
+  Neon se pisaría). El `DATABASE_URL` (con `?sslmode=require`, ya incluido) lo copió y guardó el
+  usuario **fuera del repo/chat** — no está en ningún lado versionado. Si mañana no lo tiene a mano,
+  se re-copia desde Neon → card/botón **"Connect"** → **"Show password"**.
+- 🔄 **Render (paso 2) — EN CURSO.** Se creó vía **New → Blueprint** con el repo
+  `andresga79/agile-metric-hub`; Render leyó `render.yaml` y estaba **creando/buildeando** el web
+  service `agile-metric-hub-api` (Docker, free) al cortar. El usuario confirmó que el flujo del
+  Blueprint **le pidió y cargó todas las env vars secretas** (`DATABASE_URL`, `JIRA_URL`,
+  `JIRA_EMAIL`, `JIRA_API_TOKEN`, `DEFAULT_ADMIN_PASSWORD` fuerte). `JWT_SECRET` lo genera Render;
+  `NODE_ENV=production`, `JWT_EXPIRE`, `CORS_ORIGIN` vienen del `render.yaml`.
+- ⏳ **Vercel (paso 3) — PENDIENTE**, todavía no se tocó.
+
+**Cómo retomar mañana:**
+1. Verificar que el servicio de Render quedó en **"Live"** (no "Build failed"/"Deploy failed").
+   Mirar la pestaña **Logs**: deberían verse las migraciones de `initDb()` + el sync de Jira
+   arrancando. Si falló al arrancar con un mensaje tipo *"JWT_SECRET too weak"* /
+   *"DEFAULT_ADMIN_PASSWORD..."* → es el gate de seguridad, ajustar esa env var en Render.
+2. **Verificar el backend vivo** (lo puede hacer Claude con `curl` a la URL pública):
+   `curl https://agile-metric-hub-api.onrender.com/api/healthz` → `{"status":"ok"}`. Ojo: primera
+   request puede tardar ~30-60s por el cold start del free tier. Si Render asignó **otra URL**
+   (distinta a `agile-metric-hub-api.onrender.com`), ajustar 1 línea en `render.yaml` (y en el
+   `rewrite` de `vercel.json`) y re-pushear.
+3. **Vercel (paso 3 de `DEPLOY.md`):** Add New → Project, importar el repo, **NO** cambiar el Root
+   Directory (raíz, para que resuelva el workspace pnpm), nombre `agile-metric-hub`. Deploy y abrir
+   `https://agile-metric-hub.vercel.app` → login `admin` / la `DEFAULT_ADMIN_PASSWORD` que se puso
+   en Render. Ver gotchas del build de Vercel en la sección 9.
+4. (Opcional) cron de sync diario — paso 4 de `DEPLOY.md`.
+
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
 Se retomó el backlog por el **Tier 3 (Seguridad)**, que era el *gate* previo a exponer la app.
