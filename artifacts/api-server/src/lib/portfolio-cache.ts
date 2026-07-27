@@ -251,8 +251,13 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
     // preserves the previous row instead. Tracked here so the skip is logged, not silent.
     const failedProjectIds: string[] = [];
 
-    // Keep concurrency low so Jira searches don't trip the upstream 30s abort.
-    const batchSize = 3;
+    // One project at a time. Each project fetches THREE full issue+changelog sets
+    // (current 90d, open, previous 90-180d), so batching 3 projects held up to 9
+    // such sets in memory at once — the main driver of the 512MB OOM crash loop
+    // (this phase runs right after warm-cache, which is why the crash landed here
+    // even after that phase reported 7/7). Serial keeps the peak to one project's
+    // sets. Also safely under the upstream 30s Jira abort. Bump up only with more RAM.
+    const batchSize = 1;
     for (let i = 0; i < jiraProjects.length; i += batchSize) {
       const batch = jiraProjects.slice(i, i + batchSize);
       const results = await Promise.allSettled(
