@@ -523,6 +523,39 @@ interno, ~2-3 cuentas, tráfico bajo, sync de 29 proyectos, datos chicos):
   mantenerlo always-on con pinger (750 hs ≈ 1 servicio 24/7 justo). Plan Starter (~$7/mes) saca el sleep.
 - **Vercel Hobby:** 100 GB BW · **solo uso NO comercial** → por eso se migró (arriba).
 
+### Bug de producción: crash loop del sync por OOM (2026-07-27)
+
+**Síntoma:** Render mandó 2 mails de *"Server failure ... Exited with status 139"* (SIGSEGV) sobre
+`agile-metric-hub-api`. En `/api/sync/status`, `lastSyncedAt` estaba **siempre en null** y el
+`startedAt` cambiaba cada ~1 min → el proceso **crasheaba a mitad del sync, reiniciaba, y volvía a
+empezar el sync**: un crash loop. Pasaba incluso con solo 7 proyectos visibles.
+
+**Diagnóstico (por observación + lectura de código):** el crash era por **memoria** en los 512 MB del
+free tier. El sync tiene dos fases pesadas, ambas concurrentes:
+- `warmVisibleProjectsCache` (`jira-cache.ts`) — `CONCURRENCY=3`, cada proyecto trae 2 sets de issues
+  (uno con changelog).
+- `calculateAndCachePortfolio` (`portfolio-cache.ts`) — `batchSize=3`, cada proyecto trae **3 sets de
+  issues con changelog** → hasta **9 sets en memoria a la vez**. Observamos que el sync llegaba a 7/7
+  (warm terminado) pero seguía `isSyncing=true` sin completar y reiniciaba → el crash caía en **esta
+  segunda fase**.
+
+**Fix (backend, gratis, sin migrar):**
+- `jira-cache.ts`: `CONCURRENCY` 3 → **1** (warm de a un proyecto).
+- `portfolio-cache.ts`: `batchSize` 3 → **1** (portfolio de a un proyecto). Pico de memoria de 9 sets
+  → los de un solo proyecto.
+- `docker/api/Dockerfile` (CMD) + `package.json` (start): agregado **`--max-old-space-size=400`** para
+  que V8 haga GC y se mantenga bajo los 512 MB en vez de que el contenedor mate el proceso.
+- **Trade-off:** el sync pasa a ser **secuencial → más lento** (minutos), pero **estable y completa**.
+  Hay timeout de 15s por proyecto en warm.
+- **Verificado:** local completa `7/7 failed=0 outcome=success`; **en prod** el sync ya completa
+  (`lastSyncedAt` seteado, `outcome=success`, 0 failed, **0 reinicios** durante el monitoreo) y healthz
+  estable 3/3. typecheck limpio, 22/22 tests. Commits `4912206` (warm+heap) y `86bec5b` (portfolio).
+
+> **Si vuelve a crashear** (p. ej. al subir a 29 proyectos o con un proyecto de changelog gigante),
+> escalar: (a) serializar los 3 fetches por proyecto en `calculateAndCachePortfolio` (fetch→procesar→
+> liberar, en vez de `Promise.all`), (b) achicar la ventana de 90 días, o (c) **Render Starter
+> (~$7/mes)** con más RAM. Confirmar mirando que no lleguen más mails de *status 139* de Render.
+
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
 Se retomó el backlog por el **Tier 3 (Seguridad)**, que era el *gate* previo a exponer la app.
