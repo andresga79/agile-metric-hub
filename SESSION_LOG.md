@@ -391,21 +391,38 @@ Se empezó a ejecutar el deploy real de la sección 9. Estado al cortar:
   prod OK (HSTS presente, CSP `default-src 'none'`, nosniff, X-Frame DENY, sin X-Powered-By); login
   con password incorrecta → 401 (no 500) ⇒ admin bootstrapeado y flujo auth vivo. **Backend
   desplegado y funcional.**
-- ⏳ **Vercel (paso 3) — PENDIENTE**, único paso que falta para cerrar el deploy.
+- ✅ **Vercel (paso 3) — HECHO Y VERIFICADO. DEPLOY COMPLETO.** Frontend live en
+  **`https://agile-metric-hub.vercel.app`**.
+  **Gotcha del wizard de Vercel (importante para futuros imports):** al importar el repo, el wizard
+  **auto-detectó `artifacts/api-server` como Root Directory** (tiene su `package.json`) y preseteó
+  "Express" — eso es el backend, NO el frontend. Se intentó corregir a la raíz desde el wizard pero
+  el selector no dejaba subir de la subcarpeta. Se le dio **Deploy igual** y, contra lo esperado,
+  **salió bien**: Vercel terminó usando el `vercel.json` de la raíz (el import traía
+  `name=agile-metric-hub` y `root-directory=.` en la URL, que ganaron) y el dominio de producción
+  quedó `agile-metric-hub.vercel.app` (coincide con el `CORS_ORIGIN` de Render). Si en un futuro
+  re-import el root queda mal, corregirlo en **Settings → General → Root Directory** (ahí es un
+  campo de texto editable: dejar **vacío** = raíz) + Framework Preset "Other", y **Redeploy** sin
+  build cache.
+  **Verificación en vivo con `curl`:** `https://agile-metric-hub.vercel.app/` → 200 `text/html`
+  (dashboard servido); `/api/healthz` → 200 `{"status":"ok"}` y `/api/sync/status` → 200 con datos
+  reales (29/29 proyectos) ⇒ **el proxy `/api/*` → Render funciona** (el navegador ve un solo origen,
+  sin CORS). Pendiente de confirmar por el usuario en el navegador: el **login real** (`admin` /
+  `DEFAULT_ADMIN_PASSWORD`) — Claude no lo puede probar porque no tiene la contraseña.
+- ⏳ (Opcional) **paso 4** de `DEPLOY.md` — cron de sync diario (`sync-cron.yml`, parkeado en rama
+  `ci-workflow` por el scope `workflow`). No es necesario para que la app funcione.
 
-**Cómo retomar mañana (solo falta Vercel):**
-1. **Vercel (paso 3 de `DEPLOY.md`):** Add New → Project, importar el repo, **NO** cambiar el Root
-   Directory (raíz, para que resuelva el workspace pnpm), nombre `agile-metric-hub` (para que el
-   dominio coincida con el `CORS_ORIGIN` ya seteado en Render). Deploy y abrir
-   `https://agile-metric-hub.vercel.app` → login `admin` / la `DEFAULT_ADMIN_PASSWORD` que se puso
-   en Render. **El build de Vercel es la parte más frágil** (monorepo + pnpm alpha) — ver gotchas en
-   la sección 9; si falla, leer el log de build de Vercel.
-2. Una vez arriba Vercel: verificar el flujo end-to-end (login real, que las pantallas carguen datos
-   vía el proxy `/api/*` → Render, que no haya CORS en el navegador).
-3. (Opcional) cron de sync diario — paso 4 de `DEPLOY.md`.
+**Estado del deploy: LISTO.** Neon + Render + Vercel arriba y verificados end-to-end. La app está
+pública en `https://agile-metric-hub.vercel.app`.
 
-> Nota: Render free se duerme a los ~15 min sin tráfico (cold start ~30-60s la próxima visita). El
-> primer sync arrancó al bootear y procesa 29 proyectos de Jira — tarda un rato en completar.
+> Notas operativas del free tier:
+> - Render free se **duerme** a los ~15 min sin tráfico (cold start ~30-60s en la próxima request).
+> - El **estado del sync es en memoria**: cada cold-start/reboot de Render dispara un sync nuevo
+>   (`trigger:"startup"`) y `lastSyncedAt` vuelve a `null` — es esperado, los datos persistidos viven
+>   en Neon. El sync procesa 29 proyectos de Jira, tarda unos minutos en completar.
+> - Auto-deploy: cada push a `main` redespliega Render y Vercel solos.
+
+**Qué queda del proyecto (post-deploy):** SEC-2 residuo (forced password change, necesita UI),
+activar el CI (QA-2, bloqueado por scope `workflow`), y Tier 4 (FE-*/DEU-*/OPS-*/DAT-1/5).
 
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
