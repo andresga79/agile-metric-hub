@@ -19,4 +19,7 @@ COPY --from=builder /app/artifacts /app/artifacts
 COPY --from=builder /app/node_modules /app/node_modules
 
 EXPOSE 8000
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# Cap V8's old-space heap below the 512 MB free-tier container limit so it GCs
+# aggressively and stays within bounds, instead of growing until the container
+# kills the process. Tune up if the instance gets more RAM.
+CMD ["node", "--enable-source-maps", "--max-old-space-size=400", "artifacts/api-server/dist/index.mjs"]

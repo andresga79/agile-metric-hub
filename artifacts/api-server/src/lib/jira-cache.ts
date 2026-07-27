@@ -157,7 +157,13 @@ async function warmVisibleProjectsCache(forceRefresh: boolean = false): Promise<
     syncTotalProjects = projects.length;
     syncProcessedProjects = 0;
 
-    const CONCURRENCY = 3;
+    // Serial (1 project at a time): on the 512 MB free tier, warming several
+    // projects concurrently held multiple full issue+changelog sets in memory
+    // at once and segfaulted the process (status 139) before the sync could
+    // finish — a crash loop that left lastSyncedAt perpetually null. One at a
+    // time trades speed for staying under the memory ceiling. Bump back up only
+    // if the instance gets more RAM.
+    const CONCURRENCY = 1;
     const PROJECT_WARM_TIMEOUT_MS = 15000;
     for (let i = 0; i < projects.length; i += CONCURRENCY) {
       const batch = projects.slice(i, i + CONCURRENCY);
