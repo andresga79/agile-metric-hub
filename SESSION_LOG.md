@@ -378,29 +378,34 @@ Se empezó a ejecutar el deploy real de la sección 9. Estado al cortar:
   Neon se pisaría). El `DATABASE_URL` (con `?sslmode=require`, ya incluido) lo copió y guardó el
   usuario **fuera del repo/chat** — no está en ningún lado versionado. Si mañana no lo tiene a mano,
   se re-copia desde Neon → card/botón **"Connect"** → **"Show password"**.
-- 🔄 **Render (paso 2) — EN CURSO.** Se creó vía **New → Blueprint** con el repo
-  `andresga79/agile-metric-hub`; Render leyó `render.yaml` y estaba **creando/buildeando** el web
-  service `agile-metric-hub-api` (Docker, free) al cortar. El usuario confirmó que el flujo del
-  Blueprint **le pidió y cargó todas las env vars secretas** (`DATABASE_URL`, `JIRA_URL`,
-  `JIRA_EMAIL`, `JIRA_API_TOKEN`, `DEFAULT_ADMIN_PASSWORD` fuerte). `JWT_SECRET` lo genera Render;
-  `NODE_ENV=production`, `JWT_EXPIRE`, `CORS_ORIGIN` vienen del `render.yaml`.
-- ⏳ **Vercel (paso 3) — PENDIENTE**, todavía no se tocó.
+- ✅ **Render (paso 2) — HECHO Y VERIFICADO.** Se creó vía **New → Blueprint** con el repo
+  `andresga79/agile-metric-hub`; Render leyó `render.yaml` y creó el web service
+  `agile-metric-hub-api` (Docker, free) en `https://agile-metric-hub-api.onrender.com` (la URL
+  quedó como se esperaba, no hubo que ajustar configs). El flujo del Blueprint pidió y se cargaron
+  todas las env vars secretas (`DATABASE_URL`, `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`,
+  `DEFAULT_ADMIN_PASSWORD` fuerte). `JWT_SECRET` lo genera Render; `NODE_ENV=production`,
+  `JWT_EXPIRE`, `CORS_ORIGIN` vienen del `render.yaml`.
+  **Verificación en vivo (2026-07-27 ~02:0x UTC), con `curl` a la URL pública:**
+  `/api/healthz` → `{"status":"ok"}` (200); `/api/sync/status` → 200 con el sync corriendo
+  (`isSyncing:true`, `trigger:"startup"`, 29/29 proyectos) ⇒ conectado a Neon y a Jira; headers de
+  prod OK (HSTS presente, CSP `default-src 'none'`, nosniff, X-Frame DENY, sin X-Powered-By); login
+  con password incorrecta → 401 (no 500) ⇒ admin bootstrapeado y flujo auth vivo. **Backend
+  desplegado y funcional.**
+- ⏳ **Vercel (paso 3) — PENDIENTE**, único paso que falta para cerrar el deploy.
 
-**Cómo retomar mañana:**
-1. Verificar que el servicio de Render quedó en **"Live"** (no "Build failed"/"Deploy failed").
-   Mirar la pestaña **Logs**: deberían verse las migraciones de `initDb()` + el sync de Jira
-   arrancando. Si falló al arrancar con un mensaje tipo *"JWT_SECRET too weak"* /
-   *"DEFAULT_ADMIN_PASSWORD..."* → es el gate de seguridad, ajustar esa env var en Render.
-2. **Verificar el backend vivo** (lo puede hacer Claude con `curl` a la URL pública):
-   `curl https://agile-metric-hub-api.onrender.com/api/healthz` → `{"status":"ok"}`. Ojo: primera
-   request puede tardar ~30-60s por el cold start del free tier. Si Render asignó **otra URL**
-   (distinta a `agile-metric-hub-api.onrender.com`), ajustar 1 línea en `render.yaml` (y en el
-   `rewrite` de `vercel.json`) y re-pushear.
-3. **Vercel (paso 3 de `DEPLOY.md`):** Add New → Project, importar el repo, **NO** cambiar el Root
-   Directory (raíz, para que resuelva el workspace pnpm), nombre `agile-metric-hub`. Deploy y abrir
+**Cómo retomar mañana (solo falta Vercel):**
+1. **Vercel (paso 3 de `DEPLOY.md`):** Add New → Project, importar el repo, **NO** cambiar el Root
+   Directory (raíz, para que resuelva el workspace pnpm), nombre `agile-metric-hub` (para que el
+   dominio coincida con el `CORS_ORIGIN` ya seteado en Render). Deploy y abrir
    `https://agile-metric-hub.vercel.app` → login `admin` / la `DEFAULT_ADMIN_PASSWORD` que se puso
-   en Render. Ver gotchas del build de Vercel en la sección 9.
-4. (Opcional) cron de sync diario — paso 4 de `DEPLOY.md`.
+   en Render. **El build de Vercel es la parte más frágil** (monorepo + pnpm alpha) — ver gotchas en
+   la sección 9; si falla, leer el log de build de Vercel.
+2. Una vez arriba Vercel: verificar el flujo end-to-end (login real, que las pantallas carguen datos
+   vía el proxy `/api/*` → Render, que no haya CORS en el navegador).
+3. (Opcional) cron de sync diario — paso 4 de `DEPLOY.md`.
+
+> Nota: Render free se duerme a los ~15 min sin tráfico (cold start ~30-60s la próxima visita). El
+> primer sync arrancó al bootear y procesa 29 proyectos de Jira — tarda un rato en completar.
 
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
