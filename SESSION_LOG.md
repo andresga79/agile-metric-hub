@@ -556,6 +556,23 @@ free tier. El sync tiene dos fases pesadas, ambas concurrentes:
 > liberar, en vez de `Promise.all`), (b) achicar la ventana de 90 días, o (c) **Render Starter
 > (~$7/mes)** con más RAM. Confirmar mirando que no lleguen más mails de *status 139* de Render.
 
+**Aclaraciones operativas (post-fix):**
+- **Solo se sincronizan los proyectos visibles.** Ambas fases del sync pasan por
+  `filterVisibleProjects()`, por eso `/api/sync/status` muestra `7/7` (el usuario dejó 7 visibles en
+  Admin → Visibilidad, no 29). Tener menos proyectos visibles **ayuda** (sync más corto, menos
+  llamadas a Jira, menos probabilidad de recaída), pero **no baja el pico de memoria** — eso ya lo
+  bajó el fix (concurrencia 1). El riesgo residual sería un **único** proyecto con changelog gigante.
+  Si vuelve a hacer visibles los 29, sube el riesgo → ahí conviene el escalamiento (serializar los
+  fetches por proyecto) o Render Starter. Decisión del usuario: **dejarlo en 7 por ahora.**
+- **Cuenta `member` compartida por varias personas a la vez: OK por diseño.** La auth es **JWT
+  stateless** (el backend no guarda sesiones), así que dos personas usando el mismo usuario `member`
+  simultáneamente no genera conflicto ni pisada. Surgió porque el usuario y un compañero entraron a
+  la vez con `member` justo cuando llegó un crash y sospecharon relación.
+- **Los logins simultáneos NO causaron el crash.** El crash era el OOM del sync. Vínculo indirecto:
+  el backend free de Render **se duerme a los ~15 min**, así que **cualquier visita** (aunque sea una
+  sola persona) lo **despierta** y dispara el sync `startup` — que era el que crasheaba. Con una
+  persona habría pasado igual. Ya está arreglado; usar `member` con varios a la vez es normal.
+
 ## 10. Cierre de Seguridad Tier 3 — backend (2026-07-26)
 
 Se retomó el backlog por el **Tier 3 (Seguridad)**, que era el *gate* previo a exponer la app.
