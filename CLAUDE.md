@@ -114,6 +114,8 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 
 ## Pointers
 
+- `HEALTH-THRESHOLDS.md` — umbrales de Admin → Health personalizados manualmente (difieren
+  del default de fábrica), con script SQL para restaurarlos en un Postgres nuevo/otra PC
 - `METRICS.md` — fórmula real de cada métrica calculada, con referencias `archivo:línea`
 - `DEPLOY.md` — arquitectura y pasos de deploy (Render Static + Render API Docker + Neon),
   ya ejecutado en producción
