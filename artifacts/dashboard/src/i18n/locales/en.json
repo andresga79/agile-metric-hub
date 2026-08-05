@@ -306,6 +306,7 @@
   "page.flow.reasonStatus": "Blocked status",
   "page.flow.reasonFlag": "🚩 Flag",
   "page.flow.reasonBoth": "Status + 🚩 flag",
+  "page.flow.flagReason": "Flag reason",
   "page.flow.assignee": "Assignee",
   "page.flow.alert": "Alert",
   "page.flow.daysInProgress": "Days in Progress",

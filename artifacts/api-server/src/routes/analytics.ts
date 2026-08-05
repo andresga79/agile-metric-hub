@@ -18,11 +18,15 @@ import {
   isBlockedStatus,
   isIssueCurrentlyFlagged,
   isBlockedEligibleIssueType,
+  getIssueComments,
+  adfToPlainText,
   type JiraIssue,
 } from "../lib/jira";
 import { logger } from "../lib/logger";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
+import { db, blockedReasonsTable } from "@workspace/db";
+import { inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -411,6 +415,7 @@ router.get(
             isCurrentlyBlocked: false,
             currentStatus: i.fields.status.name,
             blockReason: null as "status" | "flag" | "both" | null,
+            lastFlagAppliedAt: null as number | null,
           };
         }
 
@@ -420,6 +425,10 @@ router.get(
         let intervalStart: number | null = null;
         let blockedByStatus = false;
         let blockedByFlag = false;
+        // Timestamp of the most recent transition that set the Flagged field to a
+        // blocking value - used later to find the comment written alongside it (teams
+        // often explain the impediment in a comment when they flag the issue).
+        let lastFlagAppliedAt: number | null = null;
 
         const sortedHistories = [...histories]
           .filter((h) => h.items.some((it) => it.field === "status" || isFlaggedTransition(it)))
@@ -436,7 +445,11 @@ router.get(
 
           const flaggedTransition = h.items.find((it) => isFlaggedTransition(it));
           if (flaggedTransition) {
+            const wasFlagged = blockedByFlag;
             blockedByFlag = isBlockedFlagValue(flaggedTransition.toString ?? null);
+            if (!wasFlagged && blockedByFlag) {
+              lastFlagAppliedAt = transitionTime;
+            }
           }
 
           const isBlockedNow = blockedByStatus || blockedByFlag;
@@ -456,6 +469,13 @@ router.get(
         const currentlyBlockedByStatus = !isDone && isBlockedStatus(i.fields.status.name);
         const currentlyBlockedByFlag = !isDone && isIssueCurrentlyFlagged(i);
         const isCurrentlyBlocked = currentlyBlockedByStatus || currentlyBlockedByFlag;
+
+        // Same "no transition observed" edge case as intervalStart below: if it's
+        // currently flagged but we never saw the flag-applied transition in the
+        // fetched changelog window, fall back to creation time as the best guess.
+        if (currentlyBlockedByFlag && lastFlagAppliedAt === null) {
+          lastFlagAppliedAt = createdMs;
+        }
 
         if (isCurrentlyBlocked && intervalStart === null) {
           // If the issue is currently blocked but we did not observe a transition
@@ -491,18 +511,73 @@ router.get(
           priority: i.fields.priority.name,
           totalDays,
           isCurrentlyBlocked,
+          lastFlagAppliedAt: reasonByFlag ? lastFlagAppliedAt : null,
           currentStatus: i.fields.status.name,
           blockReason,
         };
       })
     );
 
-    const blockedIssues = blockedData
+    const blockedIssuesRanked = blockedData
       .filter((b) => b.totalDays > 0 || b.isCurrentlyBlocked)
       .sort((a, b) => {
         if (a.isCurrentlyBlocked !== b.isCurrentlyBlocked) return a.isCurrentlyBlocked ? -1 : 1;
         return b.totalDays - a.totalDays;
       });
+
+    // Jira's Flagged field carries no reason text of its own (it's just a binary
+    // "Impediment" marker) - the actual explanation, when someone bothers to write
+    // one, lives in a regular issue comment posted around the same time the flag was
+    // applied. Only fetched for rows that are actually flag-blocked, and only for the
+    // already-filtered/sorted rows shown in the table, to keep this to one extra Jira
+    // call per visible flagged row instead of one per project issue.
+    const FLAG_COMMENT_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes
+    const flagBlockedKeys = blockedIssuesRanked
+      .filter((b) => b.blockReason === "flag" || b.blockReason === "both")
+      .map((b) => b.key);
+
+    // Manual notes (added from the UI, see routes/blocked-reasons.ts) take priority
+    // over an auto-detected Jira comment - if someone bothered to write a curated
+    // note, prefer it over a heuristic guess at the nearest comment.
+    const manualReasons =
+      flagBlockedKeys.length > 0
+        ? await db
+            .select({ issueKey: blockedReasonsTable.issueKey, reason: blockedReasonsTable.reason })
+            .from(blockedReasonsTable)
+            .where(inArray(blockedReasonsTable.issueKey, flagBlockedKeys))
+        : [];
+    const manualReasonByKey = new Map(manualReasons.map((r) => [r.issueKey, r.reason]));
+
+    const blockedIssues = await Promise.all(
+      blockedIssuesRanked.map(async ({ lastFlagAppliedAt, ...b }) => {
+        const isFlagBlocked = b.blockReason === "flag" || b.blockReason === "both";
+        if (!isFlagBlocked) {
+          return { ...b, flagReason: null as string | null, flagReasonEditable: false };
+        }
+
+        const manualReason = manualReasonByKey.get(b.key);
+        if (manualReason) {
+          return { ...b, flagReason: manualReason, flagReasonEditable: true };
+        }
+
+        if (lastFlagAppliedAt === null) {
+          return { ...b, flagReason: null as string | null, flagReasonEditable: true };
+        }
+
+        const comments = await getIssueComments(b.key);
+        let best: { text: string; diffMs: number } | null = null;
+        for (const c of comments) {
+          const createdMs = new Date(c.created).getTime();
+          const diffMs = Math.abs(createdMs - lastFlagAppliedAt);
+          if (diffMs > FLAG_COMMENT_TOLERANCE_MS) continue;
+          if (best && diffMs >= best.diffMs) continue;
+          const text = adfToPlainText(c.body);
+          if (text) best = { text, diffMs };
+        }
+
+        return { ...b, flagReason: best?.text ?? null, flagReasonEditable: true };
+      })
+    );
 
     // --- Time in Status (#9) ---
     const timeInStatus = await computeTimeInStatus(timeInStatusIssues);

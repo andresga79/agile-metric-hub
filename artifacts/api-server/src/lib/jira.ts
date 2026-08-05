@@ -685,6 +685,42 @@ export async function getJiraProject(projectId: string): Promise<JiraProject | n
   }
 }
 
+export interface JiraComment {
+  id: string;
+  author?: { displayName: string };
+  body: unknown; // Atlassian Document Format (ADF), not plain text - use adfToPlainText
+  created: string;
+  updated: string;
+}
+
+// Comments come back as ADF (a nested doc/paragraph/text tree), not plain strings -
+// this walks the tree and concatenates every text node.
+export function adfToPlainText(doc: unknown): string {
+  if (!doc || typeof doc !== "object") return "";
+  const node = doc as { type?: string; text?: string; content?: unknown[] };
+  if (node.type === "text" && typeof node.text === "string") return node.text;
+  if (Array.isArray(node.content)) {
+    return node.content.map(adfToPlainText).join(" ").replace(/\s+/g, " ").trim();
+  }
+  return "";
+}
+
+// Not cached: comments are low-volume, change at any time, and aren't part of the
+// periodic project sync/warm-cache - unlike issues/sprints, there's no dashboard-wide
+// re-read pattern here that would justify the 6h TTL used elsewhere in this file.
+export async function getIssueComments(issueKey: string): Promise<JiraComment[]> {
+  if (!isJiraConfigured()) return [];
+  try {
+    const result = await jiraFetch<{ comments: JiraComment[] }>(
+      `/issue/${encodeURIComponent(issueKey)}/comment?orderBy=created`
+    );
+    return result.comments;
+  } catch (err) {
+    logger.warn({ err, issueKey }, "Failed to fetch issue comments");
+    return [];
+  }
+}
+
 const canonicalProjectIdCache = new Map<string, string>();
 
 export async function getCanonicalProjectId(projectId: string): Promise<string> {
