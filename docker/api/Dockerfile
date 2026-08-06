@@ -1,6 +1,6 @@
 FROM node:22-bullseye-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm@12.0.0-alpha.17
+RUN npm install -g pnpm@10
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
@@ -9,6 +9,12 @@ COPY lib/db ./lib/db
 COPY artifacts/api-server ./artifacts/api-server
 
 RUN mkdir -p lib/integrations
+ARG npm_config_fetch_timeout=600000
+ARG npm_config_fetch_retries=8
+ARG npm_config_network_concurrency=4
+ENV npm_config_fetch_timeout=$npm_config_fetch_timeout \
+    npm_config_fetch_retries=$npm_config_fetch_retries \
+    npm_config_network_concurrency=$npm_config_network_concurrency
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @workspace/api-server run build
 
