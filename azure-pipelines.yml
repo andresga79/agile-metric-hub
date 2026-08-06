@@ -1,0 +1,29 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - script: |
+      set -e
+      GITHUB_HEAD=$(git ls-remote "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git" refs/heads/main | awk '{print $1}')
+      if [ -z "$GITHUB_HEAD" ]; then
+        echo "Unable to read GitHub remote, aborting"
+        exit 1
+      fi
+      if [ "$GITHUB_HEAD" = "$(git rev-parse HEAD)" ]; then
+        echo "GitHub already at $(git rev-parse HEAD), skipping sync"
+      else
+        git remote add github "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git"
+        git push github main --force
+        echo "GitHub synced to $(git rev-parse HEAD)"
+      fi
+    displayName: 'Sync main to GitHub (skip if already in sync)'
+    env:
+      GITHUB_PAT: $(GITHUB_PAT)

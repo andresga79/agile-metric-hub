@@ -1,0 +1,30 @@
+name: Sync main to Azure DevOps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Azure DevOps (skip if already in sync)
+        env:
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          git remote add azure "https://x-access-token:${AZURE_DEVOPS_PAT}@dev.azure.com/Nxtara/Otras%20Apps/_git/agile-metric-hub"
+          AZURE_HEAD=$(git ls-remote azure refs/heads/main | awk '{print $1}')
+          if [ "$AZURE_HEAD" = "$GITHUB_SHA" ]; then
+            echo "Azure already at $GITHUB_SHA, skipping sync"
+          else
+            git push azure main --force
+            echo "Azure synced to $GITHUB_SHA"
+          fi
