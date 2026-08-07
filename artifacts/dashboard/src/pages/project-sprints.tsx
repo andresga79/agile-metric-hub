@@ -68,7 +68,7 @@ export default function ProjectSprints() {
   const activeSprint = sprints.find((s) => s.state === "active") ?? null;
   const isTruncated = (summary?.totalSprintsInPeriod ?? 0) > sprints.length;
 
-  const chartData = [...sprints].reverse().map((s) => ({
+  const chartData = sprints.map((s) => ({
     name: s.sprintName.replace(/^.*\s/, "S"),
     velocity: s.velocity,
     completionRate: s.completionRate,
