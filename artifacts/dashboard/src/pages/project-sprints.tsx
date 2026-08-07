@@ -70,8 +70,8 @@ export default function ProjectSprints() {
 
   const chartData = sprints.map((s) => ({
     name: s.sprintName.replace(/^.*\s/, "S"),
+    plannedStoryPoints: s.totalStoryPoints,
     velocity: s.velocity,
-    completionRate: s.completionRate,
   }));
 
   return (
@@ -187,15 +187,14 @@ export default function ProjectSprints() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <Tooltip
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }} />
-                    <Area yAxisId="left" type="monotone" dataKey="velocity" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVelocity)" name={`${t('terms.velocity')} (SP)`} />
-                    <Area yAxisId="right" type="monotone" dataKey="completionRate" stroke="hsl(142, 76%, 36%)" fillOpacity={0.1} fill="hsl(142, 76%, 36%)" name={`${t('page.sprints.completion')} (%)`} />
+                    <Area type="monotone" dataKey="plannedStoryPoints" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" fillOpacity={0} name={`${t('page.sprints.spPlanned')} (SP)`} />
+                    <Area type="monotone" dataKey="velocity" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVelocity)" name={`${t('terms.velocity')} (SP)`} />
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
