@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
@@ -15,6 +15,23 @@ const DEFAULT_COMPLETION_THRESHOLD = { good: 80, warning: 50 };
 
 function pct(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+// Least-squares linear fit over the series index, used to draw a velocity trend line.
+function linearTrend(values: number[]): number[] {
+  const n = values.length;
+  if (n < 2) return values;
+  const xMean = (n - 1) / 2;
+  const yMean = values.reduce((sum, v) => sum + v, 0) / n;
+  let num = 0;
+  let den = 0;
+  values.forEach((y, x) => {
+    num += (x - xMean) * (y - yMean);
+    den += (x - xMean) ** 2;
+  });
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = yMean - slope * xMean;
+  return values.map((_, x) => slope * x + intercept);
 }
 
 function days(value: number | null): string {
@@ -68,10 +85,13 @@ export default function ProjectSprints() {
   const activeSprint = sprints.find((s) => s.state === "active") ?? null;
   const isTruncated = (summary?.totalSprintsInPeriod ?? 0) > sprints.length;
 
-  const chartData = sprints.map((s) => ({
+  const velocityTrendLine = linearTrend(sprints.map((s) => s.velocity));
+  const chartData = sprints.map((s, i) => ({
     name: s.sprintName.replace(/^.*\s/, "S"),
     plannedStoryPoints: s.totalStoryPoints,
     velocity: s.velocity,
+    completionRate: s.completionRate,
+    velocityTrend: velocityTrendLine[i],
   }));
 
   return (
@@ -178,13 +198,7 @@ export default function ProjectSprints() {
               </CardHeader>
               <CardContent className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
+                  <ComposedChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
@@ -193,9 +207,23 @@ export default function ProjectSprints() {
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }} />
-                    <Area type="monotone" dataKey="plannedStoryPoints" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" fillOpacity={0} name={`${t('page.sprints.spPlanned')} (SP)`} />
-                    <Area type="monotone" dataKey="velocity" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVelocity)" name={`${t('terms.velocity')} (SP)`} />
-                  </AreaChart>
+                    <Bar dataKey="plannedStoryPoints" fill="hsl(var(--muted-foreground))" fillOpacity={0.25} radius={[2, 2, 0, 0]} name={`${t('page.sprints.spPlanned')} (SP)`} />
+                    <Bar dataKey="velocity" radius={[2, 2, 0, 0]} name={`${t('terms.velocity')} (SP)`}>
+                      {chartData.map((d, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            d.completionRate >= completionThreshold.good
+                              ? "hsl(142, 76%, 36%)"
+                              : d.completionRate >= completionThreshold.warning
+                              ? "hsl(38, 92%, 50%)"
+                              : "hsl(var(--destructive))"
+                          }
+                        />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="velocityTrend" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 3" dot={false} name={t('page.sprints.velocityTrendLine')} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
