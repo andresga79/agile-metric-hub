@@ -34,6 +34,38 @@ function linearTrend(values: number[]): number[] {
   return values.map((_, x) => slope * x + intercept);
 }
 
+// z-scores for one-sided confidence levels (P(actual >= mean - z*sd) = confidence),
+// used to turn "average and spread of past closed sprints" into a planning commitment.
+const CONFIDENCE_Z_SCORES: Array<{ confidence: number; z: number }> = [
+  { confidence: 95, z: 1.645 },
+  { confidence: 85, z: 1.036 },
+  { confidence: 70, z: 0.524 },
+];
+
+interface CommitmentStats {
+  avg: number;
+  stdDev: number;
+  recommendations: Array<{ confidence: number; value: number }>;
+}
+
+// Sample standard deviation (n-1 denominator) — with only a handful of closed sprints, the
+// population formula understates real variance, so this is the more honest estimate to plan on.
+function commitmentStats(values: number[]): CommitmentStats | null {
+  const n = values.length;
+  if (n < 2) return null;
+  const avg = values.reduce((sum, v) => sum + v, 0) / n;
+  const variance = values.reduce((sum, v) => sum + (v - avg) ** 2, 0) / (n - 1);
+  const stdDev = Math.sqrt(variance);
+  return {
+    avg,
+    stdDev,
+    recommendations: CONFIDENCE_Z_SCORES.map(({ confidence, z }) => ({
+      confidence,
+      value: Math.max(0, avg - z * stdDev),
+    })),
+  };
+}
+
 function days(value: number | null): string {
   if (value === null || value === undefined) return "—";
   return `${value.toFixed(1)}d`;
@@ -84,6 +116,12 @@ export default function ProjectSprints() {
   const summary = data?.summary;
   const activeSprint = sprints.find((s) => s.state === "active") ?? null;
   const isTruncated = (summary?.totalSprintsInPeriod ?? 0) > sprints.length;
+
+  // Recommended commitment is computed from CLOSED sprints only — an active sprint's partial
+  // numbers would understate the team's real spread, same reasoning as the summary averages.
+  const closedSprints = sprints.filter((s) => s.state === "closed");
+  const issuesStats = commitmentStats(closedSprints.map((s) => s.completedIssues));
+  const spStats = commitmentStats(closedSprints.map((s) => s.completedStoryPoints));
 
   const velocityTrendLine = linearTrend(sprints.map((s) => s.velocity));
   const chartData = sprints.map((s, i) => ({
@@ -225,6 +263,52 @@ export default function ProjectSprints() {
                     <Line type="monotone" dataKey="velocityTrend" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 3" dot={false} name={t('page.sprints.velocityTrendLine')} />
                   </ComposedChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {issuesStats && spStats && (
+            <Card className="bg-card/40">
+              <CardHeader>
+                <CardTitle className="text-lg">{t('page.sprints.recommendedCommitment')}</CardTitle>
+                <CardDescription>{t('page.sprints.recommendedCommitmentDesc', { count: closedSprints.length })}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableHead></TableHead>
+                        <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
+                        <TableHead className="text-right">{t('terms.velocity')} (SP)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableCell className="font-medium">{t('page.sprints.average')}</TableCell>
+                        <TableCell className="text-right font-mono">{issuesStats.avg.toFixed(1)}</TableCell>
+                        <TableCell className="text-right font-mono">{spStats.avg.toFixed(1)}</TableCell>
+                      </TableRow>
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableCell className="font-medium">{t('page.sprints.stdDev')}</TableCell>
+                        <TableCell className="text-right font-mono">{issuesStats.stdDev.toFixed(1)}</TableCell>
+                        <TableCell className="text-right font-mono">{spStats.stdDev.toFixed(1)}</TableCell>
+                      </TableRow>
+                      {CONFIDENCE_Z_SCORES.map(({ confidence }) => {
+                        const issuesRec = issuesStats.recommendations.find((r) => r.confidence === confidence)!;
+                        const spRec = spStats.recommendations.find((r) => r.confidence === confidence)!;
+                        return (
+                          <TableRow key={confidence} className="border-border hover:bg-accent/50 bg-muted/30">
+                            <TableCell className="font-medium">{t('page.sprints.confidenceLevel', { confidence })}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(issuesRec.value)}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(spRec.value)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">{t('page.sprints.recommendedCommitmentLegend')}</p>
               </CardContent>
             </Card>
           )}
