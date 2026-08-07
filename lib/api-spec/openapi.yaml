@@ -1357,7 +1357,8 @@ components:
       required:
         [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
          completedIssues, completedStoryPoints, completionRate, completionBasis, velocity,
-         reopenedCount, avgCycleTimeDays, breakdown]
+         reopenedCount, avgCycleTimeDays, breakdown, carryoverCount, carryoverStoryPoints,
+         carryoverRate]
       properties:
         sprintId:
           type: integer
@@ -1394,6 +1395,15 @@ components:
           type: ["number", "null"]
         breakdown:
           $ref: "#/components/schemas/IssueTypeBreakdown"
+        carryoverCount:
+          type: integer
+          description: Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one.
+        carryoverStoryPoints:
+          type: number
+          description: Story points belonging to carryoverCount issues.
+        carryoverRate:
+          type: number
+          description: Percentage of this sprint's total story points that is carryover (0-100).
 
     IssueTypeBreakdown:
       type: object

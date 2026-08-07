@@ -405,6 +405,8 @@
   "page.sprints.issues": "Issues",
   "page.sprints.spPlanned": "SP Planned",
   "page.sprints.spDone": "SP Done",
+  "page.sprints.carryover": "Carryover",
+  "page.sprints.carryoverTooltip": "Issues already tagged with an earlier, closed sprint that slipped into this one",
   "page.sprints.completion": "Completion",
   "page.sprints.reopened": "Reopened",
   "page.sprints.cycleTime": "Cycle Time",

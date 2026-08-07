@@ -8,6 +8,7 @@ import {
   getStoryPoints,
   getCycleTimeDays,
   countReopenedIssues,
+  isCarryoverIssue,
   mapIssueType,
   getEffectiveIssueType,
   periodToDays,
@@ -45,6 +46,11 @@ interface SprintMetric {
     Epic: number;
     Other: number;
   };
+  // Issues already tagged with an earlier, already-closed sprint (per Jira's Sprint field
+  // history) that slipped into this one — work that didn't finish on time, not new scope.
+  carryoverCount: number;
+  carryoverStoryPoints: number;
+  carryoverRate: number;
 }
 
 interface SprintMetricsResponse {
@@ -68,7 +74,8 @@ interface SprintMetricsResponse {
 async function computeSprintMetrics(
   sprint: JiraSprint,
   sprintIssues: JiraIssue[],
-  allowedIssueTypes: string[]
+  allowedIssueTypes: string[],
+  allSprints: JiraSprint[]
 ): Promise<SprintMetric> {
   const filtered = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
   const doneIssues = filtered.filter((i) => isIssueDone(i));
@@ -88,6 +95,10 @@ async function computeSprintMetrics(
       }
 
   const reopenedCount = await countReopenedIssues(filtered);
+
+  const carryoverIssues = filtered.filter((i) => isCarryoverIssue(i, allSprints, sprint));
+  const carryoverCount = carryoverIssues.length;
+  const carryoverStoryPoints = carryoverIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
   const cycleTimes = await Promise.all(
     doneIssues.map((i) => getCycleTimeDays(i))
@@ -120,6 +131,9 @@ async function computeSprintMetrics(
     reopenedCount,
     avgCycleTimeDays,
     breakdown,
+    carryoverCount,
+    carryoverStoryPoints,
+    carryoverRate: totalSp > 0 ? (carryoverStoryPoints / totalSp) * 100 : 0,
   };
 }
 
@@ -176,7 +190,7 @@ router.get(
     const sprintMetrics = await Promise.all(
       filteredSprints.map(async (s) => {
         const issues = await getSprintIssues(s.id);
-        return computeSprintMetrics(s, issues, allowedIssueTypes);
+        return computeSprintMetrics(s, issues, allowedIssueTypes, sprints);
       })
     );
 

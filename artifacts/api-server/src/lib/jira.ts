@@ -578,6 +578,55 @@ export interface JiraSprint {
   completeDate?: string;
 }
 
+function sprintEndTime(sprint: JiraSprint): number | null {
+  const raw = sprint.endDate ?? sprint.completeDate ?? null;
+  return raw ? new Date(raw).getTime() : null;
+}
+
+// Jira's "Sprint" changelog field is multi-valued and cumulative: toString/fromString are
+// comma-separated lists of every sprint name the issue has ever been tagged with as of that
+// history entry (e.g. "Sprint 109, Sprint 110"), not a single before/after pair. We only need
+// the union of every sprint name that ever appeared in either side across the whole history.
+function sprintNamesEverAssociated(issue: JiraIssue): Set<string> {
+  const names = new Set<string>();
+  for (const h of issue.changelog?.histories ?? []) {
+    for (const item of h.items) {
+      if (item.field !== "Sprint") continue;
+      for (const raw of [item.fromString, item.toString]) {
+        for (const name of (raw ?? "").split(",")) {
+          const trimmed = name.trim();
+          if (trimmed) names.add(trimmed);
+        }
+      }
+    }
+  }
+  return names;
+}
+
+/** Whether an issue carried over into `currentSprint` from a genuinely earlier sprint — one it
+ * was already tagged with (per Sprint field history) whose end date precedes this sprint's
+ * start date. Excludes sprints named in the history that end at/after the current sprint's
+ * start (future/planning tags, or the current sprint itself), so pre-planning into an upcoming
+ * sprint is never mistaken for carryover. Returns false (not true by default) when no changelog
+ * or Sprint-field history exists — no evidence of a prior sprint means no carryover claim. */
+export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], currentSprint: JiraSprint): boolean {
+  const currentStart = currentSprint.startDate ? new Date(currentSprint.startDate).getTime() : null;
+  if (currentStart === null) return false;
+
+  const associatedNames = sprintNamesEverAssociated(issue);
+  if (associatedNames.size === 0) return false;
+
+  const sprintsByName = new Map(allSprints.map((s) => [s.name, s] as const));
+  for (const name of associatedNames) {
+    if (name === currentSprint.name) continue;
+    const candidate = sprintsByName.get(name);
+    if (!candidate) continue;
+    const candidateEnd = sprintEndTime(candidate);
+    if (candidateEnd !== null && candidateEnd < currentStart) return true;
+  }
+  return false;
+}
+
 const JIRA_URL = process.env["JIRA_URL"] ?? "";
 const JIRA_TIMEOUT_MS = 10000;
 const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";

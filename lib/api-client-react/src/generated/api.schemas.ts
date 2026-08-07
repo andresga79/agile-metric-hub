@@ -501,6 +501,12 @@ export interface SprintMetric {
   /** @nullable */
   avgCycleTimeDays: number | null;
   breakdown: IssueTypeBreakdown;
+  /** Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one. */
+  carryoverCount: number;
+  /** Story points belonging to carryoverCount issues. */
+  carryoverStoryPoints: number;
+  /** Percentage of this sprint's total story points that is carryover (0-100). */
+  carryoverRate: number;
 }
 
 export interface SprintMetricsSummary {

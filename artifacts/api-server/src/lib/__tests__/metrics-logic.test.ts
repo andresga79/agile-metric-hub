@@ -8,7 +8,9 @@ import {
   getStoryPoints,
   findQaRejections,
   computeQaRejectionRate,
+  isCarryoverIssue,
   type JiraIssue,
+  type JiraSprint,
 } from "../jira";
 import { normalize } from "../health-thresholds";
 
@@ -50,6 +52,27 @@ function withStatusHistory(
       })),
     },
   };
+}
+
+/** Build a changelog with one "Sprint" field transition per [from,to,when] tuple. Mirrors Jira's
+ * real shape: from/toString are comma-separated lists of every sprint name tagged so far. */
+function withSprintHistory(
+  issue: JiraIssue,
+  transitions: Array<{ from: string; to: string; at: string }>
+): JiraIssue {
+  return {
+    ...issue,
+    changelog: {
+      histories: transitions.map((t) => ({
+        created: t.at,
+        items: [{ field: "Sprint", fromString: t.from, toString: t.to }],
+      })),
+    },
+  };
+}
+
+function makeSprint(overrides: Partial<JiraSprint> & { id: number; name: string }): JiraSprint {
+  return { state: "closed", ...overrides };
 }
 
 // --- normalize() (regression guard for the sign bug) ------------------------
@@ -233,5 +256,56 @@ describe("computeQaRejectionRate", () => {
     const none = makeIssue({ id: "4", key: "D" });
     const r = computeQaRejectionRate([none], qa, dev, since, until);
     expect(r.overallRejectionRate).toBe(0);
+  });
+});
+
+// --- isCarryoverIssue --------------------------------------------------------
+describe("isCarryoverIssue", () => {
+  const sprint109 = makeSprint({ id: 109, name: "Sprint 109", endDate: "2026-06-01T00:00:00.000Z" });
+  const sprint110 = makeSprint({ id: 110, name: "Sprint 110", endDate: "2026-06-15T00:00:00.000Z" });
+  const sprint111 = makeSprint({ id: 111, name: "Sprint 111", state: "active", startDate: "2026-06-16T00:00:00.000Z" });
+  const sprint112Future = makeSprint({ id: 112, name: "Sprint 112", startDate: "2026-07-01T00:00:00.000Z" });
+  const allSprints = [sprint109, sprint110, sprint111, sprint112Future];
+
+  it("returns false for an issue with no changelog at all", () => {
+    const issue = makeIssue({ id: "1", key: "A" });
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
+  });
+
+  it("returns false for an issue only ever tagged with the current sprint", () => {
+    const issue = withSprintHistory(makeIssue({ id: "2", key: "B" }), [
+      { from: "", to: "Sprint 111", at: "2026-06-16T00:00:00.000Z" },
+    ]);
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
+  });
+
+  it("returns true for an issue tagged with an earlier sprint that already ended before this one started", () => {
+    const issue = withSprintHistory(makeIssue({ id: "3", key: "C" }), [
+      { from: "", to: "Sprint 110", at: "2026-06-05T00:00:00.000Z" },
+      { from: "Sprint 110", to: "Sprint 110, Sprint 111", at: "2026-06-16T00:00:00.000Z" },
+    ]);
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(true);
+  });
+
+  it("returns true when the earlier sprint appears several sprints back, not just the immediately preceding one", () => {
+    const issue = withSprintHistory(makeIssue({ id: "4", key: "D" }), [
+      { from: "", to: "Sprint 109, Sprint 110, Sprint 111", at: "2026-06-16T00:00:00.000Z" },
+    ]);
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(true);
+  });
+
+  it("does not count a future/planning sprint tag as carryover", () => {
+    // Tagged with Sprint 112, which starts AFTER Sprint 111 — pre-planning, not carryover.
+    const issue = withSprintHistory(makeIssue({ id: "5", key: "E" }), [
+      { from: "", to: "Sprint 111, Sprint 112", at: "2026-06-16T00:00:00.000Z" },
+    ]);
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
+  });
+
+  it("ignores a sprint name in history that isn't in the known sprints list", () => {
+    const issue = withSprintHistory(makeIssue({ id: "6", key: "F" }), [
+      { from: "", to: "Some Deleted Sprint, Sprint 111", at: "2026-06-16T00:00:00.000Z" },
+    ]);
+    expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
   });
 });

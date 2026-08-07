@@ -246,6 +246,7 @@ export default function ProjectSprints() {
                     <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.spPlanned')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.spDone')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.carryover')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.completion')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.reopened')}</TableHead>
@@ -274,6 +275,15 @@ export default function ProjectSprints() {
                         </TableCell>
                         <TableCell className="text-right font-mono">{s.totalStoryPoints.toFixed(0)}</TableCell>
                         <TableCell className="text-right font-mono">{s.completedStoryPoints.toFixed(0)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs" title={t('page.sprints.carryoverTooltip')}>
+                          {s.carryoverCount > 0 ? (
+                            <span className="px-1.5 py-0.5 rounded font-semibold bg-orange-500/15 text-orange-400">
+                              {s.carryoverCount} ({s.carryoverStoryPoints.toFixed(0)} SP)
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <span
                             className={`text-xs font-semibold px-2 py-0.5 rounded ${
