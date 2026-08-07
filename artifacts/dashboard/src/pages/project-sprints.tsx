@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
@@ -193,8 +193,9 @@ export default function ProjectSprints() {
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />
-                    <Area yAxisId="left" type="monotone" dataKey="velocity" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVelocity)" name="Velocity (SP)" />
-                    <Area yAxisId="right" type="monotone" dataKey="completionRate" stroke="hsl(142, 76%, 36%)" fillOpacity={0.1} fill="hsl(142, 76%, 36%)" name="Completion %" />
+                    <Legend wrapperStyle={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }} />
+                    <Area yAxisId="left" type="monotone" dataKey="velocity" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVelocity)" name={`${t('terms.velocity')} (SP)`} />
+                    <Area yAxisId="right" type="monotone" dataKey="completionRate" stroke="hsl(142, 76%, 36%)" fillOpacity={0.1} fill="hsl(142, 76%, 36%)" name={`${t('page.sprints.completion')} (%)`} />
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
