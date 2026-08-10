@@ -20,6 +20,7 @@ import {
   isBlockedEligibleIssueType,
   getIssueComments,
   adfToPlainText,
+  getBoardStatusNames,
   type JiraIssue,
 } from "../lib/jira";
 import { logger } from "../lib/logger";
@@ -92,12 +93,14 @@ interface TimeInStatusEntry {
 
 async function computeTimeInStatus(
   issues: JiraIssue[],
+  allowedStatuses?: Set<string> | null,
 ): Promise<TimeInStatusEntry[]> {
   const categoryMap = await getStatusCategoryMap();
   const statusMap = new Map<string, Map<string, number>>();
 
   function addTime(status: string, issueKey: string, days: number) {
     if (days <= 0) return;
+    if (allowedStatuses && !allowedStatuses.has(status.trim().toLowerCase())) return;
     let issueMap = statusMap.get(status);
     if (!issueMap) {
       issueMap = new Map();
@@ -580,7 +583,11 @@ router.get(
     );
 
     // --- Time in Status (#9) ---
-    const timeInStatus = await computeTimeInStatus(timeInStatusIssues);
+    // Scope the breakdown to the project's board columns so statuses from other
+    // workflows living in the same project (SOLVIX, UX/UI, etc.) don't pollute
+    // the flow view. Falls back to all statuses when no board is available.
+    const boardStatusNames = await getBoardStatusNames(projectId);
+    const timeInStatus = await computeTimeInStatus(timeInStatusIssues, boardStatusNames);
 
     // --- Period-over-Period (#3) ---
     let previousPeriod: any = null;

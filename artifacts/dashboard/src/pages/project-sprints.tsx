@@ -267,51 +267,59 @@ export default function ProjectSprints() {
             </Card>
           )}
 
-          {issuesStats && spStats && (
-            <Card className="bg-card/40">
-              <CardHeader>
-                <CardTitle className="text-lg">{t('page.sprints.recommendedCommitment')}</CardTitle>
+          <Card className="bg-card/40">
+            <CardHeader>
+              <CardTitle className="text-lg">{t('page.sprints.recommendedCommitment')}</CardTitle>
+              {issuesStats && spStats ? (
                 <CardDescription>{t('page.sprints.recommendedCommitmentDesc', { count: closedSprints.length })}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-border hover:bg-transparent">
-                        <TableHead></TableHead>
-                        <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
-                        <TableHead className="text-right">{t('terms.velocity')} (SP)</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow className="border-border hover:bg-transparent">
-                        <TableCell className="font-medium">{t('page.sprints.average')}</TableCell>
-                        <TableCell className="text-right font-mono">{issuesStats.avg.toFixed(1)}</TableCell>
-                        <TableCell className="text-right font-mono">{spStats.avg.toFixed(1)}</TableCell>
-                      </TableRow>
-                      <TableRow className="border-border hover:bg-transparent">
-                        <TableCell className="font-medium">{t('page.sprints.stdDev')}</TableCell>
-                        <TableCell className="text-right font-mono">{issuesStats.stdDev.toFixed(1)}</TableCell>
-                        <TableCell className="text-right font-mono">{spStats.stdDev.toFixed(1)}</TableCell>
-                      </TableRow>
-                      {CONFIDENCE_Z_SCORES.map(({ confidence }) => {
-                        const issuesRec = issuesStats.recommendations.find((r) => r.confidence === confidence)!;
-                        const spRec = spStats.recommendations.find((r) => r.confidence === confidence)!;
-                        return (
-                          <TableRow key={confidence} className="border-border hover:bg-accent/50 bg-muted/30">
-                            <TableCell className="font-medium">{t('page.sprints.confidenceLevel', { confidence })}</TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(issuesRec.value)}</TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(spRec.value)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">{t('page.sprints.recommendedCommitmentLegend')}</p>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <CardDescription>{t('page.sprints.recommendedCommitmentNotEnough')}</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              {issuesStats && spStats ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-border hover:bg-transparent">
+                          <TableHead></TableHead>
+                          <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
+                          <TableHead className="text-right">{t('terms.velocity')} (SP)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="border-border hover:bg-transparent">
+                          <TableCell className="font-medium">{t('page.sprints.average')}</TableCell>
+                          <TableCell className="text-right font-mono">{issuesStats.avg.toFixed(1)}</TableCell>
+                          <TableCell className="text-right font-mono">{spStats.avg.toFixed(1)}</TableCell>
+                        </TableRow>
+                        <TableRow className="border-border hover:bg-transparent">
+                          <TableCell className="font-medium">{t('page.sprints.stdDev')}</TableCell>
+                          <TableCell className="text-right font-mono">{issuesStats.stdDev.toFixed(1)}</TableCell>
+                          <TableCell className="text-right font-mono">{spStats.stdDev.toFixed(1)}</TableCell>
+                        </TableRow>
+                        {CONFIDENCE_Z_SCORES.map(({ confidence }) => {
+                          const issuesRec = issuesStats.recommendations.find((r) => r.confidence === confidence)!;
+                          const spRec = spStats.recommendations.find((r) => r.confidence === confidence)!;
+                          return (
+                            <TableRow key={confidence} className="border-border hover:bg-accent/50 bg-muted/30">
+                              <TableCell className="font-medium">{t('page.sprints.confidenceLevel', { confidence })}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(issuesRec.value)}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold text-primary">{Math.round(spRec.value)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">{t('page.sprints.recommendedCommitmentLegend')}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('page.sprints.recommendedCommitmentNotEnoughHint')}</p>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="bg-card/40">
             <CardHeader>

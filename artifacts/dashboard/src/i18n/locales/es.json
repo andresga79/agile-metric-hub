@@ -400,6 +400,8 @@
   "page.sprints.velocityTrendLine": "Tendencia",
   "page.sprints.recommendedCommitment": "Compromiso Recomendado",
   "page.sprints.recommendedCommitmentDesc": "Basado en {{count}} sprints cerrados",
+  "page.sprints.recommendedCommitmentNotEnough": "Se necesitan al menos 2 sprints cerrados en este período para calcular la recomendación.",
+  "page.sprints.recommendedCommitmentNotEnoughHint": "Cambiá el período a 3M para ver la recomendación si hay sprints cerrados suficientes.",
   "page.sprints.average": "Promedio",
   "page.sprints.stdDev": "Desv. Estándar",
   "page.sprints.confidenceLevel": "{{confidence}}% confianza",

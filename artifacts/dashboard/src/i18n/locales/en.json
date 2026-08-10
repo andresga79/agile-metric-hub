@@ -400,6 +400,8 @@
   "page.sprints.velocityTrendLine": "Trend",
   "page.sprints.recommendedCommitment": "Recommended Commitment",
   "page.sprints.recommendedCommitmentDesc": "Based on {{count}} closed sprints",
+  "page.sprints.recommendedCommitmentNotEnough": "At least 2 closed sprints are needed in this period to compute the recommendation.",
+  "page.sprints.recommendedCommitmentNotEnoughHint": "Switch to the 3M period to see the recommendation if enough sprints are closed.",
   "page.sprints.average": "Average",
   "page.sprints.stdDev": "Std. Deviation",
   "page.sprints.confidenceLevel": "{{confidence}}% confidence",
