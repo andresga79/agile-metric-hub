@@ -171,7 +171,7 @@ export async function getStatusCategoryMap(): Promise<Map<string, string>> {
 
 // --- QA rejection detection ---
 
-let allStatusesCache: { name: string; statusCategory?: { key: string } }[] | null = null;
+let allStatusesCache: { id?: string; name: string; statusCategory?: { key: string } }[] | null = null;
 
 const QA_PATTERNS = [/qa/i, /test(ing)?/i, /quality/i, /qc/i, /verification/i];
 
@@ -180,13 +180,13 @@ export function isQaStatus(statusName: string): boolean {
 }
 
 async function fetchAllStatuses(): Promise<
-  { name: string; statusCategory?: { key: string } }[]
+  { id?: string; name: string; statusCategory?: { key: string } }[]
 > {
   if (!isJiraConfigured()) return [];
   if (allStatusesCache) return allStatusesCache;
   try {
     const statuses = await jiraFetch<
-      { name: string; statusCategory?: { key: string } }[]
+      { id?: string; name: string; statusCategory?: { key: string } }[]
     >("/status");
     allStatusesCache = statuses;
     return statuses;
@@ -880,6 +880,50 @@ export async function getBoardId(
   }
 }
 
+/** Return the set of status names that are columns of the project's board, so
+ *  time-in-status / flow analytics can be scoped to the board's real workflow
+ *  instead of mixing in statuses from other workflows living in the same project
+ *  (e.g. SOLVIX, UX/UI tracks). Returns null when no owned board or columns are
+ *  available (callers should then keep the unfiltered behavior). */
+export async function getBoardStatusNames(
+  projectId: string
+): Promise<Set<string> | null> {
+  if (!isJiraConfigured()) return null;
+  try {
+    const boardId = await getBoardId(projectId);
+    if (!boardId) return null;
+
+    const url = `${JIRA_URL}/rest/agile/1.0/board/${boardId}/configuration`;
+    const data = await jiraAgileFetch<{
+      columnConfig?: {
+        columns?: { name?: string; statuses?: { id?: string }[] }[];
+      };
+    }>(url);
+    const columns = data.columnConfig?.columns ?? [];
+    const statusIds = new Set<string>();
+    for (const col of columns) {
+      for (const s of col.statuses ?? []) {
+        if (s.id) statusIds.add(s.id);
+      }
+    }
+    if (statusIds.size === 0) return null;
+
+    const statuses = await fetchAllStatuses();
+    const idToName = new Map(
+      statuses.filter((s) => s.id).map((s) => [s.id, s.name])
+    );
+    const names = new Set<string>();
+    for (const id of statusIds) {
+      const name = idToName.get(id);
+      if (name) names.add(name.trim().toLowerCase());
+    }
+    return names.size > 0 ? names : null;
+  } catch (err) {
+    logger.warn({ err, projectId }, "Failed to load board status names");
+    return null;
+  }
+}
+
 export async function getJiraSprints(
   projectId: string,
   maxResults: number = 50,
@@ -1248,8 +1292,12 @@ export async function getOpenIssuesForProject(
     const issues: JiraIssue[] = [];
     let pageToken: string | null = null;
     let pageCount = 0;
+    // Scope "open" to work that's actually live: in progress, blocked (Flagged), or touched in
+    // the last 30 days. The bare `resolutiondate is EMPTY` pulls in the project's entire backlog
+    // (OLP alone had 27k+ such issues), forcing 50 sequential Jira pages (~30-60s) on every cache
+    // expiry while the vast majority of items sit untouched in To Do.
     const jql = encodeURIComponent(
-      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate is EMPTY ORDER BY updated DESC`
+      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND statusCategory != done AND (statusCategory = indeterminate OR Flagged is not EMPTY OR updated >= -30d) ORDER BY updated DESC`
     );
     const expandParam = includeChangelog ? "&expand=changelog" : "";
 
