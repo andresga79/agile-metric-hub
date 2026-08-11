@@ -56,6 +56,12 @@ export default function ProjectDetail() {
   });
 
   useEffect(() => {
+    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
+      setPeriod("2s");
+    }
+  }, [project?.boardType]);
+
+  useEffect(() => {
     if (!projectId || !token) return;
     fetch(`/api/projects/${projectId}/targets`, {
       headers: { Authorization: `Bearer ${token}` },
