@@ -34,8 +34,9 @@ const VALID_PERIODS = ["1m", "3m"] as const;
 type Period = (typeof VALID_PERIODS)[number];
 
 // "<N>s" = últimos N sprints CERRADOS (solo válido para proyectos Scrum; ver
-// resolveSprintWindowDays). Ej: "2s", "6s".
-const SPRINT_WINDOW_RE = /^(\d+)s$/;
+// resolveSprintWindowDays). Solo se soportan los dos valores publicados en el
+// contrato OpenAPI (lib/api-spec/openapi.yaml): "2s", "6s".
+const SPRINT_WINDOW_RE = /^(2|6)s$/;
 
 function isValidPeriod(p: string): p is Period {
   return (VALID_PERIODS as readonly string[]).includes(p);
@@ -88,7 +89,7 @@ async function computeMetrics(
   boardType: ProjectBoardType,
   sprints: JiraSprint[],
   allowedIssueTypes: string[],
-  sprintWindowCount: number | null
+  sprintWindowSprints: JiraSprint[] | null
 ) {
   const startDate = getStartDate(periodDays);
 
@@ -120,9 +121,11 @@ async function computeMetrics(
     if (!s.completeDate) return false;
     return new Date(s.completeDate) >= startDate;
   });
-  const sprintCount = Math.max(1, completedSprints.length > 0
-    ? completedSprints.length
-    : Math.ceil(periodDays / 14)
+  const sprintCount = Math.max(1, sprintWindowSprints !== null
+    ? sprintWindowSprints.length
+    : completedSprints.length > 0
+      ? completedSprints.length
+      : Math.ceil(periodDays / 14)
   );
   const velocity = isScrum
     ? Math.round((storyPointsTotal / sprintCount) * 10) / 10
@@ -159,8 +162,8 @@ async function computeMetrics(
       .map((r) => [r.issue.id, r.resolvedAt!])
   );
 
-  const velocityByWeek = sprintWindowCount !== null
-    ? buildSprintVelocityBuckets(resolved, resolvedMap, completedSprints)
+  const velocityByWeek = sprintWindowSprints !== null
+    ? buildSprintVelocityBuckets(resolved, resolvedMap, sprintWindowSprints)
     : buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum);
 
   // Trend: compare first half vs second half of the period
@@ -292,10 +295,19 @@ router.get(
       getPortfolioAllowedIssueTypes(),
     ]);
 
-    const sprintWindowCount = boardType === "scrum" ? parseSprintWindowToken(period) : null;
-    const periodDays = sprintWindowCount !== null
-      ? resolveSprintWindowDays(sprints, sprintWindowCount) ?? periodToDays("1m")
-      : periodToDays(period);
+    const requestedSprintWindowCount = parseSprintWindowToken(period);
+    if (requestedSprintWindowCount !== null && boardType !== "scrum") {
+      res.status(400).json({
+        error: "Sprint-window periods (2s/6s) are only valid for Scrum projects.",
+      });
+      return;
+    }
+
+    const sprintWindowCount = boardType === "scrum" ? requestedSprintWindowCount : null;
+    const sprintWindow = sprintWindowCount !== null
+      ? resolveSprintWindowDays(sprints, sprintWindowCount)
+      : null;
+    const periodDays = sprintWindow?.days ?? periodToDays(period);
 
     const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
 
@@ -344,7 +356,7 @@ router.get(
     }
 
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindowCount);
+    const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindow?.sprintsIncluded ?? null);
 
     res.json(metrics);
   }

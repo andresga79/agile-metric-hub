@@ -628,13 +628,17 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
 }
 
 /** Days from now back to the start of the earliest sprint among the last
- * `sprintCount` CLOSED sprints (by end date). Returns null when there are no
- * closed sprints, or the earliest candidate has no startDate — callers should
- * fall back to a default day-based window in that case. */
+ * `sprintCount` CLOSED sprints (by end date), capped by capLookbackDays so the
+ * day count returned here always matches what getJiraIssuesForProject will
+ * actually fetch. Also returns the exact sprint list selected, so callers have
+ * a single source of truth for "which sprints" instead of re-deriving a
+ * (potentially different) set via their own date filter. Returns null when
+ * there are no closed sprints, or the earliest candidate has no startDate —
+ * callers should fall back to a default day-based window in that case. */
 export function resolveSprintWindowDays(
   sprints: JiraSprint[],
   sprintCount: number
-): number | null {
+): { days: number; sprintsIncluded: JiraSprint[] } | null {
   const closed = sprints
     .filter((s) => s.state === "closed")
     .sort((a, b) => (sprintEndTime(b) ?? 0) - (sprintEndTime(a) ?? 0))
@@ -648,7 +652,8 @@ export function resolveSprintWindowDays(
   const startMs = new Date(earliest.startDate).getTime();
   if (Number.isNaN(startMs)) return null;
 
-  return Math.max(1, Math.ceil((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
+  const rawDays = Math.max(1, Math.ceil((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
+  return { days: capLookbackDays(rawDays), sprintsIncluded: closed };
 }
 
 /** Groups resolved issues into one bucket per sprint (chronological order),
@@ -669,14 +674,14 @@ export function buildSprintVelocityBuckets(
 
   return chronological.map((sprint) => {
     const start = sprint.startDate ? new Date(sprint.startDate).getTime() : -Infinity;
-    const endRaw = sprint.endDate ?? sprint.completeDate ?? null;
+    const endRaw = sprint.completeDate ?? sprint.endDate ?? null;
     const end = endRaw ? new Date(endRaw).getTime() : Infinity;
 
     const value = resolved.reduce((sum, issue) => {
       const resolvedAt = resolvedMap.get(issue.id);
       if (!resolvedAt) return sum;
       const t = resolvedAt.getTime();
-      if (t < start || t > end) return sum;
+      if (t < start || t >= end) return sum;
       return sum + getStoryPoints(issue);
     }, 0);
 

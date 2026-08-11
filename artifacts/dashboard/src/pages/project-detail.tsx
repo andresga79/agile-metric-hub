@@ -52,12 +52,14 @@ export default function ProjectDetail() {
   });
 
   const { data: metrics, isLoading: loadingMetrics } = useGetProjectMetrics(projectId!, period, {
-    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token && !loadingProject, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
   });
 
   useEffect(() => {
     if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
       setPeriod("2s");
+    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
+      setPeriod("1m");
     }
   }, [project?.boardType]);
 

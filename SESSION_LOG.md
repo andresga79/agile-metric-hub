@@ -674,7 +674,7 @@ arriba, `healthz` OK. Con token real:
   devuelve los 111 sprints cerrados completos, no un array vacío; confirma que el `.slice(0,
   sprintCount)` de `resolveSprintWindowDays` es seguro con `sprintCount` fuera de rango.
 - `pnpm run typecheck` limpio · `pnpm run lint` 0 errores (114 warnings, baseline sin cambios) ·
-  `pnpm --filter @workspace/api-server test` 33/33 (subieron de 22 a 33 por los tests nuevos de los
+  `pnpm --filter @workspace/api-server test` 33/33 (subieron de 28 a 33 por los tests nuevos de los
   helpers de sprint).
 - Paso visual del navegador (Step 5 del brief) **no se pudo ejecutar** — no había herramienta de
   browser/Playwright disponible en esta sesión; se hizo una verificación best-effort con `curl`
