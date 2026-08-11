@@ -895,10 +895,8 @@ export async function getCanonicalProjectId(projectId: string): Promise<string> 
 /** Manual overrides when Jira board detection is incorrect.
  *  Key can be project ID (numeric) or project key. */
 const MANUAL_BOARD_OVERRIDES: Record<string, ProjectBoardType> = {
-  "10003": "scrum",  // OLP - Olimpo: board is "simple" but team uses Scrum
+  "10003": "scrum",  // OLP - Olimpo: no board resolves via location (detection falls to "simple"), but team uses Scrum
   "OLP": "scrum",
-  "10013": "kanban",  // OLI - Olimpo Internacional: board 10 is Kanban
-  "OLI": "kanban",
 };
 
 const MOCK_BOARD_TYPES: Record<string, ProjectBoardType> = {
@@ -942,8 +940,13 @@ export async function getProjectBoardType(
       });
       if (owned.length === 0) return "simple";
 
-      // Use the first owned board's type (Jira returns boards in creation order)
-      const primaryType = owned[0]!.type;
+      // Prefer a Scrum board over the creation-order first - mirrors getBoardId's own
+      // preference below. A project can accumulate an old/unused Kanban board alongside the
+      // Scrum board the team actually works from (seen in practice: OLI has both "Tablero OLI"
+      // (Kanban, board 10, created first) and "Tablero de Scrum" (board 15) - picking
+      // creation-order-first previously misclassified it as Kanban).
+      const scrum = owned.find((b) => b.type === "scrum");
+      const primaryType = (scrum ?? owned[0]!).type;
       if (primaryType === "scrum" || primaryType === "kanban") return primaryType;
       return "simple";
     } catch (err) {
