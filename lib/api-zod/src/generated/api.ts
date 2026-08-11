@@ -115,7 +115,7 @@ export const GetProjectResponse = zod.object({
  */
 export const GetProjectMetricsParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m'])
+  "period": zod.enum(['1m', '3m', '2s', '6s']).describe('Time window. \"1m\"\/\"3m\" = últimos 30\/90 días (kanban, o scrum sin selector de sprint). \"Ns\" = últimos N sprints CERRADOS (solo scrum); si el proyecto no tiene sprints cerrados aún, cae a \"1m\".\n')
 })
 
 export const GetProjectMetricsResponse = zod.object({
@@ -131,7 +131,7 @@ export const GetProjectMetricsResponse = zod.object({
   "velocityTrend": zod.number().describe('Percentage change vs previous period'),
   "throughputTrend": zod.number().describe('Percentage change vs previous period'),
   "velocityByWeek": zod.array(zod.object({
-  "week": zod.string(),
+  "label": zod.string().describe('Bucket label — calendar week (kanban \/ non-sprint window) or sprint name (scrum sprint window)'),
   "value": zod.number()
 })),
   "cycleTimeDistribution": zod.array(zod.object({

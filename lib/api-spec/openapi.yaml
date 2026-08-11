@@ -147,7 +147,16 @@ paths:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/PeriodPath"
+        - name: period
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: ["1m", "3m", "2s", "6s"]
+          description: >
+            Time window. "1m"/"3m" = últimos 30/90 días (kanban, o scrum sin
+            selector de sprint). "Ns" = últimos N sprints CERRADOS (solo
+            scrum); si el proyecto no tiene sprints cerrados aún, cae a "1m".
       responses:
         "200":
           description: Project metrics
@@ -987,10 +996,11 @@ components:
 
     WeeklyDataPoint:
       type: object
-      required: [week, value]
+      required: [label, value]
       properties:
-        week:
+        label:
           type: string
+          description: "Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window)"
         value:
           type: number
 

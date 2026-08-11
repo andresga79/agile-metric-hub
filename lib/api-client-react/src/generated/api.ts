@@ -510,7 +510,7 @@ export function useGetProject<TData = Awaited<ReturnType<typeof getProject>>, TE
 
 
 export const getGetProjectMetricsUrl = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
 
 
 
@@ -522,7 +522,7 @@ export const getGetProjectMetricsUrl = (projectId: string,
  * @summary Get KPI metrics for a project by period
  */
 export const getProjectMetrics = async (projectId: string,
-    period: '1m' | '3m', options?: RequestInit): Promise<ProjectMetrics> => {
+    period: '1m' | '3m' | '2s' | '6s', options?: RequestInit): Promise<ProjectMetrics> => {
 
   return customFetch<ProjectMetrics>(getGetProjectMetricsUrl(projectId,period),
   {
@@ -538,7 +538,7 @@ export const getProjectMetrics = async (projectId: string,
 
 
 export const getGetProjectMetricsQueryKey = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
     return [
     `/api/projects/${projectId}/metrics/${period}`
     ] as const;
@@ -546,7 +546,7 @@ export const getGetProjectMetricsQueryKey = (projectId: string,
 
 
 export const getGetProjectMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectMetrics>>, TError = ErrorType<ErrorResponse>>(projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -574,7 +574,7 @@ export type GetProjectMetricsQueryError = ErrorType<ErrorResponse>
 
 export function useGetProjectMetrics<TData = Awaited<ReturnType<typeof getProjectMetrics>>, TError = ErrorType<ErrorResponse>>(
  projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 

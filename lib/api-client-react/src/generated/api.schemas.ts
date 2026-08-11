@@ -217,7 +217,8 @@ export const ProjectMetricsBoardType = {
 } as const;
 
 export interface WeeklyDataPoint {
-  week: string;
+  /** Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window) */
+  label: string;
   value: number;
 }
 
