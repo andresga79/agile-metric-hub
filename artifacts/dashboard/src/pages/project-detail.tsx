@@ -11,8 +11,7 @@ import { describeTrend, isImproving } from "@/lib/trend-analysis";
 import { ChevronRight, Download, Ban, Target } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
-
-type Period = "1m" | "3m";
+import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
 type MetricThreshold = { good: number; warning: number };
 type ThresholdStatus = "good" | "warning" | "critical" | null;
@@ -41,7 +40,7 @@ function formatDurationDays(value: number | null | undefined): string {
 export default function ProjectDetail() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<Period>("1m");
+  const [period, setPeriod] = useState<TimeWindow>("1m");
   const [targets, setTargets] = useState<any[]>([]);
   const [thresholds, setThresholds] = useState<Record<string, MetricThreshold>>(DEFAULT_THRESHOLDS);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -191,19 +190,11 @@ export default function ProjectDetail() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ProjectTabs projectId={project.id} active="summary" />
-        <div className="flex bg-background border border-border rounded-md p-1">
-          {(['1m', '3m'] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-                period === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {p.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <TimeWindowFilter
+          boardType={project?.boardType ?? "kanban"}
+          value={period}
+          onChange={setPeriod}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -262,7 +253,7 @@ export default function ProjectDetail() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="week" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
@@ -364,7 +355,7 @@ function MetricCard({
   info: { actual: number | undefined | null; targetVal: number | null; onTrack: boolean | null; thresholdStatus: ThresholdStatus; label: string; unit: string };
   trend: React.ReactNode;
   percentiles: { p50: number; p75: number; p85: number; p95: number } | null;
-  sparklineData?: { week: string; value: number }[];
+  sparklineData?: { label: string; value: number }[];
   thresholdValue?: number | null;
 }) {
   const { t } = useTranslation();
