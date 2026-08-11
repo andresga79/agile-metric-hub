@@ -5,11 +5,14 @@
  * Agile Metrics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
+import type { EvolutionPeriod } from './evolutionPeriod';
+import type { EvolutionResponseGranularity } from './evolutionResponseGranularity';
 import type { EvolutionTargets } from './evolutionTargets';
-import type { EvolutionWeek } from './evolutionWeek';
 
 export interface EvolutionResponse {
   projectId: string;
-  weeks: EvolutionWeek[];
+  /** How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban */
+  granularity: EvolutionResponseGranularity;
+  periods: EvolutionPeriod[];
   targets: EvolutionTargets;
 }

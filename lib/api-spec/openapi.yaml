@@ -449,11 +449,13 @@ paths:
     get:
       operationId: getProjectEvolution
       tags: [metrics]
-      summary: Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+      summary: Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
       description: >
-        Returns one row per ISO week from the project's accumulated metric_snapshots
-        table, alongside the project's configured targets. Snapshots are written by
-        the daily background sync, so this can cover more history over time than a
+        For Scrum projects, returns one row per sprint (computed live from Jira,
+        mirroring the Sprints tab) so the evolution lines up with actual sprint
+        boundaries instead of arbitrary calendar weeks. For Kanban projects, returns
+        one row per ISO week from the project's accumulated metric_snapshots table,
+        written by the daily background sync - this can cover more history than a
         single live Jira query (capped at 90 days) would allow.
       security:
         - bearerAuth: []
@@ -461,7 +463,7 @@ paths:
         - $ref: "#/components/parameters/ProjectId"
       responses:
         "200":
-          description: Weekly metric evolution
+          description: Metric evolution, bucketed by sprint (Scrum) or week (Kanban)
           content:
             application/json:
               schema:
@@ -1503,25 +1505,35 @@ components:
 
     EvolutionResponse:
       type: object
-      required: [projectId, weeks, targets]
+      required: [projectId, granularity, periods, targets]
       properties:
         projectId:
           type: string
-        weeks:
+        granularity:
+          type: string
+          enum: [sprint, week]
+          description: How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban
+        periods:
           type: array
           items:
-            $ref: "#/components/schemas/EvolutionWeek"
+            $ref: "#/components/schemas/EvolutionPeriod"
         targets:
           $ref: "#/components/schemas/EvolutionTargets"
 
-    EvolutionWeek:
+    EvolutionPeriod:
       type: object
-      required: [weekStart, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
+      required: [label, start, isActive, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
       properties:
-        weekStart:
+        label:
+          type: string
+          description: Display label - short sprint label (e.g. "SP106") or formatted week start
+        start:
           type: string
           format: date
-          description: ISO date of the Monday of this week
+          description: ISO date this period starts (sprint start date, or the Monday of the week)
+        isActive:
+          type: boolean
+          description: True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final
         leadTimeAvg:
           type: ["number", "null"]
         cycleTimeAvg:
@@ -1530,7 +1542,7 @@ components:
           type: integer
         qaRejectionRate:
           type: ["number", "null"]
-          description: Percentage of issues entering QA that were rejected back, or null if none entered QA that week
+          description: Percentage of issues entering QA that were rejected back, or null if none entered QA in this period
 
     EvolutionTargets:
       type: object

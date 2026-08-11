@@ -264,6 +264,8 @@
   "page.evolution.title": "Evolution",
   "page.evolution.subtitle": "Weekly trend of key metrics against target",
   "page.evolution.weeksAvailable": "weeks available",
+  "page.evolution.sprintsAvailable": "sprints available",
+  "page.evolution.sprintInProgress": "sprint in progress",
   "page.evolution.noDataTitle": "Building history",
   "page.evolution.buildingHistory": "No accumulated history yet. The daily sync starts building it automatically — check back in a few days.",
   "page.evolution.noData": "Not enough data for this chart.",

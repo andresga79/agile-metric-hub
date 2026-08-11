@@ -17,7 +17,10 @@ interface MetricChartConfig {
 
 function EvolutionChart({ title, data, config }: { title: string; data: any[]; config: MetricChartConfig }) {
   const { t } = useTranslation();
-  const points = data.filter((w) => w[config.key] !== null && w[config.key] !== undefined);
+  const points = data.filter((p) => p[config.key] !== null && p[config.key] !== undefined);
+  // The active sprint's point is real but still climbing (sprint isn't over), so it's drawn as a
+  // hollow dot instead of the usual filled one - same "not final yet" signal the Sprints tab gives.
+  const activeStart = data.find((p) => p.isActive)?.periodLabel;
 
   return (
     <Card className="bg-card/40">
@@ -36,12 +39,15 @@ function EvolutionChart({ title, data, config }: { title: string; data: any[]; c
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="weekLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+              <XAxis dataKey="periodLabel" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
-                formatter={(value: number) => [`${value}${config.unit}`, config.label]}
+                formatter={(value: number, _name: string, item: any) => [
+                  `${value}${config.unit}${item?.payload?.periodLabel === activeStart ? ` (${t('page.evolution.sprintInProgress')})` : ''}`,
+                  config.label,
+                ]}
               />
               {config.target !== null && (
                 <ReferenceLine
@@ -56,7 +62,13 @@ function EvolutionChart({ title, data, config }: { title: string; data: any[]; c
                 dataKey={config.key}
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
-                dot={{ r: 3 }}
+                dot={(props: any) =>
+                  props.payload.periodLabel === activeStart ? (
+                    <circle cx={props.cx} cy={props.cy} r={3} fill="hsl(var(--card))" stroke="hsl(var(--primary))" strokeWidth={2} />
+                  ) : (
+                    <circle cx={props.cx} cy={props.cy} r={3} fill="hsl(var(--primary))" />
+                  )
+                }
                 connectNulls
               />
             </LineChart>
@@ -65,12 +77,6 @@ function EvolutionChart({ title, data, config }: { title: string; data: any[]; c
       </CardContent>
     </Card>
   );
-}
-
-function formatWeekLabel(weekStart: string): string {
-  const start = new Date(weekStart);
-  const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-  return `${months[start.getMonth()]} ${start.getDate()}`;
 }
 
 export default function ProjectEvolution() {
@@ -89,7 +95,8 @@ export default function ProjectEvolution() {
   if (isLoading) return <div>{t('page.evolution.loading')}</div>;
   if (!project) return <div>{t('page.evolution.notFound')}</div>;
 
-  const weeks = (evolution?.weeks ?? []).map((w) => ({ ...w, weekLabel: formatWeekLabel(w.weekStart) }));
+  const periods = (evolution?.periods ?? []).map((p) => ({ ...p, periodLabel: p.label }));
+  const isSprintGranularity = evolution?.granularity === "sprint";
   const targets = evolution?.targets ?? { leadTime: null, cycleTime: null, throughput: null };
 
   const charts: { title: string; config: MetricChartConfig }[] = [
@@ -111,20 +118,20 @@ export default function ProjectEvolution() {
           {t('page.evolution.title')}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {weeks.length > 0
-            ? `${weeks.length} ${t('page.evolution.weeksAvailable')}`
+          {periods.length > 0
+            ? `${periods.length} ${isSprintGranularity ? t('page.evolution.sprintsAvailable') : t('page.evolution.weeksAvailable')}`
             : t('page.evolution.subtitle')}
         </p>
       </div>
 
       <ProjectTabs projectId={projectId!} active="evolution" />
 
-      {weeks.length === 0 ? (
+      {periods.length === 0 ? (
         <EmptyState icon={TrendingUp} title={t('page.evolution.noDataTitle')} description={t('page.evolution.buildingHistory')} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {charts.map((chart) => (
-            <EvolutionChart key={chart.config.key} title={chart.title} data={weeks} config={chart.config} />
+            <EvolutionChart key={chart.config.key} title={chart.title} data={periods} config={chart.config} />
           ))}
         </div>
       )}

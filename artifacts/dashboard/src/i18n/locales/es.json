@@ -264,6 +264,8 @@
   "page.evolution.title": "Evolución",
   "page.evolution.subtitle": "Tendencia semanal de las métricas clave frente a la meta",
   "page.evolution.weeksAvailable": "semanas disponibles",
+  "page.evolution.sprintsAvailable": "sprints disponibles",
+  "page.evolution.sprintInProgress": "sprint en curso",
   "page.evolution.noDataTitle": "Construyendo historial",
   "page.evolution.buildingHistory": "Aún no hay historial acumulado. El sync diario empieza a construirlo automáticamente — vuelve a revisar en unos días.",
   "page.evolution.noData": "Sin datos suficientes para este gráfico.",

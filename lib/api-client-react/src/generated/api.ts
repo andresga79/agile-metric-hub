@@ -1480,9 +1480,9 @@ export const getGetProjectEvolutionUrl = (projectId: string,) => {
 }
 
 /**
- * Returns one row per ISO week from the project's accumulated metric_snapshots table, alongside the project's configured targets. Snapshots are written by the daily background sync, so this can cover more history over time than a single live Jira query (capped at 90 days) would allow.
+ * For Scrum projects, returns one row per sprint (computed live from Jira, mirroring the Sprints tab) so the evolution lines up with actual sprint boundaries instead of arbitrary calendar weeks. For Kanban projects, returns one row per ISO week from the project's accumulated metric_snapshots table, written by the daily background sync - this can cover more history than a single live Jira query (capped at 90 days) would allow.
  *
- * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
  */
 export const getProjectEvolution = async (projectId: string, options?: RequestInit): Promise<EvolutionResponse> => {
 
@@ -1529,7 +1529,7 @@ export type GetProjectEvolutionQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
  */
 
 export function useGetProjectEvolution<TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(

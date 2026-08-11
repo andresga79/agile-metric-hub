@@ -164,6 +164,66 @@ export async function storeWeeklySnapshots(projectId: string, issues: JiraIssue[
   logger.debug({ projectId, weeks: snapshots.length }, "Stored weekly metric snapshots");
 }
 
+/** Computes Lead Time, Cycle Time, Throughput and QA rejection rate for a single sprint's
+ *  issue set - the sprint-bucketed sibling of computeWeeklySnapshots' per-week accumulator.
+ *  No date-window bucketing needed here: `issues` already comes scoped to one sprint (via
+ *  `sprint = {sprintId}` JQL), so every issue's full history counts toward this one row. */
+export async function computeSprintSnapshot(
+  projectId: string,
+  issues: JiraIssue[]
+): Promise<{ leadTimeAvg: number | null; cycleTimeAvg: number | null; throughput: number; qaRejectionRate: number | null }> {
+  const [allowedIssueTypes, qaStatusSet, devStatusSet] = await Promise.all([
+    getPortfolioAllowedIssueTypes(),
+    getQaStatusSet(),
+    getDevReturnStatusSet(projectId),
+  ]);
+
+  const filteredIssues = issues.filter((issue) =>
+    allowedIssueTypes.includes(getEffectiveIssueType(issue))
+  );
+  const doneIssues = filteredIssues.filter((issue) => isIssueDone(issue));
+
+  await getStatusCategoryMap();
+
+  const resolvedIssues = await Promise.all(
+    doneIssues.map(async (issue) => ({
+      resolvedAt: await getResolutionDate(issue),
+      leadTime: await getLeadTimeDays(issue),
+      cycleTime: await getCycleTimeDays(issue),
+    }))
+  );
+
+  const acc = emptyAccumulator();
+  for (const { resolvedAt, leadTime, cycleTime } of resolvedIssues) {
+    if (!resolvedAt) continue;
+    acc.throughput += 1;
+    if (leadTime !== null) acc.leadTimes.push(leadTime);
+    if (cycleTime !== null) acc.cycleTimes.push(cycleTime);
+  }
+
+  // QA rejection rate uses the full (unfiltered) issue set, mirroring computeWeeklySnapshots.
+  for (const issue of issues) {
+    const histories = issue.changelog?.histories ?? [];
+    for (const h of histories) {
+      for (const item of h.items) {
+        if (item.field !== "status") continue;
+        const to = item.toString?.trim() ?? "";
+        if (to && qaStatusSet.has(to.toLowerCase())) {
+          acc.qaEntries += 1;
+        }
+      }
+    }
+    acc.qaRejections += findQaRejections(issue, qaStatusSet, devStatusSet).length;
+  }
+
+  return {
+    leadTimeAvg: avg(acc.leadTimes),
+    cycleTimeAvg: avg(acc.cycleTimes),
+    throughput: acc.throughput,
+    qaRejectionRate: acc.qaEntries > 0 ? Math.min(100, Math.round((acc.qaRejections / acc.qaEntries) * 1000) / 10) : null,
+  };
+}
+
 export async function getProjectSnapshots(projectId: string) {
   return db
     .select()

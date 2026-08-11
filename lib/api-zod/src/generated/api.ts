@@ -459,9 +459,9 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
- * Returns one row per ISO week from the project's accumulated metric_snapshots table, alongside the project's configured targets. Snapshots are written by the daily background sync, so this can cover more history over time than a single live Jira query (capped at 90 days) would allow.
+ * For Scrum projects, returns one row per sprint (computed live from Jira, mirroring the Sprints tab) so the evolution lines up with actual sprint boundaries instead of arbitrary calendar weeks. For Kanban projects, returns one row per ISO week from the project's accumulated metric_snapshots table, written by the daily background sync - this can cover more history than a single live Jira query (capped at 90 days) would allow.
  *
- * @summary Get weekly metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
+ * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
  */
 export const GetProjectEvolutionParams = zod.object({
   "projectId": zod.coerce.string()
@@ -469,12 +469,15 @@ export const GetProjectEvolutionParams = zod.object({
 
 export const GetProjectEvolutionResponse = zod.object({
   "projectId": zod.string(),
-  "weeks": zod.array(zod.object({
-  "weekStart": zod.coerce.date().describe('ISO date of the Monday of this week'),
+  "granularity": zod.enum(['sprint', 'week']).describe('How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban'),
+  "periods": zod.array(zod.object({
+  "label": zod.string().describe('Display label - sprint name (e.g. \"Sprint 106\") or formatted week start'),
+  "start": zod.coerce.date().describe('ISO date this period starts (sprint start date, or the Monday of the week)'),
+  "isActive": zod.boolean().describe('True for the currently in-progress sprint (always false for weekly\/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final'),
   "leadTimeAvg": zod.number().nullable(),
   "cycleTimeAvg": zod.number().nullable(),
   "throughput": zod.number(),
-  "qaRejectionRate": zod.number().nullable().describe('Percentage of issues entering QA that were rejected back, or null if none entered QA that week')
+  "qaRejectionRate": zod.number().nullable().describe('Percentage of issues entering QA that were rejected back, or null if none entered QA in this period')
 })),
   "targets": zod.object({
   "leadTime": zod.number().nullable(),

@@ -555,16 +555,31 @@ export interface KanbanMetricsResponse {
   summary: KanbanMetricsSummary;
 }
 
-export interface EvolutionWeek {
-  /** ISO date of the Monday of this week */
-  weekStart: string;
+/**
+ * How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban
+ */
+export type EvolutionResponseGranularity = typeof EvolutionResponseGranularity[keyof typeof EvolutionResponseGranularity];
+
+
+export const EvolutionResponseGranularity = {
+  sprint: 'sprint',
+  week: 'week',
+} as const;
+
+export interface EvolutionPeriod {
+  /** Display label - sprint name (e.g. "Sprint 106") or formatted week start */
+  label: string;
+  /** ISO date this period starts (sprint start date, or the Monday of the week) */
+  start: string;
+  /** True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final */
+  isActive: boolean;
   /** @nullable */
   leadTimeAvg: number | null;
   /** @nullable */
   cycleTimeAvg: number | null;
   throughput: number;
   /**
-     * Percentage of issues entering QA that were rejected back, or null if none entered QA that week
+     * Percentage of issues entering QA that were rejected back, or null if none entered QA in this period
      * @nullable
      */
   qaRejectionRate: number | null;
@@ -581,7 +596,9 @@ export interface EvolutionTargets {
 
 export interface EvolutionResponse {
   projectId: string;
-  weeks: EvolutionWeek[];
+  /** How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban */
+  granularity: EvolutionResponseGranularity;
+  periods: EvolutionPeriod[];
   targets: EvolutionTargets;
 }
 
