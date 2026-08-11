@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
@@ -8,8 +8,7 @@ import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle, ChevronDown, Chevro
 import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-suggestions";
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
-
-type Period = "1m" | "3m";
+import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
 const STATUS_CONFIG = {
   critical: {
@@ -87,12 +86,22 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
 export default function ProjectHealth() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<Period>("1m");
+  const [period, setPeriod] = useState<TimeWindow>("1m");
   const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
+
+  // Scrum projects speak in sprints, not calendar time - switch the filter's meaning (and default
+  // value) the moment we learn the board type, same as project-detail.tsx's Resumen tab.
+  useEffect(() => {
+    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
+      setPeriod("2s");
+    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
+      setPeriod("1m");
+    }
+  }, [project?.boardType]);
 
   const { suggestions, loading: loadingHealth } = useHealthSuggestions(projectId, period);
 
@@ -154,17 +163,11 @@ export default function ProjectHealth() {
           <h1 className="text-2xl font-bold tracking-tight">{t('page.health.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('page.health.subtitle')}</p>
         </div>
-        <div className="flex bg-background border border-border rounded-md p-1">
-          {(["1m", "3m"] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {p.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <TimeWindowFilter
+          boardType={project?.boardType ?? "kanban"}
+          value={period}
+          onChange={setPeriod}
+        />
       </div>
 
       <ProjectTabs projectId={projectId!} active="health" />

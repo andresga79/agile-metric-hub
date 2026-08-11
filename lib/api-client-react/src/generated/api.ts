@@ -592,7 +592,7 @@ export function useGetProjectMetrics<TData = Awaited<ReturnType<typeof getProjec
 
 
 export const getGetProjectMembersUrl = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
 
 
 
@@ -604,7 +604,7 @@ export const getGetProjectMembersUrl = (projectId: string,
  * @summary Get team member statistics for a project
  */
 export const getProjectMembers = async (projectId: string,
-    period: '1m' | '3m', options?: RequestInit): Promise<MemberStats[]> => {
+    period: '1m' | '3m' | '2s' | '6s', options?: RequestInit): Promise<MemberStats[]> => {
 
   return customFetch<MemberStats[]>(getGetProjectMembersUrl(projectId,period),
   {
@@ -620,7 +620,7 @@ export const getProjectMembers = async (projectId: string,
 
 
 export const getGetProjectMembersQueryKey = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
     return [
     `/api/projects/${projectId}/members/${period}`
     ] as const;
@@ -628,7 +628,7 @@ export const getGetProjectMembersQueryKey = (projectId: string,
 
 
 export const getGetProjectMembersQueryOptions = <TData = Awaited<ReturnType<typeof getProjectMembers>>, TError = ErrorType<ErrorResponse>>(projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -656,7 +656,7 @@ export type GetProjectMembersQueryError = ErrorType<ErrorResponse>
 
 export function useGetProjectMembers<TData = Awaited<ReturnType<typeof getProjectMembers>>, TError = ErrorType<ErrorResponse>>(
  projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -674,7 +674,7 @@ export function useGetProjectMembers<TData = Awaited<ReturnType<typeof getProjec
 
 
 export const getGetProjectIssuesUrl = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
 
 
 
@@ -686,7 +686,7 @@ export const getGetProjectIssuesUrl = (projectId: string,
  * @summary Get recent issues for a project
  */
 export const getProjectIssues = async (projectId: string,
-    period: '1m' | '3m', options?: RequestInit): Promise<Issue[]> => {
+    period: '1m' | '3m' | '2s' | '6s', options?: RequestInit): Promise<Issue[]> => {
 
   return customFetch<Issue[]>(getGetProjectIssuesUrl(projectId,period),
   {
@@ -702,7 +702,7 @@ export const getProjectIssues = async (projectId: string,
 
 
 export const getGetProjectIssuesQueryKey = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
     return [
     `/api/projects/${projectId}/issues/${period}`
     ] as const;
@@ -710,7 +710,7 @@ export const getGetProjectIssuesQueryKey = (projectId: string,
 
 
 export const getGetProjectIssuesQueryOptions = <TData = Awaited<ReturnType<typeof getProjectIssues>>, TError = ErrorType<unknown>>(projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -738,7 +738,7 @@ export type GetProjectIssuesQueryError = ErrorType<unknown>
 
 export function useGetProjectIssues<TData = Awaited<ReturnType<typeof getProjectIssues>>, TError = ErrorType<unknown>>(
  projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -1056,7 +1056,7 @@ export const usePostProjectForecast = <TError = ErrorType<ErrorResponse>,
     }
 
 export const getGetProjectHealthUrl = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
 
 
 
@@ -1068,7 +1068,7 @@ export const getGetProjectHealthUrl = (projectId: string,
  * @summary Get health radar dimensions for a project
  */
 export const getProjectHealth = async (projectId: string,
-    period: '1m' | '3m', options?: RequestInit): Promise<HealthResponse> => {
+    period: '1m' | '3m' | '2s' | '6s', options?: RequestInit): Promise<HealthResponse> => {
 
   return customFetch<HealthResponse>(getGetProjectHealthUrl(projectId,period),
   {
@@ -1084,7 +1084,7 @@ export const getProjectHealth = async (projectId: string,
 
 
 export const getGetProjectHealthQueryKey = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '1m' | '3m' | '2s' | '6s',) => {
     return [
     `/api/projects/${projectId}/health/${period}`
     ] as const;
@@ -1092,7 +1092,7 @@ export const getGetProjectHealthQueryKey = (projectId: string,
 
 
 export const getGetProjectHealthQueryOptions = <TData = Awaited<ReturnType<typeof getProjectHealth>>, TError = ErrorType<ErrorResponse>>(projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1120,7 +1120,7 @@ export type GetProjectHealthQueryError = ErrorType<ErrorResponse>
 
 export function useGetProjectHealth<TData = Awaited<ReturnType<typeof getProjectHealth>>, TError = ErrorType<ErrorResponse>>(
  projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '1m' | '3m' | '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 

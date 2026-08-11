@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useTranslation } from "react-i18next";
-import { 
+import {
   useGetProject, getGetProjectQueryKey,
   useGetProjectMembers, getGetProjectMembersQueryKey,
   useGetProjectIssues, getGetProjectIssuesQueryKey,
@@ -10,13 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Users } from "lucide-react";
 import { ProjectTabs } from "@/components/project-tabs";
-
-type Period = "1m" | "3m";
+import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
 export default function ProjectTeam() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<Period>("1m");
+  const [period, setPeriod] = useState<TimeWindow>("1m");
   const [memberFilter, setMemberFilter] = useState("all");
   const [showAllWorkItems, setShowAllWorkItems] = useState(false);
 
@@ -25,6 +24,16 @@ export default function ProjectTeam() {
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
+
+  // Scrum projects speak in sprints, not calendar time - switch the filter's meaning (and default
+  // value) the moment we learn the board type, same as project-detail.tsx's Resumen tab.
+  useEffect(() => {
+    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
+      setPeriod("2s");
+    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
+      setPeriod("1m");
+    }
+  }, [project?.boardType]);
 
   const { data: members, isLoading: loadingMembers } = useGetProjectMembers(projectId!, period, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectMembersQueryKey(projectId!, period) }
@@ -89,19 +98,11 @@ export default function ProjectTeam() {
           <p className="text-sm text-muted-foreground mt-1">{t('page.team.subtitle')} {project.name}</p>
         </div>
         
-        <div className="flex bg-background border border-border rounded-md p-1">
-          {(['1m', '3m'] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-                period === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {p.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <TimeWindowFilter
+          boardType={project?.boardType ?? "kanban"}
+          value={period}
+          onChange={setPeriod}
+        />
       </div>
 
       <ProjectTabs projectId={project.id} active="team" />

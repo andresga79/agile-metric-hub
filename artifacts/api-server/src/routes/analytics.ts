@@ -7,7 +7,9 @@ import {
   getFlaggedJiraIssuesForProject,
   getOpenIssuesForProject,
   getEffectiveIssueType,
-  periodToDays,
+  getProjectBoardType,
+  isValidPeriodOrSprintWindow,
+  resolvePeriodDays,
   isIssueDone,
   isIssueInProgress,
   getResolutionDate,
@@ -30,13 +32,6 @@ import { db, blockedReasonsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
-
-const VALID_PERIODS = ["1m", "3m"] as const;
-type Period = (typeof VALID_PERIODS)[number];
-
-function isValidPeriod(p: string): p is Period {
-  return (VALID_PERIODS as readonly string[]).includes(p);
-}
 
 function getStartDate(periodDays: number): Date {
   const d = new Date();
@@ -280,12 +275,18 @@ router.get(
     const period = rawPeriod ?? "1m";
     const compareTo = req.query.compareTo === "true";
 
-    if (!isValidPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
+    if (!isValidPeriodOrSprintWindow(period)) {
+      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
       return;
     }
 
-    const periodDays = periodToDays(period);
+    const boardType = await getProjectBoardType(projectId);
+    const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
+    if ("error" in resolvedWindow) {
+      res.status(400).json({ error: resolvedWindow.error });
+      return;
+    }
+    const { periodDays } = resolvedWindow;
     const startDate = getStartDate(periodDays);
 
     if (req.query.refresh === "true") {

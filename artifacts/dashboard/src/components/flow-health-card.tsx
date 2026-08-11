@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
+import type { TimeWindow } from "@/components/time-window-filter";
 
 interface FlowHealthCardProps {
   projectId: string;
-  period?: "1m" | "3m";
+  period?: TimeWindow;
   compact?: boolean;
 }
 

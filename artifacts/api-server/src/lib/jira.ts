@@ -656,6 +656,46 @@ export function resolveSprintWindowDays(
   return { days: capLookbackDays(rawDays), sprintsIncluded: closed };
 }
 
+// "<N>s" = últimos N sprints CERRADOS (solo válido para proyectos Scrum). Solo se soportan los
+// dos valores publicados en el contrato OpenAPI: "2s", "6s". Mirrors the token routes/metrics.ts
+// already parses locally for /metrics/:period - shared here so the routes below (members, issues,
+// health, analytics) don't each reinvent it.
+const SPRINT_WINDOW_TOKEN_RE = /^(2|6)s$/;
+
+export function parseSprintWindowToken(period: string): number | null {
+  const match = SPRINT_WINDOW_TOKEN_RE.exec(period);
+  return match ? Number(match[1]) : null;
+}
+
+export function isValidPeriodOrSprintWindow(period: string): boolean {
+  return period === "1m" || period === "3m" || SPRINT_WINDOW_TOKEN_RE.test(period);
+}
+
+/** Resolves a "1m"/"3m"/"2s"/"6s" period token to an actual day count, fetching this project's
+ * sprints only when the token is a sprint-window one. Returns an `error` for a sprint-window
+ * token on a non-Scrum project, or when the project has no closed sprints yet to measure from -
+ * callers should respond 400 in the first case (matches /metrics/:period's existing behavior) and
+ * fall back to periodToDays in the second, mirroring computeMetrics' own "no sprints yet" fallback. */
+export async function resolvePeriodDays(
+  projectId: string,
+  period: string,
+  boardType: ProjectBoardType
+): Promise<{ error: string } | { periodDays: number; sprintsIncluded: JiraSprint[] | null }> {
+  const sprintWindowCount = parseSprintWindowToken(period);
+  if (sprintWindowCount === null) {
+    return { periodDays: periodToDays(period), sprintsIncluded: null };
+  }
+  if (boardType !== "scrum") {
+    return { error: "Sprint-window periods (2s/6s) are only valid for Scrum projects." };
+  }
+  const sprints = await getJiraSprints(projectId);
+  const resolved = resolveSprintWindowDays(sprints, sprintWindowCount);
+  if (!resolved) {
+    return { periodDays: periodToDays("3m"), sprintsIncluded: null };
+  }
+  return { periodDays: resolved.days, sprintsIncluded: resolved.sprintsIncluded };
+}
+
 /** Groups resolved issues into one bucket per sprint (chronological order),
  * summing story points resolved within each sprint's [startDate, endDate]
  * window. Mirrors the shape buildWeeklyVelocity produces for the weekly

@@ -15,6 +15,7 @@ import {
   getResolutionDate,
   getJiraSprints,
   resolveSprintWindowDays,
+  resolvePeriodDays,
   buildSprintVelocityBuckets,
   getEffectiveIssueType,
   mapIssueType,
@@ -377,16 +378,24 @@ router.get(
     const projectId = rawId ?? "";
     const period = rawPeriod ?? "1m";
 
-    if (!isValidPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
+    if (!isValidMetricsPeriod(period)) {
+      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
       return;
     }
+
+    const boardType = await getProjectBoardType(projectId);
+    const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
+    if ("error" in resolvedWindow) {
+      res.status(400).json({ error: resolvedWindow.error });
+      return;
+    }
+    const { periodDays } = resolvedWindow;
 
     const [allProjects, issues, openIssues, allowedIssueTypes, portfolioRows] = await Promise.all([
       listJiraProjects(),
       // includeChangelog is required for getCycleTimeDays() below to find the actual
       // first-in-progress transition — without it, every issue silently falls back to lead time.
-      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
       // Unbounded by period — an issue opened before the period window but still open/blocked
       // today must still count against its assignee's current WIP.
       getOpenIssuesForProject(projectId),
@@ -433,7 +442,7 @@ router.get(
 
     const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const openFiltered = openIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-    const startDate = getStartDate(periodToDays(period));
+    const startDate = getStartDate(periodDays);
 
     const memberMap = new Map<
       string,
@@ -597,15 +606,22 @@ router.get(
     const projectId = rawId ?? "";
     const period = rawPeriod ?? "1m";
 
-    if (!isValidPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
+    if (!isValidMetricsPeriod(period)) {
+      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
+      return;
+    }
+
+    const boardType = await getProjectBoardType(projectId);
+    const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
+    if ("error" in resolvedWindow) {
+      res.status(400).json({ error: resolvedWindow.error });
       return;
     }
 
     const [issues, openIssues, allowedIssueTypes] = await Promise.all([
       // includeChangelog: required for getCycleTimeDays() to find the real first-in-progress
       // transition — without it this silently degrades to lead time for every issue.
-      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
+      getJiraIssuesForProject(projectId, resolvedWindow.periodDays, { includeChangelog: true }),
       // Merged in below so "currently open" issues older than the period window still show up —
       // otherwise a ticket opened 60 days ago and still in progress silently vanishes from a 1M view.
       getOpenIssuesForProject(projectId),

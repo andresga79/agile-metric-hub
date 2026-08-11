@@ -4,7 +4,9 @@ import {
   getJiraIssuesForProject,
   isIssueDone,
   isIssueInProgress,
-  periodToDays,
+  getProjectBoardType,
+  isValidPeriodOrSprintWindow,
+  resolvePeriodDays,
   getResolutionDate,
   getCycleTimeDays,
   getLeadTimeDays,
@@ -33,8 +35,20 @@ router.get(
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0] : req.params.projectId;
     const rawPeriod = Array.isArray(req.params.period) ? req.params.period[0] : req.params.period;
-    const period = (rawPeriod ?? "1m") as "1m" | "3m";
-    const periodDays = periodToDays(period);
+    const period = rawPeriod ?? "1m";
+
+    if (!isValidPeriodOrSprintWindow(period)) {
+      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
+      return;
+    }
+
+    const boardType = await getProjectBoardType(projectId);
+    const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
+    if ("error" in resolvedWindow) {
+      res.status(400).json({ error: resolvedWindow.error });
+      return;
+    }
+    const { periodDays } = resolvedWindow;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 

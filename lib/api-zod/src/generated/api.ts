@@ -158,7 +158,7 @@ export const GetProjectMetricsResponse = zod.object({
  */
 export const GetProjectMembersParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m'])
+  "period": zod.enum(['1m', '3m', '2s', '6s']).describe('Time window. \"1m\"\/\"3m\" = últimos 30\/90 días (kanban, o scrum sin selector de sprint). \"Ns\" = últimos N sprints CERRADOS (solo scrum); si el proyecto no tiene sprints cerrados aún, cae a \"3m\".\n')
 })
 
 export const GetProjectMembersResponseItem = zod.object({
@@ -181,7 +181,7 @@ export const GetProjectMembersResponse = zod.array(GetProjectMembersResponseItem
  */
 export const GetProjectIssuesParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m'])
+  "period": zod.enum(['1m', '3m', '2s', '6s']).describe('Time window. \"1m\"\/\"3m\" = últimos 30\/90 días (kanban, o scrum sin selector de sprint). \"Ns\" = últimos N sprints CERRADOS (solo scrum); si el proyecto no tiene sprints cerrados aún, cae a \"3m\".\n')
 })
 
 export const GetProjectIssuesResponseItem = zod.object({
@@ -298,7 +298,7 @@ export const PostProjectForecastResponse = zod.object({
  */
 export const GetProjectHealthParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m'])
+  "period": zod.enum(['1m', '3m', '2s', '6s']).describe('Time window. \"1m\"\/\"3m\" = últimos 30\/90 días (kanban, o scrum sin selector de sprint). \"Ns\" = últimos N sprints CERRADOS (solo scrum); si el proyecto no tiene sprints cerrados aún, cae a \"3m\".\n')
 })
 
 export const GetProjectHealthResponse = zod.object({
