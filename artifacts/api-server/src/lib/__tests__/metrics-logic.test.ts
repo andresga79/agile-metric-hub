@@ -9,6 +9,7 @@ import {
   findQaRejections,
   computeQaRejectionRate,
   isCarryoverIssue,
+  resolveSprintWindowDays,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -307,5 +308,41 @@ describe("isCarryoverIssue", () => {
       { from: "", to: "Some Deleted Sprint, Sprint 111", at: "2026-06-16T00:00:00.000Z" },
     ]);
     expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
+  });
+});
+
+// --- resolveSprintWindowDays ------------------------------------------------
+describe("resolveSprintWindowDays", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const daysAgo = (n: number) => new Date(now - n * DAY).toISOString();
+
+  it("returns null when there are no closed sprints", () => {
+    const sprints = [
+      makeSprint({ id: 1, name: "Sprint 1", state: "active", startDate: daysAgo(5) }),
+    ];
+    expect(resolveSprintWindowDays(sprints, 2)).toBeNull();
+  });
+
+  it("computes days back to the start of the earliest of the last N closed sprints", () => {
+    const sprints = [
+      makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(60), endDate: daysAgo(46) }),
+      makeSprint({ id: 2, name: "Sprint 2", state: "closed", startDate: daysAgo(45), endDate: daysAgo(31) }),
+      makeSprint({ id: 3, name: "Sprint 3", state: "closed", startDate: daysAgo(30), endDate: daysAgo(16) }),
+      makeSprint({ id: 4, name: "Sprint 4", state: "active", startDate: daysAgo(15) }),
+    ];
+    // Last 2 CLOSED sprints by end date = Sprint 3 (ends 16d ago) and Sprint 2 (ends 31d ago).
+    // Earliest start among those two = Sprint 2's start, 45 days ago.
+    const days = resolveSprintWindowDays(sprints, 2);
+    expect(days).not.toBeNull();
+    expect(days!).toBeGreaterThanOrEqual(44);
+    expect(days!).toBeLessThanOrEqual(46);
+  });
+
+  it("ignores sprints without a startDate when picking the earliest", () => {
+    const sprints = [
+      makeSprint({ id: 1, name: "Sprint 1", state: "closed", endDate: daysAgo(40) }), // no startDate
+    ];
+    expect(resolveSprintWindowDays(sprints, 1)).toBeNull();
   });
 });

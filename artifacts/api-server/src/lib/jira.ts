@@ -627,6 +627,30 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
   return false;
 }
 
+/** Days from now back to the start of the earliest sprint among the last
+ * `sprintCount` CLOSED sprints (by end date). Returns null when there are no
+ * closed sprints, or the earliest candidate has no startDate — callers should
+ * fall back to a default day-based window in that case. */
+export function resolveSprintWindowDays(
+  sprints: JiraSprint[],
+  sprintCount: number
+): number | null {
+  const closed = sprints
+    .filter((s) => s.state === "closed")
+    .sort((a, b) => (sprintEndTime(b) ?? 0) - (sprintEndTime(a) ?? 0))
+    .slice(0, sprintCount);
+
+  if (closed.length === 0) return null;
+
+  const earliest = closed[closed.length - 1];
+  if (!earliest.startDate) return null;
+
+  const startMs = new Date(earliest.startDate).getTime();
+  if (Number.isNaN(startMs)) return null;
+
+  return Math.max(1, Math.ceil((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
+}
+
 const JIRA_URL = process.env["JIRA_URL"] ?? "";
 const JIRA_TIMEOUT_MS = 10000;
 const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";
