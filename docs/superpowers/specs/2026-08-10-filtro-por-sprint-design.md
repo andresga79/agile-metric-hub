@@ -64,6 +64,13 @@ Reutiliza el mismo patrón que ya existe en `sprint-metrics.ts:167-179`:
 fecha → `.slice(0, sprintCount)` → `.reverse()` (orden cronológico) →
 `startDate` = `startDate` del primero de la lista.
 
+**Caso borde — proyecto scrum sin sprints cerrados todavía:** si
+`sprintsIncluded` queda vacío, el helper hace fallback a
+`periodToDays("1m")` (mismo default que hoy) para no romper la página con una
+ventana vacía. `sprintsIncluded` se devuelve vacío igual, así que el frontend
+puede detectar el caso y mostrarlo (ej. "aún no hay sprints cerrados") en vez
+de rotular el gráfico como si tuviera datos por sprint.
+
 ### 2. Tipo de ventana unificado (backend)
 
 Cada ruta que hoy resuelve `periodToDays(period)` para acotar fechas pasa a
@@ -84,7 +91,10 @@ baldes de 7 días, arma un balde por cada sprint de `sprintsIncluded` —
 `{ sprint: sprint.name, value: storyPoints }` — agregando los issues resueltos
 dentro de las fechas de cada sprint. Kanban sigue con baldes semanales sin
 cambios. El campo de salida pasa de `week` a algo genérico (`label`) para que el
-frontend no necesite saber si es semana o sprint.
+frontend no necesite saber si es semana o sprint. Nota: `sprint.name` es texto
+libre editable en Jira y no es una key confiable para des-duplicar o indexar —
+solo se usa como label de display; si en algún momento se necesita identidad
+estable, usar `sprint.id`.
 
 ### 4. Componente de filtro compartido (frontend)
 
