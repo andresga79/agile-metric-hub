@@ -88,14 +88,19 @@ interface TimeInStatusEntry {
 
 async function computeTimeInStatus(
   issues: JiraIssue[],
-  allowedStatuses?: Set<string> | null,
+  allowedStatuses?: Map<string, string> | null,
 ): Promise<TimeInStatusEntry[]> {
   const categoryMap = await getStatusCategoryMap();
   const statusMap = new Map<string, Map<string, number>>();
 
-  function addTime(status: string, issueKey: string, days: number) {
+  function addTime(rawStatus: string, issueKey: string, days: number) {
     if (days <= 0) return;
-    if (allowedStatuses && !allowedStatuses.has(status.trim().toLowerCase())) return;
+    const key = rawStatus.trim().toLowerCase();
+    if (allowedStatuses && !allowedStatuses.has(key)) return;
+    // Resolve to the status's current canonical spelling so a mid-project rename (a changelog
+    // entry recorded under the old name) merges into the same row as the current name, instead
+    // of splitting one board column's time across two near-duplicate entries.
+    const status = allowedStatuses?.get(key) ?? rawStatus.trim();
     let issueMap = statusMap.get(status);
     if (!issueMap) {
       issueMap = new Map();

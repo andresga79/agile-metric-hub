@@ -990,9 +990,14 @@ export async function getBoardId(
  *  instead of mixing in statuses from other workflows living in the same project
  *  (e.g. SOLVIX, UX/UI tracks). Returns null when no owned board or columns are
  *  available (callers should then keep the unfiltered behavior). */
+/** Maps lowercased status name -> current canonical (correctly-cased) status name, for every
+ *  status configured on the project's board. A Map (not a Set) because a status renamed at some
+ *  point in Jira's history (e.g. "In Progress" -> "IN PROGRESS") leaves old changelog entries
+ *  carrying the pre-rename spelling - grouping by the raw string would otherwise split one board
+ *  column's time into two near-duplicate rows (see computeTimeInStatus). */
 export async function getBoardStatusNames(
   projectId: string
-): Promise<Set<string> | null> {
+): Promise<Map<string, string> | null> {
   if (!isJiraConfigured()) return null;
   try {
     const boardId = await getBoardId(projectId);
@@ -1017,10 +1022,10 @@ export async function getBoardStatusNames(
     const idToName = new Map(
       statuses.filter((s) => s.id).map((s) => [s.id, s.name])
     );
-    const names = new Set<string>();
+    const names = new Map<string, string>();
     for (const id of statusIds) {
       const name = idToName.get(id);
-      if (name) names.add(name.trim().toLowerCase());
+      if (name) names.set(name.trim().toLowerCase(), name.trim());
     }
     return names.size > 0 ? names : null;
   } catch (err) {
