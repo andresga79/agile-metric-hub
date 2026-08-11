@@ -14,6 +14,8 @@ import {
   getCycleTimeDays,
   getResolutionDate,
   getJiraSprints,
+  resolveSprintWindowDays,
+  buildSprintVelocityBuckets,
   getEffectiveIssueType,
   mapIssueType,
   type JiraIssue,
@@ -31,8 +33,17 @@ const router: IRouter = Router();
 const VALID_PERIODS = ["1m", "3m"] as const;
 type Period = (typeof VALID_PERIODS)[number];
 
-function isValidPeriod(p: string): p is Period {
-  return (VALID_PERIODS as readonly string[]).includes(p);
+// "<N>s" = últimos N sprints CERRADOS (solo válido para proyectos Scrum; ver
+// resolveSprintWindowDays). Ej: "2s", "6s".
+const SPRINT_WINDOW_RE = /^(\d+)s$/;
+
+function isValidPeriod(p: string): boolean {
+  return (VALID_PERIODS as readonly string[]).includes(p) || SPRINT_WINDOW_RE.test(p);
+}
+
+function parseSprintWindowToken(p: string): number | null {
+  const match = SPRINT_WINDOW_RE.exec(p);
+  return match ? Number(match[1]) : null;
 }
 
 function getStartDate(periodDays: number): Date {
@@ -62,11 +73,12 @@ function computePercentiles(
 
 async function computeMetrics(
   issues: JiraIssue[],
-  period: Period,
+  period: string,
   projectId: string,
   boardType: ProjectBoardType,
   sprints: JiraSprint[],
-  allowedIssueTypes: string[]
+  allowedIssueTypes: string[],
+  sprintWindowCount: number | null
 ) {
   const periodDays = periodToDays(period);
   const startDate = getStartDate(periodDays);
@@ -138,7 +150,9 @@ async function computeMetrics(
       .map((r) => [r.issue.id, r.resolvedAt!])
   );
 
-  const velocityByWeek = buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum);
+  const velocityByWeek = sprintWindowCount !== null
+    ? buildSprintVelocityBuckets(resolved, resolvedMap, completedSprints)
+    : buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum);
 
   // Trend: compare first half vs second half of the period
   const halfDays = Math.max(1, Math.floor(periodDays / 2));
@@ -196,10 +210,10 @@ function buildWeeklyVelocity(
   resolvedMap: Map<string, Date>,
   periodDays: number,
   isScrum: boolean
-): { week: string; value: number }[] {
+): { label: string; value: number }[] {
   const weeks = Math.min(Math.ceil(periodDays / 7), 24);
   const now = new Date();
-  const result: { week: string; value: number }[] = [];
+  const result: { label: string; value: number }[] = [];
 
   for (let w = weeks - 1; w >= 0; w--) {
     const weekEnd = new Date(now);
@@ -217,7 +231,7 @@ function buildWeeklyVelocity(
       : weekIssues.length;
 
     const label = weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    result.push({ week: label, value: sp });
+    result.push({ label, value: sp });
   }
 
   return result;
@@ -257,18 +271,24 @@ router.get(
     const period = rawPeriod ?? "1m";
 
     if (!isValidPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m or 3m." });
+      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
       return;
     }
 
-    const [allProjects, issues, boardType, sprints, portfolioRows, allowedIssueTypes] = await Promise.all([
+    const [allProjects, boardType, sprints, portfolioRows, allowedIssueTypes] = await Promise.all([
       listJiraProjects(),
-      getJiraIssuesForProject(projectId, periodToDays(period), { includeChangelog: true }),
       getProjectBoardType(projectId),
       getJiraSprints(projectId),
       db.select().from(portfolioCacheTable),
       getPortfolioAllowedIssueTypes(),
     ]);
+
+    const sprintWindowCount = boardType === "scrum" ? parseSprintWindowToken(period) : null;
+    const periodDays = sprintWindowCount !== null
+      ? resolveSprintWindowDays(sprints, sprintWindowCount) ?? periodToDays("1m")
+      : periodToDays(period);
+
+    const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
 
     let project = allProjects.find(
       (p) => p.id === projectId || p.key === projectId
@@ -316,7 +336,7 @@ router.get(
     }
 
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints, allowedIssueTypes);
+    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints, allowedIssueTypes, sprintWindowCount);
 
     res.json(metrics);
   }
