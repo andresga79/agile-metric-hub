@@ -74,13 +74,13 @@ function computePercentiles(
 async function computeMetrics(
   issues: JiraIssue[],
   period: string,
+  periodDays: number,
   projectId: string,
   boardType: ProjectBoardType,
   sprints: JiraSprint[],
   allowedIssueTypes: string[],
   sprintWindowCount: number | null
 ) {
-  const periodDays = periodToDays(period);
   const startDate = getStartDate(periodDays);
 
   const filteredIssues = issues.filter((issue) =>
@@ -336,7 +336,7 @@ router.get(
     }
 
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const metrics = await computeMetrics(unique, period, projectId, boardType, sprints, allowedIssueTypes, sprintWindowCount);
+    const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindowCount);
 
     res.json(metrics);
   }
