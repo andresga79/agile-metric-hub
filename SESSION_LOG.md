@@ -674,13 +674,49 @@ arriba, `healthz` OK. Con token real:
   devuelve los 111 sprints cerrados completos, no un array vacío; confirma que el `.slice(0,
   sprintCount)` de `resolveSprintWindowDays` es seguro con `sprintCount` fuera de rango.
 - `pnpm run typecheck` limpio · `pnpm run lint` 0 errores (114 warnings, baseline sin cambios) ·
-  `pnpm --filter @workspace/api-server test` 33/33 (subieron de 28 a 33 por los tests nuevos de los
-  helpers de sprint).
-- Paso visual del navegador (Step 5 del brief) **no se pudo ejecutar** — no había herramienta de
-  browser/Playwright disponible en esta sesión; se hizo una verificación best-effort con `curl`
-  (ambas rutas `/projects/10003` y `/projects/10013` devuelven 200 desde el SPA), pero **falta
-  confirmar visualmente** que el selector muestra "Últimos 2"/"Últimos 6" y que el gráfico cambia de
-  eje al tocar el toggle. Queda pendiente para la próxima sesión con acceso a navegador.
+  `pnpm --filter @workspace/api-server test` 34/34 (subieron de 28 a 34 por los tests nuevos de los
+  helpers de sprint, incluido uno agregado en la ronda de fixes final por el cap de 90 días).
+- Paso visual del navegador (Step 5 del brief): en esta sesión no había Playwright disponible para
+  el subagente de verificación, pero el controlador **sí lo tenía** y lo corrió después — encontró
+  un bug real (ver más abajo) que ninguna revisión estática detectó.
+
+**Bug encontrado y arreglado vía navegador real:** en un proyecto scrum, `period` arrancaba en
+`"1m"` por defecto, un valor que el nuevo `<TimeWindowFilter>` no ofrece para scrum (solo "2s"/"6s").
+Resultado: al entrar a `/projects/10003` ningún botón quedaba marcado como activo y el gráfico caía
+en silencio al bucketing semanal viejo hasta que el usuario tocaba manualmente un botón. Arreglado
+con un `useEffect` que reasigna `period` a `"2s"` en cuanto se conoce que el proyecto es scrum
+(commit `37d940c`) — confirmado visualmente después: "Últimos 2" queda activo desde la carga y el
+gráfico muestra labels de sprint ("Tablero Sprint 110"/"111") de entrada, sin click previo.
+
+**Revisión final de todo el branch (whole-branch review) — 3 hallazgos más, ya corregidos** (commit
+`4742de8`), cerrando también los dos "hallazgos abiertos" que había quedado documentados arriba
+sobre `4s`/`200s`:
+1. `resolveSprintWindowDays` calculaba un día-count sin aplicar el cap de 90 días
+   (`capLookbackDays`), mientras `getJiraIssuesForProject` sí lo aplicaba internamente — los dos
+   números podían divergir. Además, el set de sprints usado para dimensionar la ventana
+   (`state === "closed"`) y el usado para armar los buckets del gráfico (`completeDate >= startDate`)
+   eran dos filtros distintos que podían seleccionar sprints diferentes. Ahora
+   `resolveSprintWindowDays` devuelve `{ days, sprintsIncluded }` con `days` ya capeado y
+   `sprintsIncluded` como única fuente de verdad, reutilizada tanto para el denominador de velocity
+   como para el bucketing del gráfico.
+2. Un proyecto kanban podía mandar un token de sprint (`"2s"`) y recibir en silencio una ventana de
+   90 días en vez de un error — ahora la ruta de métricas devuelve `400` si `boardType !== "scrum"`
+   y llega un token `Ns`. También se acotó el regex del servidor a exactamente `2s`/`6s` (antes
+   aceptaba cualquier `\d+s`), alineado con el enum del contrato OpenAPI — esto cierra de raíz los
+   dos comportamientos raros de `4s`/`200s` que habían quedado como "hallazgo abierto": esos tokens
+   ya no son alcanzables vía la API.
+3. `buildSprintVelocityBuckets` tenía un límite de sprint inclusivo en ambos extremos (riesgo de
+   doble conteo en el instante exacto de corte) y usaba `endDate` antes que `completeDate` como
+   límite superior (perdía trabajo resuelto en el "tiempo extra" entre el fin planeado y el cierre
+   real). Cambiado a intervalo semiabierto y a preferir `completeDate`.
+
+Con esto, Fase 1 (filtro por sprint en la página resumen/Health, solo scrum, proyectos kanban sin
+cambios) queda cerrada end-to-end: código + tests + typecheck + lint + verificación manual con curl
++ verificación visual real en navegador + revisión final de todo el branch, sin hallazgos abiertos.
+Fase 2 (extender el filtro a las 8 sub-páginas restantes: team, analytics, issues, targets,
+blocked-KPI, QA rejected, report) queda para una sesión futura con su propio plan — ver
+`docs/superpowers/plans/2026-08-10-filtro-por-sprint.md`, sección "Alcance de este plan vs. el spec
+aprobado".
 
 **Hallazgo abierto (no bloqueante para 2s/6s, sí para uso general de `Ns`):** al probar valores de
 `Ns` fuera de las dos opciones que expone la UI (2s/6s) aparecen dos comportamientos raros:
