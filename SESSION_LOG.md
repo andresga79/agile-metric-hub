@@ -645,3 +645,64 @@ prueba con `can_view=false` en todo — creado y **borrado** al terminar):
 tiene más deuda salvo la nota del baseline `/metrics`+`/analytics` de arriba. Con esto el gate de
 seguridad para el deploy está sustancialmente cubierto. Backlog restante del proyecto: Tier 4
 (FE-*, DEU-*, OPS-*, DAT-1/5) y activar el CI (QA-2).
+
+## 11. Filtro por sprint en el resumen del proyecto — Fase 1 (2026-08-10)
+
+Plan de 7 tareas para que los proyectos **Scrum** puedan filtrar la página de resumen
+(`/projects/:id`) por rango de sprints ("Últimos 2" / "Últimos 6") en vez de solo 1M/3M, con el
+gráfico de throughput trend agrupado por sprint en vez de por semana. **Kanban queda intacto.**
+
+**Commits (orden de aplicación):**
+`49e3c9c` (resolveSprintWindowDays) · `a303676` (buildSprintVelocityBuckets) ·
+`d065e31` (wire de ambos helpers en `metrics.ts`) · `b304463` (fix: pasar periodDays ya resuelto
+a `computeMetrics` en vez de recalcularlo) · `beeeffd` (fix: acotar la validación de tokens `Ns` a
+la ruta de `metrics`, no a `members`/`issues`/`team/in-progress`) · `46f7ac3` (tokens de sprint-window
++ rename `week`→`label` en el contrato OpenAPI) · `da69697` (`TimeWindowFilter` compartido: toggle de
+mes para kanban, rango de sprints para scrum) · `c32d1bb` (wire de `project-detail.tsx` al nuevo
+filtro).
+
+**Verificación end-to-end (Tarea 7):** rebuild completo (`docker compose up -d --build`, y luego
+`down -v` + rebuild porque el volumen de Postgres reusado tenía un `admin` bootstrapeado con una
+password de una sesión anterior — el gotcha ya documentado en `CLAUDE.md`), los 3 contenedores
+arriba, `healthz` OK. Con token real:
+- **10003 (scrum, control)** `/metrics/2s` → `boardType: "scrum"`, `isScrum: true`,
+  `velocityByWeek` con 2 elementos (`{label: "Tablero Sprint 110", value: 19}`,
+  `{label: "Tablero Sprint 111", value: 37}`) — sin fechas, story points reales de Jira.
+- **10013 (kanban, control)** `/metrics/1m` → `boardType: "kanban"`, `velocityByWeek` con labels
+  tipo "Jul 14"/"Aug 4" — formato semanal sin cambios.
+- **Caso borde** `/metrics/200s` (muchos más sprints de los 111 cerrados que tiene el proyecto) →
+  devuelve los 111 sprints cerrados completos, no un array vacío; confirma que el `.slice(0,
+  sprintCount)` de `resolveSprintWindowDays` es seguro con `sprintCount` fuera de rango.
+- `pnpm run typecheck` limpio · `pnpm run lint` 0 errores (114 warnings, baseline sin cambios) ·
+  `pnpm --filter @workspace/api-server test` 33/33 (subieron de 22 a 33 por los tests nuevos de los
+  helpers de sprint).
+- Paso visual del navegador (Step 5 del brief) **no se pudo ejecutar** — no había herramienta de
+  browser/Playwright disponible en esta sesión; se hizo una verificación best-effort con `curl`
+  (ambas rutas `/projects/10003` y `/projects/10013` devuelven 200 desde el SPA), pero **falta
+  confirmar visualmente** que el selector muestra "Últimos 2"/"Últimos 6" y que el gráfico cambia de
+  eje al tocar el toggle. Queda pendiente para la próxima sesión con acceso a navegador.
+
+**Hallazgo abierto (no bloqueante para 2s/6s, sí para uso general de `Ns`):** al probar valores de
+`Ns` fuera de las dos opciones que expone la UI (2s/6s) aparecen dos comportamientos raros:
+1. Con `4s` (proyecto 10003), `velocityByWeek` trae **5** buckets en vez de 4 (se cuela un sprint
+   extra con `value: 0`). Causa probable: `resolveSprintWindowDays` calcula los días con `Math.ceil`
+   sobre el `startDate` del sprint más antiguo de la ventana, y `getStartDate` vuelve a redondear a
+   granularidad de día — cuando el sprint anterior se completó el mismo día calendario en que empieza
+   el sprint más antiguo de la ventana, ese sprint anterior pasa el filtro `completeDate >=
+   startDate` de `completedSprints` aunque no debería estar en la ventana de N sprints.
+2. Los story points de un mismo sprint (ej. Sprint 107/108/110/111) **no coinciden** entre la
+   respuesta de `/metrics/6s` y `/metrics/200s`, aun siendo el mismo sprint con las mismas fechas —
+   reproducible (mismos valores en corridas repetidas, no es flakiness de datos en vivo). Se sospecha
+   que el rango de días distinto entre ambas llamadas (una bajo el cap de `JIRA_MAX_LOOKBACK_DAYS` en
+   90 días, la otra no) interactúa con el *workaround* de paginación por chunks semanales de
+   `getJiraIssuesForProject` (ya documentado en el código como best-effort, no garantiza 100% de
+   cobertura si un chunk semanal supera 100 resultados). No se terminó de confirmar la causa raíz.
+   **Importante:** para los dos valores que la UI realmente expone (`2s` y `6s`) los números
+   coinciden entre sí en todas las corridas — el bug solo se ve al forzar tokens `Ns` que la UI no
+   ofrece hoy. Se deja anotado para revisar en una Fase futura si se agregan más opciones de rango.
+
+**Fuera de alcance de esta fase (documentado en el spec):** las 8 sub-páginas restantes (team,
+analytics, issues, targets, blocked-KPI, QA rejected, report) — cada una tiene una variación
+distinta del filtro `period`: algunas usan query param en vez de path param, `targets.ts` persiste
+`period` como valor de fila en la base de datos, y `evolution.ts`/`forecast.ts` usan el período solo
+indirectamente. Quedan para una Fase 2 con su propio plan.
