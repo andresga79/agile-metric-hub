@@ -651,6 +651,39 @@ export function resolveSprintWindowDays(
   return Math.max(1, Math.ceil((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
 }
 
+/** Groups resolved issues into one bucket per sprint (chronological order),
+ * summing story points resolved within each sprint's [startDate, endDate]
+ * window. Mirrors the shape buildWeeklyVelocity produces for the weekly
+ * (kanban / non-sprint-window) case, so the frontend chart doesn't need to
+ * know which mode produced the data. */
+export function buildSprintVelocityBuckets(
+  resolved: JiraIssue[],
+  resolvedMap: Map<string, Date>,
+  closedSprints: JiraSprint[]
+): { label: string; value: number }[] {
+  const chronological = [...closedSprints].sort((a, b) => {
+    const aStart = a.startDate ? new Date(a.startDate).getTime() : 0;
+    const bStart = b.startDate ? new Date(b.startDate).getTime() : 0;
+    return aStart - bStart;
+  });
+
+  return chronological.map((sprint) => {
+    const start = sprint.startDate ? new Date(sprint.startDate).getTime() : -Infinity;
+    const endRaw = sprint.endDate ?? sprint.completeDate ?? null;
+    const end = endRaw ? new Date(endRaw).getTime() : Infinity;
+
+    const value = resolved.reduce((sum, issue) => {
+      const resolvedAt = resolvedMap.get(issue.id);
+      if (!resolvedAt) return sum;
+      const t = resolvedAt.getTime();
+      if (t < start || t > end) return sum;
+      return sum + getStoryPoints(issue);
+    }, 0);
+
+    return { label: sprint.name, value };
+  });
+}
+
 const JIRA_URL = process.env["JIRA_URL"] ?? "";
 const JIRA_TIMEOUT_MS = 10000;
 const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";
