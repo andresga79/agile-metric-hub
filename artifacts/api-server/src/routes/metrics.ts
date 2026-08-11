@@ -37,8 +37,17 @@ type Period = (typeof VALID_PERIODS)[number];
 // resolveSprintWindowDays). Ej: "2s", "6s".
 const SPRINT_WINDOW_RE = /^(\d+)s$/;
 
-function isValidPeriod(p: string): boolean {
-  return (VALID_PERIODS as readonly string[]).includes(p) || SPRINT_WINDOW_RE.test(p);
+function isValidPeriod(p: string): p is Period {
+  return (VALID_PERIODS as readonly string[]).includes(p);
+}
+
+// Only the /projects/:projectId/metrics/:period route understands "Ns" sprint-window
+// tokens (via sprintWindowCount/resolveSprintWindowDays below) — the other routes in
+// this file (members, team/in-progress, issues) call periodToDays(period) directly,
+// which has no "Ns" case and would silently fall to its 90-day default. Keep them on
+// the strict isValidPeriod so a token like "2s" still 400s there.
+function isValidMetricsPeriod(p: string): boolean {
+  return isValidPeriod(p) || SPRINT_WINDOW_RE.test(p);
 }
 
 function parseSprintWindowToken(p: string): number | null {
@@ -270,7 +279,7 @@ router.get(
     const projectId = rawId ?? "";
     const period = rawPeriod ?? "1m";
 
-    if (!isValidPeriod(period)) {
+    if (!isValidMetricsPeriod(period)) {
       res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
       return;
     }
@@ -316,7 +325,6 @@ router.get(
 
       // If no issues from Jira, return estimated metrics from portfolio cache
       if (issues.length === 0 && portfolioRow) {
-        const periodDays = periodToDays(period);
         const throughput = portfolioRow.doneCount > 0 ? Math.ceil(portfolioRow.doneCount / 4) : 0; // Estimate for 1 week
         
         res.json({
