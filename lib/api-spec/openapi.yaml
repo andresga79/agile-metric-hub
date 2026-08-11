@@ -1522,11 +1522,14 @@ components:
 
     EvolutionPeriod:
       type: object
-      required: [label, start, isActive, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
+      required: [label, rangeLabel, start, isActive, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
       properties:
         label:
           type: string
-          description: Display label - short sprint label (e.g. "SP106") or formatted week start
+          description: Display label - short sprint label (e.g. "SP106") or ISO week number (e.g. "S22")
+        rangeLabel:
+          type: ["string", "null"]
+          description: Full date range for weekly (Kanban) rows, e.g. "Ago 10 - Ago 16" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name/dates aren't a fixed calendar range.
         start:
           type: string
           format: date

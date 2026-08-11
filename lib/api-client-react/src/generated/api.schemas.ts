@@ -567,8 +567,13 @@ export const EvolutionResponseGranularity = {
 } as const;
 
 export interface EvolutionPeriod {
-  /** Display label - sprint name (e.g. "Sprint 106") or formatted week start */
+  /** Display label - short sprint label (e.g. "SP106") or ISO week number (e.g. "S22") */
   label: string;
+  /**
+     * Full date range for weekly (Kanban) rows, e.g. "Ago 10 - Ago 16" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name/dates aren't a fixed calendar range.
+     * @nullable
+     */
+  rangeLabel: string | null;
   /** ISO date this period starts (sprint start date, or the Monday of the week) */
   start: string;
   /** True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final */

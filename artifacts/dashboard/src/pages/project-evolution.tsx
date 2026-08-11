@@ -44,8 +44,12 @@ function EvolutionChart({ title, data, config }: { title: string; data: any[]; c
               <Tooltip
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
+                labelFormatter={(label: string, item: any) => {
+                  const rangeLabel = item?.[0]?.payload?.rangeLabel;
+                  return rangeLabel ? `${label} · ${rangeLabel}` : label;
+                }}
                 formatter={(value: number, _name: string, item: any) => [
-                  `${value}${config.unit}${item?.payload?.periodLabel === activeStart ? ` (${t('page.evolution.sprintInProgress')})` : ''}`,
+                  `${value.toFixed(2)}${config.unit}${item?.payload?.periodLabel === activeStart ? ` (${t('page.evolution.sprintInProgress')})` : ''}`,
                   config.label,
                 ]}
               />

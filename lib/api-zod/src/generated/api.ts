@@ -471,7 +471,8 @@ export const GetProjectEvolutionResponse = zod.object({
   "projectId": zod.string(),
   "granularity": zod.enum(['sprint', 'week']).describe('How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban'),
   "periods": zod.array(zod.object({
-  "label": zod.string().describe('Display label - sprint name (e.g. \"Sprint 106\") or formatted week start'),
+  "label": zod.string().describe('Display label - short sprint label (e.g. \"SP106\") or ISO week number (e.g. \"S22\")'),
+  "rangeLabel": zod.string().nullable().describe('Full date range for weekly (Kanban) rows, e.g. \"Ago 10 - Ago 16\" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name\/dates aren\'t a fixed calendar range.'),
   "start": zod.coerce.date().describe('ISO date this period starts (sprint start date, or the Monday of the week)'),
   "isActive": zod.boolean().describe('True for the currently in-progress sprint (always false for weekly\/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final'),
   "leadTimeAvg": zod.number().nullable(),
