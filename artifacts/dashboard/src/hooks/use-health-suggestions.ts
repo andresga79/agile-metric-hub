@@ -39,6 +39,7 @@ const DEFAULT_THRESHOLDS = {
 
 export function useHealthSuggestions(projectId: string | undefined, period: string) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [flowHealthScore, setFlowHealthScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,6 +58,11 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         const raw: RawHealth = healthData.raw;
         const analytics = analyticsData;
         const result: Suggestion[] = [];
+
+        const flowHealthDimension = Array.isArray(healthData.dimensions)
+          ? healthData.dimensions.find((d: { name: string }) => d.name === "Flow Health Score")
+          : undefined;
+        setFlowHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
 
         const mergedThresholds: Record<string, { good: number; warning: number }> = {};
         for (const key of Object.keys(DEFAULT_THRESHOLDS)) {
@@ -245,8 +251,11 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         setSuggestions(result);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setFlowHealthScore(null);
+        setLoading(false);
+      });
   }, [projectId, period]);
 
-  return { suggestions, loading };
+  return { suggestions, flowHealthScore, loading };
 }

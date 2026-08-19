@@ -163,9 +163,21 @@ async function computeMetrics(
       .map((r) => [r.issue.id, r.resolvedAt!])
   );
 
+  // Per-issue lead/cycle time, keyed by id — reused by both bucketing functions below so
+  // each velocityByWeek/sprint bucket can report its own avgCycleTime/avgLeadTime without
+  // recomputing getLeadTimeDays/getCycleTimeDays (already computed once for leadTimes/cycleTimes above).
+  const leadCycleByIssueId = new Map<string, { lead: number | null; cycle: number | null }>(
+    await Promise.all(
+      resolved.map(async (i) => [
+        i.id,
+        { lead: await getLeadTimeDays(i), cycle: await getCycleTimeDays(i) },
+      ] as const)
+    )
+  );
+
   const velocityByWeek = sprintWindowSprints !== null
-    ? buildSprintVelocityBuckets(resolved, resolvedMap, sprintWindowSprints)
-    : buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum);
+    ? buildSprintVelocityBuckets(resolved, resolvedMap, sprintWindowSprints, leadCycleByIssueId)
+    : buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum, leadCycleByIssueId);
 
   // Trend: compare first half vs second half of the period
   const halfDays = Math.max(1, Math.floor(periodDays / 2));
@@ -218,15 +230,22 @@ async function computeMetrics(
   };
 }
 
+function avgOf(values: number[]): number | null {
+  return values.length > 0
+    ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
+    : null;
+}
+
 function buildWeeklyVelocity(
   resolved: JiraIssue[],
   resolvedMap: Map<string, Date>,
   periodDays: number,
-  isScrum: boolean
-): { label: string; value: number }[] {
+  isScrum: boolean,
+  leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
+): { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] {
   const weeks = Math.min(Math.ceil(periodDays / 7), 24);
   const now = new Date();
-  const result: { label: string; value: number }[] = [];
+  const result: { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] = [];
 
   for (let w = weeks - 1; w >= 0; w--) {
     const weekEnd = new Date(now);
@@ -243,8 +262,15 @@ function buildWeeklyVelocity(
       ? weekIssues.reduce((sum, i) => sum + getStoryPoints(i), 0)
       : weekIssues.length;
 
+    const avgCycleTime = avgOf(
+      weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
+    );
+    const avgLeadTime = avgOf(
+      weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
+    );
+
     const label = weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    result.push({ label, value: sp });
+    result.push({ label, value: sp, avgCycleTime, avgLeadTime });
   }
 
   return result;

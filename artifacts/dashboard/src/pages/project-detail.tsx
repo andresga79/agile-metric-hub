@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { DetailSkeleton } from "@/components/page-skeleton";
 import { describeTrend, isImproving } from "@/lib/trend-analysis";
 import { ChevronRight, Download, Ban, Target } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
@@ -253,22 +253,28 @@ export default function ProjectDetail() {
         <CardContent className="h-[300px]">
           <div ref={chartRef} className="w-full h-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={metrics?.velocityByWeek || []}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={metrics?.velocityByWeek || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="throughput" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis
+                  yAxisId="days"
+                  orientation="right"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{ value: t('page.detail.daysAxis'), angle: 90, position: 'insideRight', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
-                <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
-              </AreaChart>
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar yAxisId="throughput" dataKey="value" name={t('metric.throughput')} fill="hsl(var(--primary))" fillOpacity={0.5} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="days" type="monotone" dataKey="avgCycleTime" name={t('metric.cycleTime')} stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="days" type="monotone" dataKey="avgLeadTime" name={t('metric.leadTime')} stroke="#8b5cf6" strokeWidth={2} dot={false} connectNulls />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </CardContent>

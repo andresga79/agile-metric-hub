@@ -143,6 +143,10 @@ router.get(
         leadTime: pickTarget(targets, thresholds, "leadTime"),
         cycleTime: pickTarget(targets, thresholds, "cycleTime"),
         throughput: pickTarget(targets, thresholds, "throughput"),
+        // No global admin threshold exists for this metric (it's distinct from "cfr" - QA
+        // rejections vs. bug ratio) so this only resolves when a project has set a manual
+        // target for it; otherwise pickTarget's thresholds fallback correctly returns null.
+        qaRejectionRate: pickTarget(targets, thresholds, "qaRejectionRate"),
       },
     });
   }

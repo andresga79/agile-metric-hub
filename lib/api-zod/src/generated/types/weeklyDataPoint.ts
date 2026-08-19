@@ -10,4 +10,8 @@ export interface WeeklyDataPoint {
   /** Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window) */
   label: string;
   value: number;
+  /** Average cycle time (days) of issues resolved in this bucket, null if none resolved */
+  avgCycleTime?: number | null;
+  /** Average lead time (days) of issues resolved in this bucket, null if none resolved */
+  avgLeadTime?: number | null;
 }

@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, useGetProjectEvolution, getGetProjectQueryKey, getGetProjectEvolutionQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft, TrendingUp } from "lucide-react";
+import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import { getAuthToken } from "@/lib/auth";
@@ -13,6 +13,26 @@ interface MetricChartConfig {
   label: string;
   unit: string;
   target: number | null;
+  lowerIsBetter: boolean;
+}
+
+// Delta vs. the previous completed period - "completed" so a still-in-progress sprint's
+// partial value doesn't get compared against a full prior sprint as if they were equal footing.
+function DeltaBadge({ points, config }: { points: any[]; config: MetricChartConfig }) {
+  const completed = points.filter((p) => !p.isActive);
+  if (completed.length < 2) return null;
+  const last = completed[completed.length - 1][config.key];
+  const prev = completed[completed.length - 2][config.key];
+  const delta = last - prev;
+  if (delta === 0) return null;
+  const isImprovement = config.lowerIsBetter ? delta < 0 : delta > 0;
+  const Icon = delta > 0 ? ArrowUp : ArrowDown;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isImprovement ? "text-green-400" : "text-red-400"}`}>
+      <Icon size={12} />
+      {Math.abs(delta).toFixed(1)}{config.unit}
+    </span>
+  );
 }
 
 function EvolutionChart({ title, data, config }: { title: string; data: any[]; config: MetricChartConfig }) {
@@ -25,7 +45,10 @@ function EvolutionChart({ title, data, config }: { title: string; data: any[]; c
   return (
     <Card className="bg-card/40">
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <DeltaBadge points={points} config={config} />
+        </div>
         <CardDescription>
           {config.target !== null
             ? `${t('page.evolution.target')}: ${config.target}${config.unit}`
@@ -101,13 +124,13 @@ export default function ProjectEvolution() {
 
   const periods = (evolution?.periods ?? []).map((p) => ({ ...p, periodLabel: p.label }));
   const isSprintGranularity = evolution?.granularity === "sprint";
-  const targets = evolution?.targets ?? { leadTime: null, cycleTime: null, throughput: null };
+  const targets = evolution?.targets ?? { leadTime: null, cycleTime: null, throughput: null, qaRejectionRate: null };
 
   const charts: { title: string; config: MetricChartConfig }[] = [
-    { title: t('page.evolution.leadTime'), config: { key: "leadTimeAvg", label: t('page.evolution.leadTime'), unit: "d", target: targets.leadTime } },
-    { title: t('page.evolution.cycleTime'), config: { key: "cycleTimeAvg", label: t('page.evolution.cycleTime'), unit: "d", target: targets.cycleTime } },
-    { title: t('page.evolution.throughput'), config: { key: "throughput", label: t('page.evolution.throughput'), unit: "", target: targets.throughput } },
-    { title: t('page.evolution.qaRejectionRate'), config: { key: "qaRejectionRate", label: t('page.evolution.qaRejectionRate'), unit: "%", target: null } },
+    { title: t('page.evolution.leadTime'), config: { key: "leadTimeAvg", label: t('page.evolution.leadTime'), unit: "d", target: targets.leadTime, lowerIsBetter: true } },
+    { title: t('page.evolution.cycleTime'), config: { key: "cycleTimeAvg", label: t('page.evolution.cycleTime'), unit: "d", target: targets.cycleTime, lowerIsBetter: true } },
+    { title: t('page.evolution.throughput'), config: { key: "throughput", label: t('page.evolution.throughput'), unit: "", target: targets.throughput, lowerIsBetter: false } },
+    { title: t('page.evolution.qaRejectionRate'), config: { key: "qaRejectionRate", label: t('page.evolution.qaRejectionRate'), unit: "%", target: targets.qaRejectionRate ?? null, lowerIsBetter: true } },
   ];
 
   return (
@@ -123,7 +146,7 @@ export default function ProjectEvolution() {
         </h1>
         <p className="text-sm text-muted-foreground">
           {periods.length > 0
-            ? `${periods.length} ${isSprintGranularity ? t('page.evolution.sprintsAvailable') : t('page.evolution.weeksAvailable')}`
+            ? t(isSprintGranularity ? 'page.evolution.sprintsAvailable' : 'page.evolution.weeksAvailable', { count: periods.length })
             : t('page.evolution.subtitle')}
         </p>
       </div>

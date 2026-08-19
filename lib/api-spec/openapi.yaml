@@ -1032,6 +1032,14 @@ components:
           description: "Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window)"
         value:
           type: number
+        avgCycleTime:
+          type: number
+          nullable: true
+          description: "Average cycle time (days) of issues resolved in this bucket, null if none resolved"
+        avgLeadTime:
+          type: number
+          nullable: true
+          description: "Average lead time (days) of issues resolved in this bucket, null if none resolved"
 
     CycleTimeDataPoint:
       type: object
@@ -1576,13 +1584,15 @@ components:
 
     EvolutionTargets:
       type: object
-      required: [leadTime, cycleTime, throughput]
+      required: [leadTime, cycleTime, throughput, qaRejectionRate]
       properties:
         leadTime:
           type: ["number", "null"]
         cycleTime:
           type: ["number", "null"]
         throughput:
+          type: ["number", "null"]
+        qaRejectionRate:
           type: ["number", "null"]
 
 

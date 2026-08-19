@@ -704,28 +704,39 @@ export async function resolvePeriodDays(
 export function buildSprintVelocityBuckets(
   resolved: JiraIssue[],
   resolvedMap: Map<string, Date>,
-  closedSprints: JiraSprint[]
-): { label: string; value: number }[] {
+  closedSprints: JiraSprint[],
+  leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
+): { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] {
   const chronological = [...closedSprints].sort((a, b) => {
     const aStart = a.startDate ? new Date(a.startDate).getTime() : 0;
     const bStart = b.startDate ? new Date(b.startDate).getTime() : 0;
     return aStart - bStart;
   });
 
+  const avgOf = (values: number[]): number | null =>
+    values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
+
   return chronological.map((sprint) => {
     const start = sprint.startDate ? new Date(sprint.startDate).getTime() : -Infinity;
     const endRaw = sprint.completeDate ?? sprint.endDate ?? null;
     const end = endRaw ? new Date(endRaw).getTime() : Infinity;
 
-    const value = resolved.reduce((sum, issue) => {
+    const sprintIssues = resolved.filter((issue) => {
       const resolvedAt = resolvedMap.get(issue.id);
-      if (!resolvedAt) return sum;
+      if (!resolvedAt) return false;
       const t = resolvedAt.getTime();
-      if (t < start || t >= end) return sum;
-      return sum + getStoryPoints(issue);
-    }, 0);
+      return t >= start && t < end;
+    });
 
-    return { label: sprint.name, value };
+    const value = sprintIssues.reduce((sum, issue) => sum + getStoryPoints(issue), 0);
+    const avgCycleTime = avgOf(
+      sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
+    );
+    const avgLeadTime = avgOf(
+      sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
+    );
+
+    return { label: sprint.name, value, avgCycleTime, avgLeadTime };
   });
 }
 

@@ -9,6 +9,37 @@ import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-sugges
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { MetricTooltip } from "@/components/metric-tooltip";
+
+// Same 0-100 scale normalize() produces server-side (100 = at/above the "good" admin
+// threshold, 0 = at/below "warning") - these bands just decide which color band the
+// number falls into, not a separate scoring formula.
+function scoreStatus(score: number): "critical" | "warning" | "good" {
+  return score >= 70 ? "good" : score >= 40 ? "warning" : "critical";
+}
+
+function FlowHealthScoreBanner({ score }: { score: number | null }) {
+  const { t } = useTranslation();
+  if (score === null) return null;
+  const config = STATUS_CONFIG[scoreStatus(score)];
+
+  return (
+    <Card className={`${config.bg} transition-colors`}>
+      <CardContent className="py-5 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+            {t('page.health.flowHealthScore')}
+            <MetricTooltip description={t('page.health.flowHealthScoreTooltip')} />
+          </div>
+          <div className="text-4xl font-bold tabular-nums mt-1">{score}<span className="text-lg text-muted-foreground">/100</span></div>
+        </div>
+        <span className={`text-xs font-semibold px-2 py-1 rounded ${config.badge}`}>
+          {t(config.label)}
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
 
 const STATUS_CONFIG = {
   critical: {
@@ -103,7 +134,7 @@ export default function ProjectHealth() {
     }
   }, [project?.boardType]);
 
-  const { suggestions, loading: loadingHealth } = useHealthSuggestions(projectId, period);
+  const { suggestions, flowHealthScore, loading: loadingHealth } = useHealthSuggestions(projectId, period);
 
   if (loadingProject) {
     return (
@@ -171,6 +202,8 @@ export default function ProjectHealth() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="health" />
+
+      <FlowHealthScoreBanner score={flowHealthScore} />
 
       {suggestions.length === 0 ? (
         <EmptyState

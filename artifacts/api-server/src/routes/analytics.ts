@@ -53,6 +53,14 @@ function isFlaggedTransition(item: { field: string; fieldId?: string }): boolean
   return fieldId === "customfield_10021" || fieldName === "flagged" || fieldName === "marca";
 }
 
+// Some Jira automations post a boilerplate comment when the Flagged field changes
+// (e.g. "Marca añadida", "Flag added") instead of an actual explanation - matching
+// this exact noise lets a real one- or two-word comment through unfiltered.
+const GENERIC_FLAG_COMMENT_RE = /^(marca (a[ñn]adida|quitada|removida)|flag (added|removed))\.?$/i;
+function isGenericFlagComment(text: string): boolean {
+  return GENERIC_FLAG_COMMENT_RE.test(text.trim());
+}
+
 function getISOWeek(date: Date): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -418,6 +426,7 @@ router.get(
           return {
             key: i.key,
             summary: i.fields.summary,
+            assignee: i.fields.assignee?.displayName ?? null,
             issueType: i.fields.issuetype.name,
             priority: i.fields.priority.name,
             totalDays: 0,
@@ -516,6 +525,7 @@ router.get(
         return {
           key: i.key,
           summary: i.fields.summary,
+          assignee: i.fields.assignee?.displayName ?? null,
           issueType: i.fields.issuetype.name,
           priority: i.fields.priority.name,
           totalDays,
@@ -581,7 +591,10 @@ router.get(
           if (diffMs > FLAG_COMMENT_TOLERANCE_MS) continue;
           if (best && diffMs >= best.diffMs) continue;
           const text = adfToPlainText(c.body);
-          if (text) best = { text, diffMs };
+          // Some teams' automation posts a boilerplate comment ("Marca añadida" /
+          // "Flag added") alongside the flag change - it says nothing about WHY the
+          // issue is blocked, so treat it the same as no comment at all.
+          if (text && !isGenericFlagComment(text)) best = { text, diffMs };
         }
 
         return { ...b, flagReason: best?.text ?? null, flagReasonEditable: true };

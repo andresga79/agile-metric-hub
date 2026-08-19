@@ -374,17 +374,35 @@ describe("buildSprintVelocityBuckets", () => {
     ]);
 
     // Pass sprints out of chronological order to confirm the function re-sorts them.
-    const buckets = buildSprintVelocityBuckets([issueA, issueB, issueC], resolvedMap, [sprint2, sprint1]);
+    const buckets = buildSprintVelocityBuckets([issueA, issueB, issueC], resolvedMap, [sprint2, sprint1], new Map());
 
     expect(buckets).toEqual([
-      { label: "Sprint 1", value: 3 },
-      { label: "Sprint 2", value: 7 },
+      { label: "Sprint 1", value: 3, avgCycleTime: null, avgLeadTime: null },
+      { label: "Sprint 2", value: 7, avgCycleTime: null, avgLeadTime: null },
     ]);
   });
 
   it("gives a sprint with no resolved issues a value of 0", () => {
     const sprint1 = makeSprint({ id: 1, name: "Sprint 1", startDate: "2026-06-01T00:00:00.000Z", endDate: "2026-06-14T00:00:00.000Z" });
-    const buckets = buildSprintVelocityBuckets([], new Map(), [sprint1]);
-    expect(buckets).toEqual([{ label: "Sprint 1", value: 0 }]);
+    const buckets = buildSprintVelocityBuckets([], new Map(), [sprint1], new Map());
+    expect(buckets).toEqual([{ label: "Sprint 1", value: 0, avgCycleTime: null, avgLeadTime: null }]);
+  });
+
+  it("computes per-sprint avgCycleTime/avgLeadTime from the lead/cycle map", () => {
+    const sprint1 = makeSprint({ id: 1, name: "Sprint 1", startDate: "2026-06-01T00:00:00.000Z", endDate: "2026-06-14T00:00:00.000Z" });
+    const issueA = makeIssue({ id: "1", key: "A" });
+    const issueB = makeIssue({ id: "2", key: "B" });
+    const resolvedMap = new Map<string, Date>([
+      ["1", new Date("2026-06-10T00:00:00.000Z")],
+      ["2", new Date("2026-06-11T00:00:00.000Z")],
+    ]);
+    const leadCycleByIssueId = new Map([
+      ["1", { lead: 4, cycle: 2 }],
+      ["2", { lead: 6, cycle: 4 }],
+    ]);
+
+    const buckets = buildSprintVelocityBuckets([issueA, issueB], resolvedMap, [sprint1], leadCycleByIssueId);
+
+    expect(buckets).toEqual([{ label: "Sprint 1", value: 0, avgCycleTime: 3, avgLeadTime: 5 }]);
   });
 });

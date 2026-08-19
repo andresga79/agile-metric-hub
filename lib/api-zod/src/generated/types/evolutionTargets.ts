@@ -13,4 +13,6 @@ export interface EvolutionTargets {
   cycleTime: number | null;
   /** @nullable */
   throughput: number | null;
+  /** @nullable */
+  qaRejectionRate: number | null;
 }

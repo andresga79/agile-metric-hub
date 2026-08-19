@@ -9,7 +9,6 @@ import { ArrowLeft, AlertTriangle, Clock, RefreshCw, Pencil, Check, X } from "lu
 import { useState, useEffect } from "react";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
-import FlowHealthCard from "@/components/flow-health-card";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -36,6 +35,7 @@ export default function ProjectFlow() {
   const [editingFlagKey, setEditingFlagKey] = useState<string | null>(null);
   const [flagReasonDraft, setFlagReasonDraft] = useState("");
   const [savingFlagKey, setSavingFlagKey] = useState<string | null>(null);
+  const [showAllBlocked, setShowAllBlocked] = useState(false);
 
   const token = getAuthToken();
 
@@ -115,6 +115,7 @@ export default function ProjectFlow() {
   // filtering wipItems here would silently undercount critical/warning items ranked 11+.
   const wipAgingCounts = data?.wipAgingCounts ?? { critical: 0, warning: 0, watch: 0 };
   const blockedItems = data?.blockedIssues ?? [];
+  const visibleBlockedItems = showAllBlocked ? blockedItems : blockedItems.filter((b: any) => b.isCurrentlyBlocked);
   const timeInStatus = data?.timeInStatus ?? [];
   const fetchedAt = data?.fetchedAt ?? null;
 
@@ -205,12 +206,6 @@ export default function ProjectFlow() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="flow" />
-
-      <Card className="bg-card/40">
-        <CardContent className="pt-6">
-          <FlowHealthCard projectId={projectId!} period={period} />
-        </CardContent>
-      </Card>
 
       <Card className="bg-card/40">
         <CardHeader>
@@ -345,18 +340,28 @@ export default function ProjectFlow() {
 
       <Card className="bg-card/40">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle size={18} />
-            {t('page.flow.blockedTitle')}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle size={18} />
+              {t('page.flow.blockedTitle')}
+            </CardTitle>
+            <button
+              onClick={() => setShowAllBlocked((v) => !v)}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border bg-background text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+            >
+              {showAllBlocked ? t('page.flow.showOnlyCurrent') : t('page.flow.showAllBlocked')}
+            </button>
+          </div>
           <CardDescription>
             <span className="text-red-400 font-semibold">🔴 {blockedItems.filter((b: any) => b.isCurrentlyBlocked).length} {t('page.flow.blockedNow')}</span>
             <span className="text-muted-foreground"> · {blockedItems.length} {t('page.flow.blockedDesc')} · ↑{blockedItems.length > 0 ? Math.max(...blockedItems.map((b: any) => b.totalDays)).toFixed(1) : 0}d {t('page.flow.maxBlocked')}</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {blockedItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('page.flow.noBlocked')}</p>
+          {visibleBlockedItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {blockedItems.length === 0 ? t('page.flow.noBlocked') : t('page.flow.noCurrentlyBlocked')}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -364,34 +369,25 @@ export default function ProjectFlow() {
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead>{t('page.flow.key')}</TableHead>
                     <TableHead>{t('page.flow.summary')}</TableHead>
-                    <TableHead>{t('page.flow.type')}</TableHead>
-                    <TableHead>{t('page.flow.priority')}</TableHead>
+                    <TableHead>{t('page.flow.assignee')}</TableHead>
                     <TableHead>{t('page.flow.status')}</TableHead>
-                    <TableHead>{t('page.flow.reason')}</TableHead>
                     <TableHead>{t('page.flow.flagReason')}</TableHead>
                     <TableHead className="text-right">{t('page.flow.totalBlockedDays')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {blockedItems.map((item: any) => (
+                  {visibleBlockedItems.map((item: any) => (
                     <TableRow key={item.key} className={`border-border hover:bg-accent/50 ${item.isCurrentlyBlocked ? 'bg-red-500/5' : ''}`}>
                       <TableCell className="font-mono text-xs text-primary">{item.key}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={item.summary}>{item.summary}</TableCell>
-                      <TableCell>{item.issueType}</TableCell>
-                      <TableCell>{item.priority}</TableCell>
+                      <TableCell>{item.assignee ?? "—"}</TableCell>
                       <TableCell>
                         {item.isCurrentlyBlocked
                           ? <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded">🔴 {item.currentStatus}</span>
                           : <span className="text-xs text-muted-foreground">{item.currentStatus}</span>
                         }
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {item.blockReason === "both" ? t('page.flow.reasonBoth')
-                          : item.blockReason === "flag" ? t('page.flow.reasonFlag')
-                          : item.blockReason === "status" ? t('page.flow.reasonStatus')
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[240px] text-xs text-muted-foreground">
+                      <TableCell className="max-w-[320px]">
                         {editingFlagKey === item.key ? (
                           <div className="flex items-center gap-1">
                             <Input
