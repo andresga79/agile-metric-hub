@@ -750,6 +750,10 @@ export const isJiraConfigured = () =>
   JIRA_EMAIL.trim() !== "" &&
   JIRA_API_TOKEN.trim() !== "";
 
+// Safe to expose to the frontend (unlike JIRA_EMAIL/JIRA_API_TOKEN) - lets pages link
+// out to a real issue at ${getJiraBaseUrl()}/browse/${issueKey}.
+export const getJiraBaseUrl = () => JIRA_URL;
+
 function jiraHeaders(): Record<string, string> {
   const token = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
   return {

@@ -8,9 +8,18 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, Users, ExternalLink } from "lucide-react";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+
+// No Admin -> Health threshold exists for "WIP items carried by one person" (wipRatio there is
+// a project-wide %, not a per-person count) - this is a plain Kanban rule of thumb, not wired to
+// the centralized threshold system like every other colored metric in the app.
+function wipColorClass(wip: number): string {
+  if (wip >= 5) return "text-red-400";
+  if (wip >= 3) return "text-amber-400";
+  return "text-muted-foreground";
+}
 
 export default function ProjectTeam() {
   const { t } = useTranslation();
@@ -154,9 +163,17 @@ export default function ProjectTeam() {
                   <TableRow key={member.accountId} className="border-border hover:bg-accent/50">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-                          {member.displayName.charAt(0).toUpperCase()}
-                        </div>
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={member.displayName}
+                            className="w-8 h-8 rounded-full object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                            {member.displayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <span className="font-medium">{member.displayName}</span>
                       </div>
                     </TableCell>
@@ -171,7 +188,7 @@ export default function ProjectTeam() {
                     </TableCell>
                     <TableCell className="text-right font-mono">{member.avgCycleTime.toFixed(1)}d</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{member.avgLeadTime.toFixed(1)}d</TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">{member.issuesInProgress}</TableCell>
+                    <TableCell className={`text-right font-mono ${wipColorClass(member.issuesInProgress)}`}>{member.issuesInProgress}</TableCell>
                     <TableCell className="text-right font-mono">
                       {member.issuesBlocked > 0 ? (
                         <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400">
@@ -185,7 +202,19 @@ export default function ProjectTeam() {
                       <div className="space-y-1 max-w-[440px]">
                         {(showAllWorkItems ? work : work.slice(0, 3)).map((item) => (
                           <div key={item.key} className="text-xs">
-                            <span className="font-mono text-primary mr-2">{item.key}</span>
+                            {project.url ? (
+                              <a
+                                href={`${project.url}/browse/${item.key}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-primary mr-2 inline-flex items-center gap-0.5 hover:underline"
+                              >
+                                {item.key}
+                                <ExternalLink size={10} />
+                              </a>
+                            ) : (
+                              <span className="font-mono text-primary mr-2">{item.key}</span>
+                            )}
                             <span className="text-muted-foreground">{item.summary}</span>
                             <span className="ml-2 text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground">
                               {item.status}

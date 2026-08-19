@@ -3,6 +3,7 @@ import {
   listJiraProjects,
   isJiraConfigured,
   getProjectBoardType,
+  getJiraBaseUrl,
 } from "../lib/jira";
 import { requireAuth } from "../middleware/auth";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
@@ -54,7 +55,7 @@ router.get("/projects", requireAuth, async (_req, res): Promise<void> => {
       inProgressCount: cached?.inProgressCount ?? 0,
       visible: true,
       lead: p.lead?.displayName ?? null,
-      url: null,
+      url: isJiraConfigured() ? getJiraBaseUrl() : null,
       usingMockData: !isJiraConfigured(),
     };
   });
@@ -122,7 +123,7 @@ router.get("/projects/:projectId", requireAuth, async (req, res): Promise<void> 
     inProgressCount: cached?.inProgressCount ?? 0,
     visible: true,
     lead: sourceProject.lead?.displayName ?? null,
-    url: null,
+    url: isJiraConfigured() ? getJiraBaseUrl() : null,
     usingMockData: !isJiraConfigured(),
   });
 });
