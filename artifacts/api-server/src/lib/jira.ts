@@ -763,54 +763,78 @@ function jiraHeaders(): Record<string, string> {
   };
 }
 
+// Retries only network-level failures (dropped/reset connections, abort timeouts) - an
+// HTTP error response (4xx/5xx) still resolves normally and is handled by the caller,
+// since retrying an actual bad request wouldn't help.
+const JIRA_FETCH_MAX_ATTEMPTS = 3;
+const JIRA_FETCH_RETRY_DELAY_MS = 500;
+
+function isTransientFetchError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const message = err.message.toLowerCase();
+  return (
+    message.includes("econnreset") ||
+    message.includes("other side closed") ||
+    message.includes("fetch failed") ||
+    message.includes("aborted")
+  );
+}
+
+async function fetchWithRetry(url: string): Promise<Response> {
+  for (let attempt = 1; attempt <= JIRA_FETCH_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      return await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
+    } catch (err) {
+      if (attempt === JIRA_FETCH_MAX_ATTEMPTS || !isTransientFetchError(err)) {
+        throw err;
+      }
+      logger.warn({ err, url, attempt }, "Transient Jira fetch error, retrying");
+      await new Promise((resolve) => setTimeout(resolve, JIRA_FETCH_RETRY_DELAY_MS * attempt));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new Error("unreachable");
+}
+
 async function jiraFetch<T>(path: string): Promise<T> {
   const url = `${JIRA_URL}/rest/api/3${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const response = await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
+  const response = await fetchWithRetry(url);
 
-    if (!response.ok) {
-      const text = await response.text();
-      logger.error({ status: response.status, path, body: text }, "Jira API error");
-      throw new Error(`Jira API error: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json() as Promise<T>;
-  } finally {
-    clearTimeout(timeout);
+  if (!response.ok) {
+    const text = await response.text();
+    logger.error({ status: response.status, path, body: text }, "Jira API error");
+    throw new Error(`Jira API error: ${response.status} ${response.statusText}`);
   }
+
+  return response.json() as Promise<T>;
 }
 
 async function jiraAgileFetch<T>(url: string): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const response = await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
+  const response = await fetchWithRetry(url);
 
-    if (!response.ok) {
-      const text = await response.text();
-      const lowerBody = text.toLowerCase();
-      const sprintBoardUnsupported =
-        response.status === 400 &&
-        /\/board\/\d+\/sprint/.test(url) &&
-        (lowerBody.includes("no admite sprints") ||
-          lowerBody.includes("does not support sprints") ||
-          lowerBody.includes("tablero no admite sprints"));
+  if (!response.ok) {
+    const text = await response.text();
+    const lowerBody = text.toLowerCase();
+    const sprintBoardUnsupported =
+      response.status === 400 &&
+      /\/board\/\d+\/sprint/.test(url) &&
+      (lowerBody.includes("no admite sprints") ||
+        lowerBody.includes("does not support sprints") ||
+        lowerBody.includes("tablero no admite sprints"));
 
-      if (sprintBoardUnsupported) {
-        logger.info({ status: response.status, url, body: text }, "Jira board does not support sprints");
-        throw new Error("Jira board does not support sprints");
-      }
-
-      logger.warn({ status: response.status, url, body: text }, "Jira Agile API error");
-      throw new Error(`Jira Agile API error: ${response.status} ${response.statusText}`);
+    if (sprintBoardUnsupported) {
+      logger.info({ status: response.status, url, body: text }, "Jira board does not support sprints");
+      throw new Error("Jira board does not support sprints");
     }
 
-    return response.json() as Promise<T>;
-  } finally {
-    clearTimeout(timeout);
+    logger.warn({ status: response.status, url, body: text }, "Jira Agile API error");
+    throw new Error(`Jira Agile API error: ${response.status} ${response.statusText}`);
   }
+
+  return response.json() as Promise<T>;
 }
 
 export async function listJiraProjects(options?: { forceRefresh?: boolean }): Promise<JiraProject[]> {
