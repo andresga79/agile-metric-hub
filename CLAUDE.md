@@ -117,8 +117,9 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 - `HEALTH-THRESHOLDS.md` — umbrales de Admin → Health personalizados manualmente (difieren
   del default de fábrica), con script SQL para restaurarlos en un Postgres nuevo/otra PC
 - `METRICS.md` — fórmula real de cada métrica calculada, con referencias `archivo:línea`
-- `DEPLOY.md` — arquitectura y pasos de deploy (Render Static + Render API Docker + Neon),
-  ya ejecutado en producción
+- `DEPLOY.md` — arquitectura y pasos de deploy en máquina interna vía Docker Compose (Render
+  Static + Render API Docker + Neon quedaron discontinuados, ver `SESSION_LOG.md` para esa
+  historia)
 - `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto: 27 hallazgos priorizados por
   impacto/esfuerzo (Tier 3 Seguridad ya cerrado; Tier 4 —FE-*, DEU-*, OPS-*, DAT-1/5—
   pendiente; CI/QA-2 bloqueado por scope `workflow` de GitHub)
