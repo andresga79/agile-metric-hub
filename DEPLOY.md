@@ -105,6 +105,108 @@ producción-ready para datos que importe no perder.
 
 ---
 
+## Alternativa: Vercel (frontend) + Supabase (Postgres)
+
+> ⚠️ **No es el plan actual ni está probado en vivo** — el deploy vigente es el de la
+> máquina interna (arriba). Esta sección documenta cómo se armaría si en algún momento se
+> quisiera volver a un esquema cloud gratuito/split, dejando explícito qué cambia respecto
+> al Docker Compose de un solo host.
+
+### Por qué no es "solo Vercel"
+
+`artifacts/api-server` es un **proceso Express de larga duración** (background sync al
+arrancar, `warmVisibleProjectsCache`/`calculateAndCachePortfolio` corriendo en el propio
+proceso — ver `CLAUDE.md`, sync serializado), no un conjunto de funciones request/response
+sin estado. Las Vercel Serverless Functions no sostienen ese tipo de proceso en background
+entre invocaciones, así que **el backend no va en Vercel** — solo el frontend. El backend
+necesita seguir viviendo en un host que corra un contenedor/proceso persistente (por
+ejemplo Render, Fly.io, Railway, una VM, o la misma máquina interna). Vercel + Supabase
+resuelve frontend estático + DB gestionada; el cómputo del API sigue siendo un problema
+aparte.
+
+### 1. Supabase (Postgres)
+
+1. Crear un proyecto en [supabase.com](https://supabase.com).
+2. En **Project Settings → Database → Connection string**, usar el modo **Session
+   pooler** (puerto `5432` o `6543` según el plan) si el backend abre pocas conexiones
+   persistentes (es el caso — un solo `Pool` en `lib/db/src/index.ts:13`), o **Transaction
+   pooler** si el host del backend es serverless/efímero.
+3. Setear `DATABASE_URL` con esa cadena, agregando `?sslmode=require` — Supabase exige TLS
+   y `pg` (usado en `lib/db`) lo respeta a través del propio connection string, sin config
+   adicional en el código:
+   ```
+   DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
+   ```
+4. Correr las migraciones de Drizzle contra esa `DATABASE_URL` (mismo mecanismo que en
+   local — ver `lib/db/drizzle.config.ts`; revisar el diff antes de aplicar, gotcha ya
+   conocido de `drizzle-kit push` en `CLAUDE.md`).
+5. El bootstrap del usuario `admin` sigue disparándose al primer arranque del `api` contra
+   esta DB nueva, igual que con Postgres local (ver gotcha de `CLAUDE.md` — solo corre en
+   una base vacía).
+
+### 2. Backend (fuera de Vercel)
+
+- Desplegar `artifacts/api-server` como contenedor Docker (mismo `Dockerfile` que ya usa
+  Compose) en el host elegido (Render/Fly/Railway/VM propia).
+- Variables de entorno iguales a las de la tabla de abajo, pero con `DATABASE_URL` apuntando
+  a Supabase en vez de al contenedor `db` local.
+- Como no hay nginx haciendo de proxy same-origin (ese rol lo cumple `docker/web/nginx.conf`
+  solo en el escenario de máquina interna), acá el frontend y el backend quedan en dominios
+  distintos → **hay que setear `CORS_ORIGIN`** con el dominio de Vercel:
+  ```
+  CORS_ORIGIN=https://<tu-proyecto>.vercel.app
+  ```
+  (lógica ya implementada en `artifacts/api-server/src/app.ts:45-48`, solo falta configurarla).
+
+### 3. Frontend en Vercel
+
+- El dashboard (`artifacts/dashboard`) es un build estático de Vite — encaja directo en
+  Vercel. **No existe todavía un `vercel.json` en el repo**; habría que agregarlo con:
+  ```json
+  {
+    "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @workspace/dashboard build",
+    "outputDirectory": "dist/public",
+    "rewrites": [
+      { "source": "/api/(.*)", "destination": "https://<tu-backend>/api/$1" }
+    ]
+  }
+  ```
+- El `rewrites` es clave: el código del dashboard llama a rutas relativas (`/api/...`, ver
+  `lib/api-client-react/src/generated/api.ts`) asumiendo mismo origen — así fue diseñado
+  para el proxy de nginx. Con el `rewrite` de Vercel se preserva ese mismo comportamiento
+  sin tocar código y **sin necesitar CORS** en el navegador (el `CORS_ORIGIN` del backend
+  sigue siendo buena práctica igual, por si algo llega a pegarle directo). La alternativa —
+  usar `setBaseUrl()` de `lib/api-client-react/src/custom-fetch.ts:28`, hoy sin ningún
+  caller — requeriría un cambio de código para inicializarlo con una env var (`VITE_*`) al
+  bootstrapear la app; no es necesaria si se usa el `rewrite`.
+- Variables de entorno de build en Vercel: ninguna estrictamente necesaria si se usa el
+  `rewrite` (no hay `VITE_API_URL` ni equivalente consumido hoy en `artifacts/dashboard`).
+
+### Variables de entorno — resumen (escenario Vercel + Supabase)
+
+| Variable | Dónde | Valor |
+|---|---|---|
+| `DATABASE_URL` | backend (host elegido) | connection string de Supabase con `?sslmode=require` |
+| `NODE_ENV` | backend | `production` |
+| `JWT_SECRET` | backend | `openssl rand -base64 32` |
+| `DEFAULT_ADMIN_PASSWORD` | backend | contraseña fuerte |
+| `JIRA_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | backend | credenciales reales de Jira (o vacíos para mock) |
+| `CORS_ORIGIN` | backend | `https://<tu-proyecto>.vercel.app` (defensa en profundidad; el `rewrite` ya evita CORS en el browser) |
+| `vercel.json` (`rewrites`) | frontend/Vercel | proxy de `/api/*` hacia la URL pública del backend |
+
+### Limitaciones de este esquema (no resueltas, quedan como trabajo futuro)
+
+- Backups de Supabase: el plan free tiene retención limitada — revisar el plan elegido
+  antes de asumir continuidad de datos.
+- Igual que en el deploy de máquina interna, no hay auto-deploy del backend definido; Vercel
+  sí redespliega el frontend automáticamente en cada push (a diferencia del backend, que
+  queda manual según dónde se hostee).
+- No validado en vivo — antes de usarlo en serio, seguir el mismo proceso de verificación
+  de la skill `run-app` (`/api/healthz`, sync sin `failedProjects`, login) contra este
+  esquema split.
+
+---
+
 ## Historia
 
 Este proyecto pasó por Replit (dev inicial) y luego Render Static + Render API Docker +
