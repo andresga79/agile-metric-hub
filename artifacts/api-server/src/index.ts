@@ -196,6 +196,17 @@ async function initDb() {
       ON CONFLICT (key) DO NOTHING;
     `);
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS blocked_reasons (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        issue_key TEXT NOT NULL UNIQUE,
+        reason TEXT NOT NULL,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // Clean stale cache entries from periods other than 30d
     await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
 
