@@ -19,18 +19,19 @@ producción faltan**: cero tests, cero CI, sin manejo de errores centralizado, y
 puntos donde los datos se degradan en silencio. Hoy es un prototipo/herramienta interna
 madura en features, inmadura en robustez.
 
-> **Estado al 2026-08-26** (actualizado, ver `SESSION_LOG.md` secciones 10, 11 y 12):
-> - ✅ **Tier 3 (Seguridad) cerrado**: SEC-1, SEC-3, SEC-4 completos. SEC-2 con un
->   residuo menor sin resolver (forced password change en primer login — necesita UI).
-> - 🟡 **DAT-5 parcialmente cerrado**: retry con backoff para errores de red
->   transitorios (`2229a5f`, 2026-08-20) — pero sigue **sin** manejo de `429`/
->   `Retry-After` ni límite global de concurrencia hacia Jira.
-> - 🚫 **QA-2 bloqueado**: CI no se pudo activar por falta de scope `workflow` en el
->   token de GitHub usado, no por decisión de producto.
-> - El resto de Tier 4 (DAT-1, MET-1, MET-2, FE-1..6, DEU-1..4, OPS-1/2) sigue sin
->   tocar. QA-1 (tests) avanzó parcialmente vía trabajo de otras sesiones (ver
->   `pnpm --filter @workspace/api-server test`, 34 tests al 2026-08-10) pero no cubre
->   toda la lógica pura listada en QA-1.
+> **Estado al 2026-08-26** (verificado contra el código actual, no solo contra
+> `SESSION_LOG.md` — el log mismo estaba incompleto, ver sección 12):
+> - ✅ **Cerrados**: SEC-1, SEC-3, SEC-4, DAT-2, DAT-3, DAT-4, QA-3, QA-4, OPS-1, MET-1.
+>   Varios de estos (DAT-2/3/4, QA-3/4, OPS-1) ya estaban resueltos en el código pero la
+>   tabla de abajo los seguía listando como abiertos — quedaron así por un doc
+>   desactualizado, no por trabajo pendiente real.
+> - 🟡 **Parciales**: SEC-2 (falta forced password change), DAT-5 (retry de red hecho,
+>   falta 429/`Retry-After` + límite de concurrencia), QA-1 (34 tests, no cubre toda la
+>   lógica pura listada), DOC-1 (`METRICS.md` existe, sigue sin `README.md`), FE-2
+>   (bajó de ~39 a 28 usos de `any` en `pages/`, no eliminado).
+> - 🚫 **Bloqueado**: QA-2 (CI, falta scope `workflow` en el token de GitHub).
+> - **Sin tocar, confirmado**: DAT-1, MET-2, FE-1, FE-3, FE-4, FE-5, FE-6, DEU-1, DEU-2,
+>   DEU-3, DEU-4, OPS-2.
 
 ---
 
@@ -50,20 +51,20 @@ madura en features, inmadura en robustez.
 > - **Seguridad (SEC-*)** deja de ser lo primero mientras sea demo interno: pasa a ser un
 >   **gate obligatorio antes del primer deploy real**, no un pendiente inmediato.
 
-**Tier 1 — Correctitud de los números (hacer primero)**
-1. **DAT-2** — arreglar la comparación período-anterior rota en Analíticas (bug activo mostrando un número incorrecto hoy · esfuerzo bajo).
-2. **MET-1** — renombrar "DORA Score" a algo honesto + documentar la fórmula (defendibilidad ante líderes técnicos).
-3. **QA-1 (acotado)** — tests unitarios de la lógica pura de métricas (`normalize`, `getCycleTimeDays`, `computeQaRejectionRate`, `getISOWeek`…); la red que evita regresiones de las correcciones ya hechas.
-4. **DOC-1 (parte METRICS.md)** — definir cada métrica y su fórmula con precisión.
+**Tier 1 — Correctitud de los números (hacer primero)** — ✅ **completo**
+1. ✅ **DAT-2** — arreglar la comparación período-anterior rota en Analíticas (bug activo mostrando un número incorrecto hoy · esfuerzo bajo). *(`1b6808a`)*
+2. ✅ **MET-1** — renombrar "DORA Score" a algo honesto + documentar la fórmula (defendibilidad ante líderes técnicos). *(ahora "Flow Health Score")*
+3. 🟡 **QA-1 (acotado)** — tests unitarios de la lógica pura de métricas (`normalize`, `getCycleTimeDays`, `computeQaRejectionRate`, `getISOWeek`…); la red que evita regresiones de las correcciones ya hechas. *(34 tests, cobertura parcial)*
+4. 🟡 **DOC-1 (parte METRICS.md)** — definir cada métrica y su fórmula con precisión. *(`METRICS.md` existe, falta `README.md`)*
 
-**Tier 2 — Prevenir regresiones / integridad de datos**
-5. **QA-2** — CI mínimo (typecheck + tests) en cada PR. Barato, habilita todo lo demás.
-6. **DAT-4** — que timeout/error no pise datos buenos con `null`.
-7. **DAT-3** — llevar `jira_cache` al schema de Drizzle.
-8. **QA-3 / QA-4** — lint + `strict`, y error handler global.
+**Tier 2 — Prevenir regresiones / integridad de datos** — ✅ **completo salvo QA-2**
+5. 🚫 **QA-2** — CI mínimo (typecheck + tests) en cada PR. Barato, habilita todo lo demás. *(bloqueado: falta scope `workflow` en el token de GitHub)*
+6. ✅ **DAT-4** — que timeout/error no pise datos buenos con `null`.
+7. ✅ **DAT-3** — llevar `jira_cache` al schema de Drizzle.
+8. ✅ **QA-3 / QA-4** — lint + `strict`, y error handler global.
 
-**Tier 3 — Gate antes del primer deploy real (no ahora, pero bloqueante para exponer)**
-9. **SEC-1, SEC-2, SEC-3, SEC-4** — resolver todo Seguridad antes de abrir a más gente.
+**Tier 3 — Gate antes del primer deploy real (no ahora, pero bloqueante para exponer)** — ✅ **completo salvo residuo de SEC-2**
+9. ✅ **SEC-1, SEC-3, SEC-4** cerrados; 🟡 **SEC-2** con el forced password change pendiente (necesita UI).
 
 **Tier 4 — Cuando haya aire (velocidad de desarrollo / limpieza)**
 10. DAT-1 (surfacear truncamiento), DAT-5, FE-1, FE-2, FE-3, FE-4, FE-5, DEU-1, DEU-2, DEU-3, DEU-4, OPS-1, OPS-2.
@@ -79,14 +80,14 @@ madura en features, inmadura en robustez.
 | SEC-3 | RBAC (`can_view`) solo en el cliente — la API no lo valida | 🔴 Alto | 🟡 Medio | Seguridad | ✅ Cerrado |
 | SEC-4 | Sin rate limiting en login, CORS abierto, sin helmet | 🟠 Medio | 🟢 Bajo | Seguridad | ✅ Cerrado |
 | DAT-1 | Truncamiento silencioso a ~100 issues por ventana de 7 días | 🔴 Alto | 🟡 Medio | Datos | Pendiente |
-| DAT-2 | Comparación período-anterior rota en Analíticas (cap de 90d) | 🔴 Alto | 🟢 Bajo | Datos | Pendiente |
-| DAT-3 | `drizzle-kit push` borra la tabla `jira_cache` | 🟠 Medio | 🟢 Bajo | Datos | Pendiente |
-| DAT-4 | Timeout/error de portfolio pisa datos buenos con `null` | 🟠 Medio | 🟢 Bajo | Datos | Pendiente |
+| DAT-2 | Comparación período-anterior rota en Analíticas (cap de 90d) | 🔴 Alto | 🟢 Bajo | Datos | ✅ Cerrado (`1b6808a`) |
+| DAT-3 | `drizzle-kit push` borra la tabla `jira_cache` | 🟠 Medio | 🟢 Bajo | Datos | ✅ Cerrado (en `lib/db/src/schema/jira-cache.ts`) |
+| DAT-4 | Timeout/error de portfolio pisa datos buenos con `null` | 🟠 Medio | 🟢 Bajo | Datos | ✅ Cerrado (conserva fila previa, no upsertea nulls) |
 | DAT-5 | Sin backoff/retry ante 429 de Jira, sin límite global de concurrencia | 🟠 Medio | 🟡 Medio | Datos | 🟡 Parcial (retry de red hecho, falta 429 + límite de concurrencia) |
 | QA-1 | Cero tests automatizados en todo el repo | 🔴 Alto | 🔴 Alto | Calidad | 🟡 Parcial (34 tests de lógica pura) |
 | QA-2 | Cero CI/CD (nada corre en push/PR) | 🔴 Alto | 🟢 Bajo | Calidad | 🚫 Bloqueado (falta scope `workflow`) |
-| QA-3 | Sin lint enforcement; `strict` de TS incompleto | 🟠 Medio | 🟢 Bajo | Calidad | Pendiente |
-| QA-4 | Sin manejador de errores global en Express | 🟠 Medio | 🟢 Bajo | Calidad | Pendiente |
+| QA-3 | Sin lint enforcement; `strict` de TS incompleto | 🟠 Medio | 🟢 Bajo | Calidad | ✅ Cerrado (`strict:true` + `eslint.config.mjs` + `pnpm run lint`) |
+| QA-4 | Sin manejador de errores global en Express | 🟠 Medio | 🟢 Bajo | Calidad | ✅ Cerrado (`errorHandler` en `app.ts`) |
 | MET-1 | "DORA Score" no son métricas DORA reales (nombre engañoso) | 🟠 Medio | 🟡 Medio | Metodología | ✅ Cerrado (renombrado "Flow Health Score") |
 | MET-2 | Story-point / campos custom de Jira hardcodeados | 🟠 Medio | 🟡 Medio | Metodología | Pendiente |
 | FE-1 | Cliente tipado generado esquivado por ~40 `fetch` crudos | 🟠 Medio | 🟡 Medio | Frontend | Pendiente |
@@ -95,7 +96,7 @@ madura en features, inmadura en robustez.
 | FE-4 | i18n: locales desincronizados + strings en español hardcodeados | 🟡 Bajo | 🟢 Bajo | Frontend | Pendiente |
 | FE-5 | Accesibilidad casi nula (2 `aria-*` en todo `pages/`) | 🟡 Bajo | 🟡 Medio | Frontend | Pendiente |
 | FE-6 | Reporte: un fetch fallido/abortado se queda en "Cargando..." para siempre | 🟠 Medio | 🟢 Bajo | Frontend | Pendiente |
-| OPS-1 | Sin endpoint de liveness/readiness del API | 🟠 Medio | 🟢 Bajo | Ops | Pendiente |
+| OPS-1 | Sin endpoint de liveness/readiness del API | 🟠 Medio | 🟢 Bajo | Ops | ✅ Cerrado (`GET /api/healthz`) |
 | OPS-2 | Estado de sync solo en memoria (se pierde al reiniciar) | 🟡 Bajo | 🟡 Medio | Ops | Pendiente |
 | DEU-1 | `lib/jira.ts` (1410 líneas) y `admin.tsx` (1162) son god-files | 🟡 Bajo | 🔴 Alto | Deuda | Pendiente |
 | DEU-2 | ~5 reimplementaciones de `getISOWeek` / semana ISO | 🟡 Bajo | 🟢 Bajo | Deuda | Pendiente |
@@ -103,9 +104,9 @@ madura en features, inmadura en robustez.
 | DEU-4 | `artifacts/mockup-sandbox` es código muerto (no está en el workspace) | 🟢 Bajo | 🟢 Bajo | Deuda | Pendiente |
 | DOC-1 | Sin README ni doc de arquitectura (solo `replit.md` + `SESSION_LOG`) | 🟠 Medio | 🟡 Medio | Docs | 🟡 Parcial (`METRICS.md` hecho, sigue sin `README.md`) |
 
-**Quick wins recomendados (arrancar por acá):** ~~SEC-1~~, SEC-2 (residuo), ~~SEC-4~~, DAT-2, DAT-3,
-DAT-4, ~~QA-2~~ (bloqueado), QA-3, QA-4, DEU-2, DEU-4, OPS-1. Tachados = ya cerrados, ver columna
-Estado.
+**Quick wins recomendados (arrancar por acá):** de la lista original, solo **DEU-2** y **DEU-4**
+siguen realmente pendientes — el resto (SEC-1, SEC-4, DAT-2, DAT-3, DAT-4, QA-3, QA-4, OPS-1) ya
+está cerrado (ver columna Estado); QA-2 sigue bloqueado por el scope `workflow`.
 
 ---
 
@@ -434,11 +435,13 @@ usuarios necesitan saber qué significa cada número).
 
 ---
 
-## Secuencia sugerida
+## Secuencia sugerida (histórica — ver "Estado al 2026-08-26" arriba para lo real)
 
-1. **Semana 1 (quick wins de riesgo):** SEC-1, SEC-2, SEC-4, DAT-2, DAT-3, DAT-4, QA-2
-   (CI mínimo con typecheck), OPS-1, DEU-4.
-2. **Semana 2 (fundamentos):** QA-3 (lint + strict), QA-4 (error handler), QA-1 (primeros
-   tests de la lógica pura de métricas), SEC-3 (RBAC server-side).
-3. **Semana 3+ (robustez y claridad):** DAT-1, DAT-5, MET-1/MET-2, FE-1/FE-2, DOC-1, y
-   refactors incrementales (DEU-1, DEU-2, FE-3).
+1. ~~**Semana 1 (quick wins de riesgo):** SEC-1, SEC-2, SEC-4, DAT-2, DAT-3, DAT-4, QA-2
+   (CI mínimo con typecheck), OPS-1, DEU-4.~~ — hecho salvo QA-2 (bloqueado) y DEU-4.
+2. ~~**Semana 2 (fundamentos):** QA-3 (lint + strict), QA-4 (error handler), QA-1 (primeros
+   tests de la lógica pura de métricas), SEC-3 (RBAC server-side).~~ — hecho salvo QA-1
+   completo (queda parcial).
+3. **Semana 3+ (robustez y claridad) — esto es lo que queda de verdad:** DAT-1, DAT-5
+   (completar), MET-2, FE-1/FE-2 (completar), DEU-4, y refactors incrementales (DEU-1,
+   DEU-2, DEU-3, FE-3/4/5/6, OPS-2, DOC-1 completar con README).
