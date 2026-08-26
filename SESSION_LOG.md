@@ -742,3 +742,74 @@ analytics, issues, targets, blocked-KPI, QA rejected, report) — cada una tiene
 distinta del filtro `period`: algunas usan query param en vez de path param, `targets.ts` persiste
 `period` como valor de fila en la base de datos, y `evolution.ts`/`forecast.ts` usan el período solo
 indirectamente. Quedan para una Fase 2 con su propio plan.
+
+## 12. Fase 2 parcial del filtro por sprint + quick-wins + estabilidad del sync (2026-08-11 al 2026-08-20)
+
+> Esta sección se agregó el 2026-08-26 reconstruyendo el trabajo a partir del `git log`, ya que
+> quedó sin loguear en su momento (10 commits entre `9e5da18` y `a7de361`). Sin verificación en vivo
+> propia de esta sesión — el detalle de testing de cada commit está en su mensaje de commit.
+
+**Fase 2 del filtro por sprint — arrancó, no está completa.** El plan original (sección 11) dejaba 8
+sub-páginas fuera de alcance. Se extendió a 3 de ellas, no a las 8:
+- `9e5da18`, `109242a` — Evolución: el gráfico ahora bucketea por sprint (no por semana calendario)
+  para proyectos Scrum; labels de eje acortados y tooltips capados a 2 decimales.
+- `62c5d46` — Team, Health y Flow migraron del pill 1M/3M hardcodeado al `<TimeWindowFilter>`
+  compartido (mismo componente que ya usaba Resumen). Se extrajo `resolvePeriodDays()` en `jira.ts`
+  para que `/analytics/:period` y `/health/:period` entiendan los tokens `2s`/`6s` igual que
+  `/metrics/:period` — antes `/analytics` daba 400 y `/health` caía en silencio a 90 días.
+- **Siguen sin el filtro de sprint:** Analytics (el endpoint ya entiende `2s`/`6s` desde `62c5d46`,
+  pero la página de Analíticas no fue migrada al componente), Issues, Targets, Blocked-KPI, QA
+  Rejected, Report.
+
+**Bugs de datos encontrados y corregidos:**
+- `890692e` — `getProjectBoardType()` no prefería tablero Scrum como sí hacía `getBoardId()`;
+  OLI (que tiene un tablero Kanban creado antes que su tablero Scrum real) se clasificaba mal como
+  Kanban. Alineado con `getBoardId()`; se pudo borrar el override manual que compensaba esto para
+  10013/OLI.
+- `e28784e` — en Flow, el breakdown de tiempo-en-estado no fusionaba estados renombrados en el
+  historial de Jira (ej. "In Progress" → "IN PROGRESS" en OLI/board 15): una columna real del tablero
+  aparecía partida en dos filas, incluyendo un falso bottleneck de 572 días que tapaba el real (8.7d).
+  `getBoardStatusNames()` ahora devuelve un mapa nombre-lowercase→nombre-canónico en vez de un `Set`.
+- `2229a5f` — **portfolio_cache en 0 filas** (Resumen Ejecutivo vacío) por un solo ECONNRESET/abort
+  en cualquiera de los fetches paralelos de Jira, que tiraba abajo el `Promise.all` completo y
+  marcaba el proyecto entero como fallido. `jiraFetch`/`jiraAgileFetch` ahora reintentan (hasta 3
+  intentos, backoff simple) **solo** errores de red transitorios, no respuestas HTTP de error real.
+  Verificado con Jira real: `portfolio_cache` pasó de 0 a 29 filas. **Nota para el backlog:** esto
+  cierra parcialmente `DAT-5` de `MEJORAS-PROPUESTAS.md` (retry de errores transitorios), pero
+  **no** agrega manejo de `429`/`Retry-After` ni un limitador global de concurrencia — esa parte de
+  DAT-5 sigue abierta.
+- `a7de361` — la tabla `blocked_reasons` se había agregado al schema de Drizzle cuando se implementó
+  el override de motivo de flag, pero nunca al bootstrap manual de `CREATE TABLE` en `index.ts`.
+  Cualquier proyecto con un issue bloqueado/flaggeado hacía 500 en `/analytics` (la tabla no existía),
+  que el frontend enmascaraba como un genérico "datos de transición insuficientes" en Flow.
+
+**Quick-wins de UI (`28c1f16`, `fcdb329`):**
+- Flow: se filtra el análisis de tiempo bloqueado a impedimentos activos por defecto (con toggle a
+  histórico completo), se agrega columna Responsable, se sacan columnas de bajo valor
+  (Tipo/Prioridad/Motivo), se renombra "Motivo del Flag" a "Detalle", se filtran comentarios
+  automáticos de "flag added", se retitula la página "Cuellos de Botella y Bloqueos", y **se borra
+  `FlowHealthCard`** (duplicaba por completo las tablas de abajo — componente huérfano eliminado).
+- Team-Flow chart (en `project-detail`): throughput (barras) + cycle/lead time (líneas) combinados
+  en un solo gráfico de doble eje en vez de dos vistas separadas.
+- Health: se muestra el Flow Health Score (ya se calculaba, se descartaba) como banner arriba de la
+  página, con disclaimer explícito de "no es DORA".
+- Evolution: subtítulo aclara la ventana fija ("mostrando los últimos N" en vez de "N disponibles"),
+  se conecta el target de QA rejection rate al gráfico, badge de delta período-sobre-período.
+- Team: avatares reales de Jira (el dato ya se traía, no se usaba), `Project.url` (antes siempre
+  `null`) ahora se llena con la URL base de Jira para que las keys de issue en "Trabajando en"
+  linkeen afuera, columna WIP con color (≥3 ámbar, ≥5 rojo — regla fija, sin threshold en Admin →
+  Health todavía).
+
+**Deploy: pivot definitivo a máquina interna (`83df919`, `efb2774`, `75cce34`, `008f4a4`).** Render y
+Neon quedaron discontinuados de forma definitiva — decisión: correr el stack en una máquina interna
+de la empresa (red interna/VPN, sin exposición pública), reusando el mismo `docker-compose.yml` de
+dev en vez de servicios cloud separados. Se borró `render.yaml` (sin Blueprint que lo lea) y la
+config de Replit que había quedado (`.replit`, `.replitignore`, `*/.replit-artifact/`). `DEPLOY.md`
+se reescribió con los pasos del nuevo escenario — SO del host y estrategia de backup del volumen de
+Postgres quedan **pendientes de decidir**, documentados como tal en vez de inventados. Se agregó
+además una alternativa Vercel+Supabase **no probada**, documentada como referencia junto a la de
+Docker Compose que es la que efectivamente se usa.
+
+**Qué falta después de esta tanda:** Fase 2 completa del filtro por sprint (5 sub-páginas restantes),
+cerrar DAT-5 del todo (429/backoff + límite de concurrencia), y decidir SO/backup del host de deploy
+interno antes de considerarlo producción real.

@@ -19,6 +19,19 @@ producción faltan**: cero tests, cero CI, sin manejo de errores centralizado, y
 puntos donde los datos se degradan en silencio. Hoy es un prototipo/herramienta interna
 madura en features, inmadura en robustez.
 
+> **Estado al 2026-08-26** (actualizado, ver `SESSION_LOG.md` secciones 10, 11 y 12):
+> - ✅ **Tier 3 (Seguridad) cerrado**: SEC-1, SEC-3, SEC-4 completos. SEC-2 con un
+>   residuo menor sin resolver (forced password change en primer login — necesita UI).
+> - 🟡 **DAT-5 parcialmente cerrado**: retry con backoff para errores de red
+>   transitorios (`2229a5f`, 2026-08-20) — pero sigue **sin** manejo de `429`/
+>   `Retry-After` ni límite global de concurrencia hacia Jira.
+> - 🚫 **QA-2 bloqueado**: CI no se pudo activar por falta de scope `workflow` en el
+>   token de GitHub usado, no por decisión de producto.
+> - El resto de Tier 4 (DAT-1, MET-1, MET-2, FE-1..6, DEU-1..4, OPS-1/2) sigue sin
+>   tocar. QA-1 (tests) avanzó parcialmente vía trabajo de otras sesiones (ver
+>   `pnpm --filter @workspace/api-server test`, 34 tests al 2026-08-10) pero no cubre
+>   toda la lógica pura listada en QA-1.
+
 ---
 
 ## Plan ajustado · contexto: demo (sin desplegar) + objetivo = confiar en los números
@@ -59,38 +72,40 @@ madura en features, inmadura en robustez.
 
 ## Tabla resumen (priorización)
 
-| ID | Mejora | Impacto | Esfuerzo | Tipo |
-|----|--------|:-------:|:--------:|------|
-| SEC-1 | Secreto JWT con fallback hardcodeado (token admin falsificable) | 🔴 Alto | 🟢 Bajo | Seguridad |
-| SEC-2 | Admin `admin/admin123` sin rotación forzada | 🔴 Alto | 🟢 Bajo | Seguridad |
-| SEC-3 | RBAC (`can_view`) solo en el cliente — la API no lo valida | 🔴 Alto | 🟡 Medio | Seguridad |
-| SEC-4 | Sin rate limiting en login, CORS abierto, sin helmet | 🟠 Medio | 🟢 Bajo | Seguridad |
-| DAT-1 | Truncamiento silencioso a ~100 issues por ventana de 7 días | 🔴 Alto | 🟡 Medio | Datos |
-| DAT-2 | Comparación período-anterior rota en Analíticas (cap de 90d) | 🔴 Alto | 🟢 Bajo | Datos |
-| DAT-3 | `drizzle-kit push` borra la tabla `jira_cache` | 🟠 Medio | 🟢 Bajo | Datos |
-| DAT-4 | Timeout/error de portfolio pisa datos buenos con `null` | 🟠 Medio | 🟢 Bajo | Datos |
-| DAT-5 | Sin backoff/retry ante 429 de Jira, sin límite global de concurrencia | 🟠 Medio | 🟡 Medio | Datos |
-| QA-1 | Cero tests automatizados en todo el repo | 🔴 Alto | 🔴 Alto | Calidad |
-| QA-2 | Cero CI/CD (nada corre en push/PR) | 🔴 Alto | 🟢 Bajo | Calidad |
-| QA-3 | Sin lint enforcement; `strict` de TS incompleto | 🟠 Medio | 🟢 Bajo | Calidad |
-| QA-4 | Sin manejador de errores global en Express | 🟠 Medio | 🟢 Bajo | Calidad |
-| MET-1 | "DORA Score" no son métricas DORA reales (nombre engañoso) | 🟠 Medio | 🟡 Medio | Metodología |
-| MET-2 | Story-point / campos custom de Jira hardcodeados | 🟠 Medio | 🟡 Medio | Metodología |
-| FE-1 | Cliente tipado generado esquivado por ~40 `fetch` crudos | 🟠 Medio | 🟡 Medio | Frontend |
-| FE-2 | ~45 usos de `any` anulan la seguridad de tipos | 🟠 Medio | 🟡 Medio | Frontend |
-| FE-3 | Lógica duplicada (formato, thresholds, colores) en 4+ páginas | 🟡 Bajo | 🟢 Bajo | Frontend |
-| FE-4 | i18n: locales desincronizados + strings en español hardcodeados | 🟡 Bajo | 🟢 Bajo | Frontend |
-| FE-5 | Accesibilidad casi nula (2 `aria-*` en todo `pages/`) | 🟡 Bajo | 🟡 Medio | Frontend |
-| FE-6 | Reporte: un fetch fallido/abortado se queda en "Cargando..." para siempre | 🟠 Medio | 🟢 Bajo | Frontend |
-| OPS-1 | Sin endpoint de liveness/readiness del API | 🟠 Medio | 🟢 Bajo | Ops |
-| OPS-2 | Estado de sync solo en memoria (se pierde al reiniciar) | 🟡 Bajo | 🟡 Medio | Ops |
-| DEU-1 | `lib/jira.ts` (1410 líneas) y `admin.tsx` (1162) son god-files | 🟡 Bajo | 🔴 Alto | Deuda |
-| DEU-2 | ~5 reimplementaciones de `getISOWeek` / semana ISO | 🟡 Bajo | 🟢 Bajo | Deuda |
-| DEU-3 | `pnpm` en versión alpha; `lib/integrations` fantasma; deps sin usar | 🟡 Bajo | 🟢 Bajo | Deuda |
-| DEU-4 | `artifacts/mockup-sandbox` es código muerto (no está en el workspace) | 🟢 Bajo | 🟢 Bajo | Deuda |
-| DOC-1 | Sin README ni doc de arquitectura (solo `replit.md` + `SESSION_LOG`) | 🟠 Medio | 🟡 Medio | Docs |
+| ID | Mejora | Impacto | Esfuerzo | Tipo | Estado (2026-08-26) |
+|----|--------|:-------:|:--------:|------|------|
+| SEC-1 | Secreto JWT con fallback hardcodeado (token admin falsificable) | 🔴 Alto | 🟢 Bajo | Seguridad | ✅ Cerrado |
+| SEC-2 | Admin `admin/admin123` sin rotación forzada | 🔴 Alto | 🟢 Bajo | Seguridad | 🟡 Parcial (falta forced password change) |
+| SEC-3 | RBAC (`can_view`) solo en el cliente — la API no lo valida | 🔴 Alto | 🟡 Medio | Seguridad | ✅ Cerrado |
+| SEC-4 | Sin rate limiting en login, CORS abierto, sin helmet | 🟠 Medio | 🟢 Bajo | Seguridad | ✅ Cerrado |
+| DAT-1 | Truncamiento silencioso a ~100 issues por ventana de 7 días | 🔴 Alto | 🟡 Medio | Datos | Pendiente |
+| DAT-2 | Comparación período-anterior rota en Analíticas (cap de 90d) | 🔴 Alto | 🟢 Bajo | Datos | Pendiente |
+| DAT-3 | `drizzle-kit push` borra la tabla `jira_cache` | 🟠 Medio | 🟢 Bajo | Datos | Pendiente |
+| DAT-4 | Timeout/error de portfolio pisa datos buenos con `null` | 🟠 Medio | 🟢 Bajo | Datos | Pendiente |
+| DAT-5 | Sin backoff/retry ante 429 de Jira, sin límite global de concurrencia | 🟠 Medio | 🟡 Medio | Datos | 🟡 Parcial (retry de red hecho, falta 429 + límite de concurrencia) |
+| QA-1 | Cero tests automatizados en todo el repo | 🔴 Alto | 🔴 Alto | Calidad | 🟡 Parcial (34 tests de lógica pura) |
+| QA-2 | Cero CI/CD (nada corre en push/PR) | 🔴 Alto | 🟢 Bajo | Calidad | 🚫 Bloqueado (falta scope `workflow`) |
+| QA-3 | Sin lint enforcement; `strict` de TS incompleto | 🟠 Medio | 🟢 Bajo | Calidad | Pendiente |
+| QA-4 | Sin manejador de errores global en Express | 🟠 Medio | 🟢 Bajo | Calidad | Pendiente |
+| MET-1 | "DORA Score" no son métricas DORA reales (nombre engañoso) | 🟠 Medio | 🟡 Medio | Metodología | ✅ Cerrado (renombrado "Flow Health Score") |
+| MET-2 | Story-point / campos custom de Jira hardcodeados | 🟠 Medio | 🟡 Medio | Metodología | Pendiente |
+| FE-1 | Cliente tipado generado esquivado por ~40 `fetch` crudos | 🟠 Medio | 🟡 Medio | Frontend | Pendiente |
+| FE-2 | ~45 usos de `any` anulan la seguridad de tipos | 🟠 Medio | 🟡 Medio | Frontend | Pendiente |
+| FE-3 | Lógica duplicada (formato, thresholds, colores) en 4+ páginas | 🟡 Bajo | 🟢 Bajo | Frontend | Pendiente |
+| FE-4 | i18n: locales desincronizados + strings en español hardcodeados | 🟡 Bajo | 🟢 Bajo | Frontend | Pendiente |
+| FE-5 | Accesibilidad casi nula (2 `aria-*` en todo `pages/`) | 🟡 Bajo | 🟡 Medio | Frontend | Pendiente |
+| FE-6 | Reporte: un fetch fallido/abortado se queda en "Cargando..." para siempre | 🟠 Medio | 🟢 Bajo | Frontend | Pendiente |
+| OPS-1 | Sin endpoint de liveness/readiness del API | 🟠 Medio | 🟢 Bajo | Ops | Pendiente |
+| OPS-2 | Estado de sync solo en memoria (se pierde al reiniciar) | 🟡 Bajo | 🟡 Medio | Ops | Pendiente |
+| DEU-1 | `lib/jira.ts` (1410 líneas) y `admin.tsx` (1162) son god-files | 🟡 Bajo | 🔴 Alto | Deuda | Pendiente |
+| DEU-2 | ~5 reimplementaciones de `getISOWeek` / semana ISO | 🟡 Bajo | 🟢 Bajo | Deuda | Pendiente |
+| DEU-3 | `pnpm` en versión alpha; `lib/integrations` fantasma; deps sin usar | 🟡 Bajo | 🟢 Bajo | Deuda | Pendiente |
+| DEU-4 | `artifacts/mockup-sandbox` es código muerto (no está en el workspace) | 🟢 Bajo | 🟢 Bajo | Deuda | Pendiente |
+| DOC-1 | Sin README ni doc de arquitectura (solo `replit.md` + `SESSION_LOG`) | 🟠 Medio | 🟡 Medio | Docs | 🟡 Parcial (`METRICS.md` hecho, sigue sin `README.md`) |
 
-**Quick wins recomendados (arrancar por acá):** SEC-1, SEC-2, SEC-4, DAT-2, DAT-3, DAT-4, QA-2, QA-3, QA-4, DEU-2, DEU-4, OPS-1.
+**Quick wins recomendados (arrancar por acá):** ~~SEC-1~~, SEC-2 (residuo), ~~SEC-4~~, DAT-2, DAT-3,
+DAT-4, ~~QA-2~~ (bloqueado), QA-3, QA-4, DEU-2, DEU-4, OPS-1. Tachados = ya cerrados, ver columna
+Estado.
 
 ---
 
