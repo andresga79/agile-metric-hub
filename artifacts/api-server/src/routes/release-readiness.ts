@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import { db, releaseEpicsTable, projectReleaseKeywordsTable } from "@workspace/db";
-import { eq, or, ilike } from "drizzle-orm";
+import { eq, or, ilike, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -42,12 +42,12 @@ router.get(
       .select()
       .from(releaseEpicsTable)
       .where(or(...matchConditions))
-      .orderBy(releaseEpicsTable.jiraUpdatedAt)
+      .orderBy(desc(releaseEpicsTable.jiraUpdatedAt))
       .limit(5);
 
     res.json({
       configured: true,
-      epics: epics.reverse().map((e) => ({
+      epics: epics.map((e) => ({
         issueKey: e.issueKey,
         summary: e.summary,
         description: e.description,
