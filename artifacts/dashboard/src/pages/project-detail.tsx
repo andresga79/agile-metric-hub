@@ -115,11 +115,15 @@ export default function ProjectDetail() {
   if (loadingProject || loadingMetrics) return <DetailSkeleton />;
   if (!project) return <div>{t('page.detail.notFound')}</div>;
 
+  const noCompletedWork = !metrics?.resolvedCount;
+
   const metricInfo = (metric: string) => {
-    const actual = metric === "leadTime" ? metrics?.leadTime
+    const isDurationMetric = metric === "leadTime" || metric === "cycleTime";
+    const rawActual = metric === "leadTime" ? metrics?.leadTime
       : metric === "cycleTime" ? metrics?.cycleTime
       : metric === "throughput" ? metrics?.throughput
       : metrics?.velocity;
+    const actual = isDurationMetric && noCompletedWork ? null : rawActual;
     const targetEntry = getTarget(metric);
     const targetVal = targetEntry ? Number(targetEntry.targetValue) : null;
     const isLowerBetter = metric === "leadTime" || metric === "cycleTime";
@@ -211,7 +215,7 @@ export default function ProjectDetail() {
           info={metricInfo("leadTime")}
           trend={null}
           thresholdValue={getThresholdValue("leadTime")}
-          percentiles={metrics?.leadTimePercentiles ?? null}
+          percentiles={noCompletedWork ? null : metrics?.leadTimePercentiles ?? null}
         />
 
         <MetricCard
@@ -219,7 +223,7 @@ export default function ProjectDetail() {
           info={metricInfo("cycleTime")}
           trend={null}
           thresholdValue={getThresholdValue("cycleTime")}
-          percentiles={metrics?.cycleTimePercentiles ?? null}
+          percentiles={noCompletedWork ? null : metrics?.cycleTimePercentiles ?? null}
         />
 
         <MetricCard
@@ -299,7 +303,7 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
         const active = blocked.filter((b) => b.isCurrentlyBlocked);
         const activeBlocked = active.length;
         const avgDays = active.length > 0 ? active.reduce((s, b) => s + b.totalDays, 0) / active.length : 0;
-        const wipCount: number | null = Array.isArray(json.wipAging) && json.wipAging.length > 0 ? json.wipAging.length : null;
+        const wipCount: number | null = typeof json.wipAgingTotal === "number" && json.wipAgingTotal > 0 ? json.wipAgingTotal : null;
         const wipPercent = wipCount !== null && wipCount > 0 ? Math.round((activeBlocked / wipCount) * 100) : null;
         setData({ activeBlocked, avgDays, wipPercent });
       })
