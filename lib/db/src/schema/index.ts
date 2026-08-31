@@ -9,3 +9,5 @@ export * from "./portfolio-metric-settings";
 export * from "./metric-snapshots";
 export * from "./jira-cache";
 export * from "./blocked-reasons";
+export * from "./release-epics";
+export * from "./project-release-keywords";
