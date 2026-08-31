@@ -120,9 +120,9 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 - `DEPLOY.md` — arquitectura y pasos de deploy en máquina interna vía Docker Compose (Render
   Static + Render API Docker + Neon quedaron discontinuados, ver `SESSION_LOG.md` para esa
   historia)
-- `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-25):
-  Seguridad, la mayoría de Datos y Calidad ya resueltos; pendiente real: QA-2 (CI de
-  typecheck/lint/test — ya NO bloqueado por scope `workflow`, solo falta escribirlo),
-  DAT-1/5, MET-2, FE-*, OPS-2, DEU-1/2/4
+- `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-26):
+  Seguridad, Datos y Calidad mayormente cerrados (SEC-1/3/4, DAT-2/3/4, QA-3/4, OPS-1,
+  MET-1); parciales SEC-2, DAT-5, QA-1, DOC-1, FE-2; QA-2 bloqueado por scope `workflow`
+  del token de GitHub; sin tocar DAT-1, MET-2, FE-1/3/4/5/6, DEU-1/2/3/4, OPS-2
 - `SESSION_LOG.md` — bitácora histórica completa: bugs encontrados y su causa raíz, todo
   el proceso de deploy, diagnóstico de incidentes de producción
