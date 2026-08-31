@@ -576,6 +576,7 @@ export interface JiraSprint {
   startDate?: string;
   endDate?: string;
   completeDate?: string;
+  goal?: string;
 }
 
 function sprintEndTime(sprint: JiraSprint): number | null {
