@@ -19,10 +19,18 @@ export interface ReleaseEpic {
 
 export type ReleaseReadiness = { configured: false } | { configured: true; epics: ReleaseEpic[] };
 
+export interface PeriodTrends {
+  resolvedCount: number;
+  cycleTime: number;
+  leadTime: number;
+}
+
 export function useReportData(projectId: string | undefined, period: "1m" | "3m") {
   const [cfdData, setCfdData] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any | null>(null);
+  const [trends, setTrends] = useState<PeriodTrends | null>(null);
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<any[]>([]);
@@ -60,6 +68,7 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
     Promise.all([
       fetch(`/api/projects/${projectId}/cfd/${period}`, opts).then(jsonOrThrow("CFD")),
       fetch(`/api/projects/${projectId}/members/${period}`, opts).then(jsonOrThrow("Members")),
+      fetch(`/api/projects/${projectId}/metrics/${period}?compareTo=true`, opts).then(jsonOrThrow("Metrics")),
       fetch(`/api/projects/${projectId}/analytics/${period}`, opts).then(jsonOrThrow("Analytics")),
       fetch(`/api/projects/${projectId}/health/${period}`, opts).then(jsonOrThrow("Health")),
       fetch(`/api/projects/${projectId}/qa-rejected/${period}`, opts).then(jsonOrThrow("QA rejected")),
@@ -70,9 +79,11 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
       fetch(`/api/projects/${projectId}/release-readiness`, opts).then(jsonOrThrow("Release readiness")),
       fetch(`/api/projects/${projectId}/report-insights`, opts).then(jsonOrThrow("Report insights")),
     ])
-      .then(([cfd, memberRows, analytics, health, qaRejected, sprintData, goal, readiness, insightRows]) => {
+      .then(([cfd, memberRows, metricsData, analytics, health, qaRejected, sprintData, goal, readiness, insightRows]) => {
         setCfdData(cfd?.dataPoints ?? []);
         setMembers(Array.isArray(memberRows) ? memberRows : []);
+        setMetrics(metricsData ?? null);
+        setTrends(metricsData?.trends ?? null);
         setTimeInStatus(analytics?.timeInStatus ?? []);
         setBlockedIssues((analytics?.blockedIssues ?? []).filter((b: any) => b.isCurrentlyBlocked));
         const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
@@ -105,7 +116,7 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
   }, [projectId, period, token]);
 
   return {
-    loading, error, cfdData, members, timeInStatus, healthScore, qaRejectionRate,
+    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   };

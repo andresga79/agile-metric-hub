@@ -107,31 +107,57 @@ async function setCache<T>(cacheKey: string, data: T): Promise<void> {
   `);
 }
 
+// Several report-page endpoints request the same historical issue range in parallel
+// (e.g. report-insights and the metrics compareTo comparison both fetch the prior-30-days
+// window for a 1m report). Without dedup, a cold cache means each of them independently
+// triggers a full paginated Jira fetch for the same key, doubling load right when the
+// single Node process is already juggling several concurrent report requests.
+const inFlight = new Map<string, Promise<unknown>>();
+
 export async function withCache<T>(
   cacheKey: string,
   fetchFn: () => Promise<T>,
   options?: { forceRefresh?: boolean }
 ): Promise<T> {
-  const { isJiraConfigured } = await import("./jira");
-  if (!isJiraConfigured()) {
-    return fetchFn();
-  }
-
+  // The inFlight check/set must happen synchronously, before any `await`, so that two
+  // concurrent calls for the same key can't both pass the check before either registers
+  // itself — that race let both trigger their own fetchFn (verified by a regression test).
   const scopedKey = scopedCacheKey(cacheKey);
-  if (!options?.forceRefresh) {
-    const cached = await getCached<T>(scopedKey);
-    if (cached !== null) {
-      logger.debug({ cacheKey: scopedKey }, "Cache hit");
-      return cached;
-    }
-  } else {
-    logger.info({ cacheKey: scopedKey }, "Force refresh enabled, skipping cache read");
+
+  const existing = inFlight.get(scopedKey);
+  if (existing) {
+    logger.debug({ cacheKey: scopedKey }, "Joining in-flight fetch");
+    return existing as Promise<T>;
   }
 
-  logger.debug({ cacheKey: scopedKey }, "Cache miss, fetching from Jira");
-  const fresh = await fetchFn();
-  await setCache(scopedKey, fresh);
-  return fresh;
+  const promise = (async () => {
+    const { isJiraConfigured } = await import("./jira");
+    if (!isJiraConfigured()) {
+      return fetchFn();
+    }
+
+    if (!options?.forceRefresh) {
+      const cached = await getCached<T>(scopedKey);
+      if (cached !== null) {
+        logger.debug({ cacheKey: scopedKey }, "Cache hit");
+        return cached;
+      }
+    } else {
+      logger.info({ cacheKey: scopedKey }, "Force refresh enabled, skipping cache read");
+    }
+
+    logger.debug({ cacheKey: scopedKey }, "Cache miss, fetching from Jira");
+    const fresh = await fetchFn();
+    await setCache(scopedKey, fresh);
+    return fresh;
+  })();
+
+  inFlight.set(scopedKey, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(scopedKey);
+  }
 }
 
 export function projectsCacheKey(): string {

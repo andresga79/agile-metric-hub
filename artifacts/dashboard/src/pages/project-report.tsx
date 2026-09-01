@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
-import { useGetProject, getGetProjectQueryKey, useGetProjectMetrics, getGetProjectMetricsQueryKey } from "@workspace/api-client-react";
+import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Users } from "lucide-react";
 import CfdChart from "@/components/cfd-chart";
@@ -26,7 +26,31 @@ const BAND_CLASSES: Record<"critical" | "warning" | "good", string> = {
   good: "bg-green-500/10 text-green-600 dark:text-green-400",
 };
 
-function Kpi({ label, value, dimensionValue }: { label: string; value: string; dimensionValue?: number }) {
+function TrendBadge({ pct, lowerBetter, label }: { pct: number; lowerBetter: boolean; label: string }) {
+  const isUp = pct >= 0;
+  const improving = isUp !== lowerBetter;
+  return (
+    <div className="flex items-center gap-1 mt-1 flex-wrap">
+      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+        improving ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-red-500/15 text-red-600 dark:text-red-400"
+      }`}>
+        {isUp ? "↑" : "↓"} {Math.abs(pct).toFixed(1)}%
+      </span>
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function Kpi({
+  label, value, dimensionValue, trendPct, trendLowerBetter, trendLabel,
+}: {
+  label: string;
+  value: string;
+  dimensionValue?: number;
+  trendPct?: number;
+  trendLowerBetter?: boolean;
+  trendLabel?: string;
+}) {
   const band = dimensionBand(dimensionValue);
   return (
     <div className="border border-border rounded p-3">
@@ -36,6 +60,9 @@ function Kpi({ label, value, dimensionValue }: { label: string; value: string; d
         <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${BAND_CLASSES[band]}`}>
           {band}
         </span>
+      )}
+      {typeof trendPct === "number" && trendLabel && (
+        <TrendBadge pct={trendPct} lowerBetter={trendLowerBetter ?? false} label={trendLabel} />
       )}
     </div>
   );
@@ -50,12 +77,8 @@ export default function ProjectReport() {
   const { data: project } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
-  const { data: metrics } = useGetProjectMetrics(projectId!, period, {
-    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) },
-  });
-
   const {
-    loading, error, cfdData, members, timeInStatus, healthScore, qaRejectionRate,
+    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   } = useReportData(projectId, period);
@@ -131,9 +154,28 @@ export default function ProjectReport() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Kpi label={t("page.report.throughput")} value={`${metrics?.throughput?.toFixed(1) ?? "—"} /wk`} dimensionValue={dimensionValue("Throughput")} />
-          <Kpi label={t("page.report.cycleTime")} value={`${metrics?.cycleTime?.toFixed(1) ?? "—"}d`} dimensionValue={dimensionValue("Cycle Time")} />
-          <Kpi label={t("page.report.leadTime")} value={`${metrics?.leadTime?.toFixed(1) ?? "—"}d`} dimensionValue={dimensionValue("Lead Time")} />
-          <Kpi label={t("page.report.resolved")} value={`${metrics?.resolvedCount ?? "—"}`} />
+          <Kpi
+            label={t("page.report.cycleTime")}
+            value={`${metrics?.cycleTime?.toFixed(1) ?? "—"}d`}
+            dimensionValue={dimensionValue("Cycle Time")}
+            trendPct={trends?.cycleTime}
+            trendLowerBetter
+            trendLabel={t("page.detail.vsPrev")}
+          />
+          <Kpi
+            label={t("page.report.leadTime")}
+            value={`${metrics?.leadTime?.toFixed(1) ?? "—"}d`}
+            dimensionValue={dimensionValue("Lead Time")}
+            trendPct={trends?.leadTime}
+            trendLowerBetter
+            trendLabel={t("page.detail.vsPrev")}
+          />
+          <Kpi
+            label={t("page.report.resolved")}
+            value={`${metrics?.resolvedCount ?? "—"}`}
+            trendPct={trends?.resolvedCount}
+            trendLabel={t("page.detail.vsPrev")}
+          />
           <Kpi label={t("page.report.healthScore")} value={`${healthScore ?? "—"}${healthScore !== null ? "/100" : ""}`} dimensionValue={dimensionValue("Flow Health Score")} />
           <Kpi label={t("page.report.qaRejectionRate")} value={`${qaRejectionRate ?? "—"}${qaRejectionRate !== null ? "%" : ""}`} />
         </CardContent>
