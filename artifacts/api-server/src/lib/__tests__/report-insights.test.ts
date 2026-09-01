@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { detectCompletionDrop, detectThresholdCrossing, detectStructuralBottleneck } from "../report-insights";
+import {
+  detectCompletionDrop,
+  detectThresholdCrossing,
+  detectStructuralBottleneck,
+  buildNextSteps,
+  type CompletionDropInsight,
+  type ThresholdCrossingInsight,
+} from "../report-insights";
 
 describe("detectCompletionDrop", () => {
   it("flags a drop greater than 15 points between the two most recent closed sprints", () => {
@@ -97,5 +104,83 @@ describe("detectStructuralBottleneck", () => {
 
   it("returns null for an empty list", () => {
     expect(detectStructuralBottleneck([])).toBeNull();
+  });
+});
+
+describe("buildNextSteps", () => {
+  const baseInput = {
+    activeSprint: null as { sprintName: string; completionRate: number; endDate: string | null } | null,
+    insights: [] as (CompletionDropInsight | ThresholdCrossingInsight)[],
+    releaseReadinessConfigured: false,
+    releaseEpicsPendingCount: 0,
+  };
+
+  it("returns an empty list when there is nothing to report", () => {
+    expect(buildNextSteps(baseInput)).toEqual([]);
+  });
+
+  it("adds one item per insight", () => {
+    const drop: CompletionDropInsight = {
+      type: "completionDrop",
+      previousSprintName: "S111",
+      previousCompletionRate: 92.2,
+      currentSprintName: "S112",
+      currentCompletionRate: 66.7,
+      dropPoints: 25.5,
+    };
+    const result = buildNextSteps({ ...baseInput, insights: [drop] });
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("completionDrop");
+    expect(result[0].text).toContain("S111");
+    expect(result[0].text).toContain("S112");
+  });
+
+  it("adds an active-sprint item with its completion rate", () => {
+    const result = buildNextSteps({
+      ...baseInput,
+      activeSprint: { sprintName: "Tablero Sprint 113", completionRate: 15.2, endDate: "2026-09-04T00:00:00.000Z" },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("activeSprint");
+    expect(result[0].text).toContain("Tablero Sprint 113");
+    expect(result[0].text).toContain("15.2");
+  });
+
+  it("adds a generic production item when release readiness is configured and something is pending, without inventing a date", () => {
+    const result = buildNextSteps({
+      ...baseInput,
+      releaseReadinessConfigured: true,
+      releaseEpicsPendingCount: 2,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("productionReady");
+    expect(result[0].text).not.toMatch(/\d{1,2}\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i);
+  });
+
+  it("omits the production item when configured but nothing is pending", () => {
+    const result = buildNextSteps({
+      ...baseInput,
+      releaseReadinessConfigured: true,
+      releaseEpicsPendingCount: 0,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("combines all applicable items in a fixed order: insights, sprint, production", () => {
+    const crossing: ThresholdCrossingInsight = {
+      type: "thresholdCrossing",
+      metric: "cycleTime",
+      previousValue: 13.1,
+      currentValue: 38.1,
+      fromBand: "warning",
+      toBand: "critical",
+    };
+    const result = buildNextSteps({
+      activeSprint: { sprintName: "S113", completionRate: 10, endDate: null },
+      insights: [crossing],
+      releaseReadinessConfigured: true,
+      releaseEpicsPendingCount: 1,
+    });
+    expect(result.map((r) => r.type)).toEqual(["thresholdCrossing", "activeSprint", "productionReady"]);
   });
 });

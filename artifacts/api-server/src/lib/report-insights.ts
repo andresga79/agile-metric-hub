@@ -106,3 +106,51 @@ export function detectStructuralBottleneck(
     sharePercent,
   };
 }
+
+export interface NextStep {
+  type: "completionDrop" | "thresholdCrossing" | "activeSprint" | "productionReady";
+  text: string;
+}
+
+export function buildNextSteps(input: {
+  activeSprint: { sprintName: string; completionRate: number; endDate: string | null } | null;
+  insights: (CompletionDropInsight | ThresholdCrossingInsight)[];
+  releaseReadinessConfigured: boolean;
+  releaseEpicsPendingCount: number;
+}): NextStep[] {
+  const steps: NextStep[] = [];
+
+  for (const insight of input.insights) {
+    if (insight.type === "completionDrop") {
+      steps.push({
+        type: "completionDrop",
+        text: `Revisar en retro la caída de finalización de ${insight.previousSprintName} (${insight.previousCompletionRate.toFixed(1)}%) a ${insight.currentSprintName} (${insight.currentCompletionRate.toFixed(1)}%).`,
+      });
+    } else {
+      const metricLabel = insight.metric === "cycleTime" ? "Cycle Time" : "Lead Time";
+      steps.push({
+        type: "thresholdCrossing",
+        text: `Atender el cruce a estado crítico de ${metricLabel}: pasó de ${insight.previousValue.toFixed(1)}d a ${insight.currentValue.toFixed(1)}d.`,
+      });
+    }
+  }
+
+  if (input.activeSprint) {
+    const endText = input.activeSprint.endDate
+      ? ` (cierra ${new Date(input.activeSprint.endDate).toLocaleDateString("es-AR", { day: "numeric", month: "short" })})`
+      : "";
+    steps.push({
+      type: "activeSprint",
+      text: `Seguimiento de ${input.activeSprint.sprintName}${endText}: ${input.activeSprint.completionRate.toFixed(1)}% completado a la fecha.`,
+    });
+  }
+
+  if (input.releaseReadinessConfigured && input.releaseEpicsPendingCount > 0) {
+    steps.push({
+      type: "productionReady",
+      text: `Hay ${input.releaseEpicsPendingCount} release(s) en preparación — ver "Próximos pasos a producción".`,
+    });
+  }
+
+  return steps;
+}
