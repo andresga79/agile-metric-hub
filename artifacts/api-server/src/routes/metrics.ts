@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   getJiraIssuesForProject,
+  getResolvedJiraIssuesInRange,
   getOpenIssuesForProject,
   getProjectBoardType,
   listJiraProjects,
@@ -63,7 +64,7 @@ function getStartDate(periodDays: number): Date {
   return d;
 }
 
-function calculateTrend(current: number, previous: number): number {
+export function calculateTrend(current: number, previous: number): number {
   if (previous === 0) return current > 0 ? 100 : 0;
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
@@ -230,6 +231,36 @@ async function computeMetrics(
   };
 }
 
+// Summary for the previous period of equal length (e.g. the prior 30 days for "1m"), used to
+// show "vs previous period" trend badges on the report's KPI strip. Deliberately narrower than
+// computeMetrics() — no velocity (sprint-count-relative, not a report KPI), no velocityByWeek/
+// percentiles/distribution (not needed for a single delta number).
+async function computePreviousPeriodSummary(
+  projectId: string,
+  periodDays: number,
+  allowedIssueTypes: string[]
+): Promise<{ resolvedCount: number; avgCycleTime: number; avgLeadTime: number }> {
+  const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
+    includeChangelog: true,
+  }).catch(() => [] as JiraIssue[]);
+  const filtered = prevIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+
+  const leadTimes = (await Promise.all(filtered.map((i) => getLeadTimeDays(i)))).filter(
+    (v): v is number => v !== null
+  );
+  const cycleTimes = (await Promise.all(filtered.map((i) => getCycleTimeDays(i)))).filter(
+    (v): v is number => v !== null
+  );
+  const avg = (arr: number[]) =>
+    arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 1000) / 1000 : 0;
+
+  return {
+    resolvedCount: filtered.length,
+    avgCycleTime: avg(cycleTimes),
+    avgLeadTime: avg(leadTimes),
+  };
+}
+
 function avgOf(values: number[]): number | null {
   return values.length > 0
     ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
@@ -385,7 +416,22 @@ router.get(
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
     const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindow?.sprintsIncluded ?? null);
 
-    res.json(metrics);
+    // "vs previous period" trend badges on the report's KPI strip - only meaningful for the
+    // fixed-length 1m/3m periods, not "Ns sprints" windows (whose previous window has no fixed
+    // day-length to mirror).
+    const compareTo = req.query.compareTo === "true";
+    let previousPeriod: { resolvedCount: number; avgCycleTime: number; avgLeadTime: number } | null = null;
+    let trends: { resolvedCount: number; cycleTime: number; leadTime: number } | null = null;
+    if (compareTo && sprintWindowCount === null) {
+      previousPeriod = await computePreviousPeriodSummary(projectId, periodDays, allowedIssueTypes);
+      trends = {
+        resolvedCount: calculateTrend(metrics.resolvedCount, previousPeriod.resolvedCount),
+        cycleTime: calculateTrend(metrics.cycleTime, previousPeriod.avgCycleTime),
+        leadTime: calculateTrend(metrics.leadTime, previousPeriod.avgLeadTime),
+      };
+    }
+
+    res.json({ ...metrics, previousPeriod, trends });
   }
 );
 
