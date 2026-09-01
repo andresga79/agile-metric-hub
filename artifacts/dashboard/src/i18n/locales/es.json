@@ -554,7 +554,7 @@
   "page.report.flowAvgDays": "Prom. Días",
   "page.report.flowIssues": "Issues",
   "page.report.advancesTitle": "Avances y funcionalidades",
-  "page.report.featuredTitle": "Funcionalidades destacadas del período",
+  "page.report.featuredTitle": "Funcionalidades destacadas (últimos 30 días)",
   "page.report.nextStepsTitle": "Próximos pasos",
   "page.report.scopeNoteTitle": "Nota de alcance",
   "page.report.scopeNoteBody": "El \"Flow Health Score\" de esta plataforma combina throughput, cycle time y tasa de rechazo QA normalizados contra los umbrales configurados en Admin → Health. No mide DORA real — no hay señal de deploys/CI.",

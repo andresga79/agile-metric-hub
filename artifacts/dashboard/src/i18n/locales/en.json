@@ -537,7 +537,7 @@
   "page.report.flowAvgDays": "Avg Days",
   "page.report.flowIssues": "Issues",
   "page.report.advancesTitle": "Progress and features",
-  "page.report.featuredTitle": "Featured functionality this period",
+  "page.report.featuredTitle": "Featured functionality (last 30 days)",
   "page.report.nextStepsTitle": "Next steps",
   "page.report.scopeNoteTitle": "Scope note",
   "page.report.scopeNoteBody": "This platform's \"Flow Health Score\" combines throughput, cycle time and QA rejection rate normalized against the thresholds configured in Admin → Health. It does not measure real DORA metrics — there is no deploy/CI signal.",

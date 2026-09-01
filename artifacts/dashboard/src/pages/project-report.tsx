@@ -88,6 +88,9 @@ export default function ProjectReport() {
     : [];
   const allNextSteps = [...oldestBlockerStep, ...nextSteps];
 
+  let sectionNumber = 0;
+  const nextSectionNumber = () => String(++sectionNumber).padStart(2, "0");
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -137,7 +140,7 @@ export default function ProjectReport() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>01 · {t("page.report.advancesTitle")}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.advancesTitle")}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {[...closedSprints, ...(activeSprint ? [activeSprint] : [])].map((s: any) => (
             <div key={s.sprintId}>
@@ -181,7 +184,7 @@ export default function ProjectReport() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>02 · {t("page.report.decisionsTitle")}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.decisionsTitle")}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="border border-border rounded p-3 bg-muted/30">
             <p className="text-xs font-semibold mb-1">{t("page.report.scopeNoteTitle")}</p>
@@ -202,7 +205,7 @@ export default function ProjectReport() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>03 · {t("page.report.blockersTitle")}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.blockersTitle")}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {sortedBlockedIssues.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("page.report.blockersEmpty")}</p>
@@ -234,7 +237,7 @@ export default function ProjectReport() {
 
       {allNextSteps.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>04 · {t("page.report.nextStepsTitle")}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.nextStepsTitle")}</CardTitle></CardHeader>
           <CardContent>
             <ol className="text-sm space-y-2 list-decimal pl-5">
               {allNextSteps.map((step: any, i: number) => (
@@ -247,7 +250,7 @@ export default function ProjectReport() {
 
       {releaseReadiness?.configured && releaseReadiness.epics.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>05 · {t("page.report.productionTitle")}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.productionTitle")}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {releaseReadiness.epics.map((e) => (
               <div key={e.issueKey} className="border-l-2 border-primary pl-3 text-sm">
@@ -260,6 +263,38 @@ export default function ProjectReport() {
                 )}
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {closedSprints.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{nextSectionNumber()} · {t("page.report.sprintsTitle")}</CardTitle></CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 text-muted-foreground font-medium">Sprint</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">SP</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">%</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">Cycle Time</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.reopenedLabel")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.carryoverLabel")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closedSprints.map((s: any) => (
+                  <tr key={s.sprintId} className="border-b border-border/50">
+                    <td className="py-1 font-medium">{s.sprintName}</td>
+                    <td className="py-1 text-right">{s.completedStoryPoints}/{s.totalStoryPoints}</td>
+                    <td className="py-1 text-right">{s.completionRate.toFixed(1)}%</td>
+                    <td className="py-1 text-right">{s.avgCycleTimeDays?.toFixed(1) ?? "—"}d</td>
+                    <td className="py-1 text-right">{s.reopenedCount}</td>
+                    <td className="py-1 text-right">{s.carryoverCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </CardContent>
         </Card>
       )}
@@ -293,38 +328,6 @@ export default function ProjectReport() {
                     <td className="py-1 text-right">{m.issuesResolved}</td>
                     <td className="py-1 text-right">{m.avgCycleTime?.toFixed(1) ?? "—"}d</td>
                     <td className="py-1 text-right">{m.storyPoints ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      )}
-
-      {closedSprints.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>06 · {t("page.report.sprintsTitle")}</CardTitle></CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-1 text-muted-foreground font-medium">Sprint</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">SP</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">%</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">Cycle Time</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.reopenedLabel")}</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.carryoverLabel")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {closedSprints.map((s: any) => (
-                  <tr key={s.sprintId} className="border-b border-border/50">
-                    <td className="py-1 font-medium">{s.sprintName}</td>
-                    <td className="py-1 text-right">{s.completedStoryPoints}/{s.totalStoryPoints}</td>
-                    <td className="py-1 text-right">{s.completionRate.toFixed(1)}%</td>
-                    <td className="py-1 text-right">{s.avgCycleTimeDays?.toFixed(1) ?? "—"}d</td>
-                    <td className="py-1 text-right">{s.reopenedCount}</td>
-                    <td className="py-1 text-right">{s.carryoverCount}</td>
                   </tr>
                 ))}
               </tbody>
