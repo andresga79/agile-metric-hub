@@ -22,6 +22,8 @@ import rolePermissionsRouter from "./role-permissions";
 import syncStatusRouter from "./sync-status";
 import evolutionRouter from "./evolution";
 import blockedReasonsRouter from "./blocked-reasons";
+import reportInsightsRouter from "./report-insights";
+import releaseReadinessRouter from "./release-readiness";
 
 const router: IRouter = Router();
 
@@ -48,5 +50,7 @@ router.use(syncStatusRouter);
 router.use(evolutionRouter);
 router.use(adminRouter);
 router.use(blockedReasonsRouter);
+router.use(reportInsightsRouter);
+router.use(releaseReadinessRouter);
 
 export default router;

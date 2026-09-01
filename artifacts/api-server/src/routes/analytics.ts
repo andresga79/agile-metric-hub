@@ -28,6 +28,7 @@ import {
 import { logger } from "../lib/logger";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
+import { detectStructuralBottleneck } from "../lib/report-insights";
 import { db, blockedReasonsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 
@@ -180,7 +181,7 @@ async function computeTimeInStatus(
   return entries.sort((a, b) => b.avgDays - a.avgDays);
 }
 
-async function computePeriodMetrics(
+export async function computePeriodMetrics(
   issues: JiraIssue[],
   startDate: Date,
   // Upper bound for "resolved in this period." The current-period caller omits this — an issue
@@ -607,6 +608,7 @@ router.get(
     // the flow view. Falls back to all statuses when no board is available.
     const boardStatusNames = await getBoardStatusNames(projectId);
     const timeInStatus = await computeTimeInStatus(timeInStatusIssues, boardStatusNames);
+    const structuralBottleneck = detectStructuralBottleneck(timeInStatus);
 
     // --- Period-over-Period (#3) ---
     let previousPeriod: any = null;
@@ -640,6 +642,7 @@ router.get(
       wipAgingCounts,
       blockedIssues,
       timeInStatus,
+      structuralBottleneck,
       previousPeriod,
     });
   }

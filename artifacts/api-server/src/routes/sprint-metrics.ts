@@ -21,7 +21,7 @@ import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings"
 
 const router: IRouter = Router();
 
-interface SprintMetric {
+export interface SprintMetric {
   sprintId: number;
   sprintName: string;
   state: string;
@@ -71,7 +71,7 @@ interface SprintMetricsResponse {
   };
 }
 
-async function computeSprintMetrics(
+export async function computeSprintMetrics(
   sprint: JiraSprint,
   sprintIssues: JiraIssue[],
   allowedIssueTypes: string[],
@@ -140,7 +140,7 @@ async function computeSprintMetrics(
 router.get(
   "/projects/:projectId/sprints/:period",
   requireAuth,
-  requireSectionView("sprints"),
+  requireSectionView("sprints", "report"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { calculateAndCachePortfolio } from "./portfolio-cache";
 import { storeWeeklySnapshots } from "./metric-snapshots";
+import { syncReleaseEpics } from "./release-sync";
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const DAILY_SYNC_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -241,6 +242,9 @@ async function executeSync(trigger: SyncTrigger): Promise<void> {
 
   try {
     await warmVisibleProjectsCache(forceRefresh);
+    await syncReleaseEpics().catch((err) => {
+      logger.warn({ err }, "RC epics sync failed, continuing");
+    });
     await calculateAndCachePortfolio({ forceRefresh });
     lastSyncedAt = new Date();
     lastSyncOutcome = syncFailedProjects > 0 ? "partial" : "success";

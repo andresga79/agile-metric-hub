@@ -576,6 +576,7 @@ export interface JiraSprint {
   startDate?: string;
   endDate?: string;
   completeDate?: string;
+  goal?: string;
 }
 
 function sprintEndTime(sprint: JiraSprint): number | null {
@@ -873,6 +874,70 @@ export async function getJiraProject(projectId: string): Promise<JiraProject | n
     logger.warn({ err, projectId }, "Failed to fetch Jira project from project list");
     return null;
   }
+}
+
+export interface RawRCEpic {
+  key: string;
+  summary: string;
+  description: string | null;
+  status: string;
+  statusCategory: string;
+  assignee: string | null;
+  updated: string;
+}
+
+type RCSearchResponse = {
+  issues: {
+    key: string;
+    fields: {
+      summary: string;
+      description?: unknown;
+      status: { name: string; statusCategory: { key: string } };
+      assignee: { displayName: string } | null;
+      updated: string;
+    };
+  }[];
+  nextPageToken?: string;
+};
+
+// Jira project RC (Release Coordination) tracks production releases for all 5 células
+// sharing this Jira instance - not scoped to any one project. Called once per sync
+// cycle by release-sync.ts, not per-project.
+export async function fetchReleaseCoordinationEpics(): Promise<RawRCEpic[]> {
+  if (!isJiraConfigured()) return [];
+
+  const fields = "summary,description,status,assignee,updated";
+  const jql = encodeURIComponent("project = RC ORDER BY updated DESC");
+  const all: RawRCEpic[] = [];
+  let pageToken: string | null = null;
+
+  try {
+    for (let page = 0; page < 5; page++) {
+      const result: RCSearchResponse = await jiraFetch<RCSearchResponse>(
+        `/search/jql?jql=${jql}&maxResults=50&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+      );
+
+      for (const issue of result.issues ?? []) {
+        all.push({
+          key: issue.key,
+          summary: issue.fields.summary,
+          description: issue.fields.description ? adfToPlainText(issue.fields.description) : null,
+          status: issue.fields.status.name,
+          statusCategory: issue.fields.status.statusCategory.key,
+          assignee: issue.fields.assignee?.displayName ?? null,
+          updated: issue.fields.updated,
+        });
+      }
+
+      if (!result.nextPageToken) break;
+      pageToken = result.nextPageToken;
+    }
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch RC (Release Coordination) epics");
+    return [];
+  }
+
+  return all;
 }
 
 export interface JiraComment {

@@ -20,6 +20,7 @@ import ProjectQaRejected from "@/pages/project-qa-rejected";
 import ProjectSprints from "@/pages/project-sprints";
 import ProjectKanban from "@/pages/project-kanban";
 import Admin from "@/pages/admin";
+import AdminReleaseKeywords from "@/pages/admin-release-keywords";
 
 import "@/lib/auth"; // init auth token getter
 import { getAuthToken, setAuthToken } from "@/lib/auth";
@@ -149,6 +150,9 @@ function Router() {
       </Route>
       <Route path="/admin">
         {() => <AdminRoute component={Admin} />}
+      </Route>
+      <Route path="/admin/release-keywords">
+        {() => <AdminRoute component={AdminReleaseKeywords} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
