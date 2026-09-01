@@ -535,5 +535,13 @@
   "page.report.flowTitle": "Flow Analysis",
   "page.report.flowStatus": "Status",
   "page.report.flowAvgDays": "Avg Days",
-  "page.report.flowIssues": "Issues"
+  "page.report.flowIssues": "Issues",
+  "page.report.sprintGoal": "Sprint goal",
+  "page.report.decisionsTitle": "Key decisions",
+  "page.report.blockersTitle": "Blockers and impediments",
+  "page.report.blockersEmpty": "No active blockers this period",
+  "page.report.productionTitle": "Next steps to production",
+  "page.report.productionNotConfigured": "Configure in Admin → Releases",
+  "page.report.productionLinkedIssues": "Issues implementing this release",
+  "page.report.sprintsTitle": "Sprint breakdown"
 }
