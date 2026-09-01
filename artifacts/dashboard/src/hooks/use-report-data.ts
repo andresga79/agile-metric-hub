@@ -59,7 +59,9 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
       fetch(`/api/projects/${projectId}/analytics/${period}`, opts).then(jsonOrThrow("Analytics")),
       fetch(`/api/projects/${projectId}/health/${period}`, opts).then(jsonOrThrow("Health")),
       fetch(`/api/projects/${projectId}/qa-rejected/${period}`, opts).then(jsonOrThrow("QA rejected")),
-      fetch(`/api/projects/${projectId}/sprints/${period}`, opts).then(jsonOrThrow("Sprints")),
+      fetch(`/api/projects/${projectId}/sprints/${period}`, opts)
+        .then(jsonOrThrow("Sprints"))
+        .catch(() => ({ sprints: [] })),
       fetch(`/api/projects/${projectId}/sprint-goal`, opts).then(jsonOrThrow("Sprint goal")),
       fetch(`/api/projects/${projectId}/release-readiness`, opts).then(jsonOrThrow("Release readiness")),
       fetch(`/api/projects/${projectId}/report-insights`, opts).then(jsonOrThrow("Report insights")),
