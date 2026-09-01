@@ -68,3 +68,41 @@ export function detectThresholdCrossing(
     toBand,
   };
 }
+
+export interface StructuralBottleneck {
+  type: "structuralBottleneck";
+  status: string;
+  avgDays: number;
+  issueCount: number;
+  sharePercent: number;
+}
+
+// A status only counts as a "structural bottleneck" (worth a sentence in the report) if it
+// both dominates the weighted flow time AND has enough issues behind it - a single outlier
+// issue stuck for months would otherwise look like a systemic problem.
+const BOTTLENECK_MIN_SHARE_PERCENT = 51;
+const BOTTLENECK_MIN_ISSUE_COUNT = 3;
+
+export function detectStructuralBottleneck(
+  timeInStatus: { status: string; avgDays: number; issueCount: number }[]
+): StructuralBottleneck | null {
+  if (timeInStatus.length === 0) return null;
+
+  const weighted = timeInStatus.map((s) => ({ ...s, weight: s.avgDays * s.issueCount }));
+  const totalWeight = weighted.reduce((sum, s) => sum + s.weight, 0);
+  if (totalWeight <= 0) return null;
+
+  const top = weighted.reduce((max, s) => (s.weight > max.weight ? s : max));
+  const sharePercent = (top.weight / totalWeight) * 100;
+
+  if (sharePercent < BOTTLENECK_MIN_SHARE_PERCENT) return null;
+  if (top.issueCount < BOTTLENECK_MIN_ISSUE_COUNT) return null;
+
+  return {
+    type: "structuralBottleneck",
+    status: top.status,
+    avgDays: top.avgDays,
+    issueCount: top.issueCount,
+    sharePercent,
+  };
+}

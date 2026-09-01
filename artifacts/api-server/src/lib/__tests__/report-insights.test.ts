@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectCompletionDrop, detectThresholdCrossing } from "../report-insights";
+import { detectCompletionDrop, detectThresholdCrossing, detectStructuralBottleneck } from "../report-insights";
 
 describe("detectCompletionDrop", () => {
   it("flags a drop greater than 15 points between the two most recent closed sprints", () => {
@@ -61,5 +61,41 @@ describe("detectThresholdCrossing", () => {
 
   it("returns null when no threshold is configured", () => {
     expect(detectThresholdCrossing("cycleTime", 38.1, 13.1, undefined)).toBeNull();
+  });
+});
+
+describe("detectStructuralBottleneck", () => {
+  it("flags the status with the largest weighted share of flow time", () => {
+    const timeInStatus = [
+      { status: "TO DO", avgDays: 137.0, issueCount: 166 },
+      { status: "Ready for DEV", avgDays: 24.6, issueCount: 87 },
+      { status: "Ready for QA", avgDays: 14.1, issueCount: 35 },
+    ];
+    const result = detectStructuralBottleneck(timeInStatus);
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe("TO DO");
+    expect(result?.sharePercent).toBeGreaterThan(50);
+  });
+
+  it("returns null when time is spread evenly across statuses (no clear bottleneck)", () => {
+    const timeInStatus = [
+      { status: "A", avgDays: 10, issueCount: 20 },
+      { status: "B", avgDays: 10, issueCount: 20 },
+      { status: "C", avgDays: 10, issueCount: 20 },
+    ];
+    expect(detectStructuralBottleneck(timeInStatus)).toBeNull();
+  });
+
+  it("returns null when the top status has too few issues to call it structural", () => {
+    const timeInStatus = [
+      { status: "Rare edge case", avgDays: 500, issueCount: 1 },
+      { status: "TO DO", avgDays: 10, issueCount: 100 },
+      { status: "DONE", avgDays: 5, issueCount: 100 },
+    ];
+    expect(detectStructuralBottleneck(timeInStatus)).toBeNull();
+  });
+
+  it("returns null for an empty list", () => {
+    expect(detectStructuralBottleneck([])).toBeNull();
   });
 });
