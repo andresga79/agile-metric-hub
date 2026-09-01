@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey, useGetProjectMetrics, getGetProjectMetricsQueryKey } from "@workspace/api-client-react";
@@ -7,6 +7,7 @@ import { ArrowLeft, Users } from "lucide-react";
 import CfdChart from "@/components/cfd-chart";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
+import { useReportData } from "@/hooks/use-report-data";
 
 type Period = "1m" | "3m";
 
@@ -14,13 +15,6 @@ export default function ProjectReport() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<Period>("1m");
-  const [cfdData, setCfdData] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
-  const [healthScore, setHealthScore] = useState<number | null>(null);
-  const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const token = getAuthToken();
 
   const { data: project } = useGetProject(projectId!, {
@@ -30,107 +24,18 @@ export default function ProjectReport() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectMetricsQueryKey(projectId!, period) },
   });
 
-  useEffect(() => {
-    if (!projectId) {
-      setLoading(false);
-      setError(null);
-      setCfdData([]);
-      setMembers([]);
-      setTimeInStatus([]);
-      setHealthScore(null);
-      setQaRejectionRate(null);
-      return;
-    }
-    if (!token) {
-      setLoading(false);
-      setError(t("common.loading"));
-      setCfdData([]);
-      setMembers([]);
-      setTimeInStatus([]);
-      setHealthScore(null);
-      setQaRejectionRate(null);
-      return;
-    }
+  const {
+    loading, error, cfdData, members, timeInStatus, healthScore, qaRejectionRate,
+    blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
+  } = useReportData(projectId, period);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-
-    setLoading(true);
-    setError(null);
-
-    Promise.all([
-      fetch(`/api/projects/${projectId}/cfd/${period}`, {
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => {
-        if (!r.ok) throw new Error(`CFD request failed: ${r.status}`);
-        return r.json();
-      }),
-      fetch(`/api/projects/${projectId}/members/${period}`, {
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => {
-        if (!r.ok) throw new Error(`Members request failed: ${r.status}`);
-        return r.json();
-      }),
-      fetch(`/api/projects/${projectId}/analytics/${period}`, {
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => {
-        if (!r.ok) throw new Error(`Analytics request failed: ${r.status}`);
-        return r.json();
-      }),
-      fetch(`/api/projects/${projectId}/health/${period}`, {
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => {
-        if (!r.ok) throw new Error(`Health request failed: ${r.status}`);
-        return r.json();
-      }),
-      fetch(`/api/projects/${projectId}/qa-rejected/${period}`, {
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }).then((r) => {
-        if (!r.ok) throw new Error(`QA rejected request failed: ${r.status}`);
-        return r.json();
-      }),
-    ])
-      .then(([cfd, memberRows, analytics, health, qaRejected]) => {
-        setCfdData(cfd?.dataPoints ?? []);
-        setMembers(Array.isArray(memberRows) ? memberRows : []);
-        setTimeInStatus(analytics?.timeInStatus ?? []);
-        const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
-        setHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
-        setQaRejectionRate(
-          typeof qaRejected?.overallRejectionRate === "number" ? qaRejected.overallRejectionRate : null
-        );
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(t("common.loading"));
-        setCfdData([]);
-        setMembers([]);
-        setTimeInStatus([]);
-        setHealthScore(null);
-        setQaRejectionRate(null);
-      })
-      .finally(() => {
-        clearTimeout(timeout);
-        setLoading(false);
-      });
-
-    return () => {
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [projectId, period, token]);
-
-  if (loading) return <div>{t('common.loading')}</div>;
-  if (!project) return <div>{t('page.team.notFound')}</div>;
+  if (loading) return <div>{t("common.loading")}</div>;
+  if (!project) return <div>{t("page.team.notFound")}</div>;
   if (error) return <div>{error}</div>;
 
   const sortedTimeInStatus = [...timeInStatus].sort((a: any, b: any) => b.avgDays - a.avgDays);
   const topMembers = [...(members ?? [])].sort((a: any, b: any) => b.issuesResolved - a.issuesResolved).slice(0, 5);
+  const closedSprints = [...sprints].filter((s: any) => s.state === "closed");
 
   return (
     <div className="space-y-6">
@@ -142,8 +47,8 @@ export default function ProjectReport() {
               {project.name}
             </Link>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">{t('page.report.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('page.report.subtitle')}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t("page.report.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("page.report.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-background border border-border rounded-md p-1">
@@ -162,76 +67,128 @@ export default function ProjectReport() {
 
       <ProjectTabs projectId={projectId!} active="report" />
 
-      <div className="space-y-4 bg-white text-black p-8 rounded-lg">
-        <div className="text-center border-b border-gray-300 pb-4 mb-4">
-          <h2 className="text-2xl font-bold">{project.name}</h2>
-          <p className="text-sm text-gray-500">{t('page.report.reportTitle')} — {period.toUpperCase()}</p>
-          <p className="text-xs text-gray-400">{new Date().toLocaleDateString()}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.throughput')}</div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{project.name} — {t("page.report.reportTitle")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{period.toUpperCase()} · {new Date().toLocaleDateString()}</p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.throughput")}</div>
             <div className="text-xl font-bold">{metrics?.throughput?.toFixed(1) ?? "—"} /wk</div>
           </div>
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.cycleTime')}</div>
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.cycleTime")}</div>
             <div className="text-xl font-bold">{metrics?.cycleTime?.toFixed(1) ?? "—"}d</div>
           </div>
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.leadTime')}</div>
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.leadTime")}</div>
             <div className="text-xl font-bold">{metrics?.leadTime?.toFixed(1) ?? "—"}d</div>
           </div>
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.resolved')}</div>
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.resolved")}</div>
             <div className="text-xl font-bold">{metrics?.resolvedCount ?? "—"}</div>
           </div>
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.healthScore')}</div>
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.healthScore")}</div>
             <div className="text-xl font-bold">{healthScore ?? "—"}{healthScore !== null ? "/100" : ""}</div>
           </div>
-          <div className="border border-gray-200 rounded p-3">
-            <div className="text-xs text-gray-500">{t('page.report.qaRejectionRate')}</div>
+          <div className="border border-border rounded p-3">
+            <div className="text-xs text-muted-foreground">{t("page.report.qaRejectionRate")}</div>
             <div className="text-xl font-bold">{qaRejectionRate ?? "—"}{qaRejectionRate !== null ? "%" : ""}</div>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
+      {sprintGoal && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.sprintGoal")} — {sprintGoal.sprintName}</CardTitle></CardHeader>
+          <CardContent><p className="whitespace-pre-line text-sm">{sprintGoal.goal}</p></CardContent>
+        </Card>
+      )}
 
-        <div className="border border-gray-200 rounded p-3">
-          <h3 className="text-sm font-semibold mb-2">{t('page.report.percentiles')}</h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>Cycle Time P50: <strong>{metrics?.cycleTimePercentiles?.p50?.toFixed(1) ?? "—"}d</strong> P95: <strong>{metrics?.cycleTimePercentiles?.p95?.toFixed(1) ?? "—"}d</strong></div>
-            <div>Lead Time P50: <strong>{metrics?.leadTimePercentiles?.p50?.toFixed(1) ?? "—"}d</strong> P95: <strong>{metrics?.leadTimePercentiles?.p95?.toFixed(1) ?? "—"}d</strong></div>
-          </div>
-        </div>
+      {insights.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.decisionsTitle")}</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {insights.map((insight: any, i: number) =>
+              insight.type === "completionDrop" ? (
+                <p key={i} className="text-sm border-l-2 border-destructive pl-3">
+                  {insight.previousSprintName} ({insight.previousCompletionRate.toFixed(1)}%) → {insight.currentSprintName} ({insight.currentCompletionRate.toFixed(1)}%): caída de {insight.dropPoints.toFixed(1)} puntos en finalización.
+                </p>
+              ) : (
+                <p key={i} className="text-sm border-l-2 border-destructive pl-3">
+                  {insight.metric === "cycleTime" ? t("page.report.cycleTime") : t("page.report.leadTime")} pasó de {insight.previousValue.toFixed(1)}d a {insight.currentValue.toFixed(1)}d — cruzó a estado crítico.
+                </p>
+              )
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-        {cfdData.length > 0 && (
-          <div className="border border-gray-200 rounded p-3">
-            <h3 className="text-sm font-semibold mb-2">{t('page.report.cfdTitle')}</h3>
-            <div className="h-[200px]">
-              <CfdChart data={cfdData} />
+      <Card>
+        <CardHeader><CardTitle>{t("page.report.blockersTitle")}</CardTitle></CardHeader>
+        <CardContent>
+          {blockedIssues.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("page.report.blockersEmpty")}</p>
+          ) : (
+            <div className="space-y-2">
+              {blockedIssues.map((b: any) => (
+                <div key={b.issueKey} className="border-l-2 border-destructive pl-3 text-sm">
+                  <div className="font-medium">{b.issueKey} — {b.summary}</div>
+                  <div className="text-muted-foreground">{b.flagReason ?? ""}</div>
+                  <div className="text-xs text-muted-foreground">{b.totalDays?.toFixed(1)}d bloqueado</div>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
+          )}
+        </CardContent>
+      </Card>
 
-        {topMembers.length > 0 && (
-          <div className="border border-gray-200 rounded p-3">
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-1">
-              <Users size={14} />
-              {t('page.report.membersTitle')}
-            </h3>
+      {releaseReadiness?.configured && releaseReadiness.epics.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.productionTitle")}</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {releaseReadiness.epics.map((e) => (
+              <div key={e.issueKey} className="border-l-2 border-primary pl-3 text-sm">
+                <div className="font-medium">{e.issueKey} — {e.summary}</div>
+                <div className="text-xs text-muted-foreground">{e.status}{e.assignee ? ` · ${e.assignee}` : ""}</div>
+                {e.linkedIssueKeys.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {t("page.report.productionLinkedIssues")}: {e.linkedIssueKeys.join(", ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {cfdData.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.cfdTitle")}</CardTitle></CardHeader>
+          <CardContent className="h-[200px]"><CfdChart data={cfdData} /></CardContent>
+        </Card>
+      )}
+
+      {topMembers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1"><Users size={14} />{t("page.report.membersTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-1 text-gray-500 font-medium">{t('page.report.memberName')}</th>
-                  <th className="text-right py-1 text-gray-500 font-medium">{t('page.report.memberResolved')}</th>
-                  <th className="text-right py-1 text-gray-500 font-medium">{t('page.report.memberCycle')}</th>
-                  <th className="text-right py-1 text-gray-500 font-medium">{t('page.report.memberPoints')}</th>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 text-muted-foreground font-medium">{t("page.report.memberName")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberResolved")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberCycle")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberPoints")}</th>
                 </tr>
               </thead>
               <tbody>
                 {topMembers.map((m: any) => (
-                  <tr key={m.accountId} className="border-b border-gray-100">
+                  <tr key={m.accountId} className="border-b border-border/50">
                     <td className="py-1 font-medium">{m.displayName}</td>
                     <td className="py-1 text-right">{m.issuesResolved}</td>
                     <td className="py-1 text-right">{m.avgCycleTime?.toFixed(1) ?? "—"}d</td>
@@ -240,23 +197,53 @@ export default function ProjectReport() {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
+          </CardContent>
+        </Card>
+      )}
 
-        {sortedTimeInStatus.length > 0 && (
-          <div className="border border-gray-200 rounded p-3">
-            <h3 className="text-sm font-semibold mb-2">{t('page.report.flowTitle')}</h3>
+      {closedSprints.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.sprintsTitle")}</CardTitle></CardHeader>
+          <CardContent>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-1 text-gray-500 font-medium">{t('page.report.flowStatus')}</th>
-                  <th className="text-right py-1 text-gray-500 font-medium">{t('page.report.flowAvgDays')}</th>
-                  <th className="text-right py-1 text-gray-500 font-medium">{t('page.report.flowIssues')}</th>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 text-muted-foreground font-medium">Sprint</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">SP</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">%</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">Cycle Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closedSprints.map((s: any) => (
+                  <tr key={s.sprintId} className="border-b border-border/50">
+                    <td className="py-1 font-medium">{s.sprintName}</td>
+                    <td className="py-1 text-right">{s.completedStoryPoints}/{s.totalStoryPoints}</td>
+                    <td className="py-1 text-right">{s.completionRate.toFixed(1)}%</td>
+                    <td className="py-1 text-right">{s.avgCycleTimeDays?.toFixed(1) ?? "—"}d</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {sortedTimeInStatus.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t("page.report.flowTitle")}</CardTitle></CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 text-muted-foreground font-medium">{t("page.report.flowStatus")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.flowAvgDays")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.flowIssues")}</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTimeInStatus.slice(0, 6).map((entry: any) => (
-                  <tr key={entry.status} className="border-b border-gray-100">
+                  <tr key={entry.status} className="border-b border-border/50">
                     <td className="py-1 font-medium">{entry.status}</td>
                     <td className="py-1 text-right">{entry.avgDays.toFixed(1)}d</td>
                     <td className="py-1 text-right">{entry.issueCount}</td>
@@ -264,9 +251,9 @@ export default function ProjectReport() {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-      </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
