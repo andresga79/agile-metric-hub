@@ -180,7 +180,7 @@ async function computeTimeInStatus(
   return entries.sort((a, b) => b.avgDays - a.avgDays);
 }
 
-async function computePeriodMetrics(
+export async function computePeriodMetrics(
   issues: JiraIssue[],
   startDate: Date,
   // Upper bound for "resolved in this period." The current-period caller omits this — an issue
