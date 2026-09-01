@@ -80,7 +80,7 @@ export interface StructuralBottleneck {
 // A status only counts as a "structural bottleneck" (worth a sentence in the report) if it
 // both dominates the weighted flow time AND has enough issues behind it - a single outlier
 // issue stuck for months would otherwise look like a systemic problem.
-const BOTTLENECK_MIN_SHARE_PERCENT = 51;
+const BOTTLENECK_MIN_SHARE_PERCENT = 40;
 const BOTTLENECK_MIN_ISSUE_COUNT = 3;
 
 export function detectStructuralBottleneck(

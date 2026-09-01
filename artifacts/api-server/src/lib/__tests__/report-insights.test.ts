@@ -88,9 +88,9 @@ describe("detectStructuralBottleneck", () => {
 
   it("returns null when the top status has too few issues to call it structural", () => {
     const timeInStatus = [
-      { status: "Rare edge case", avgDays: 500, issueCount: 1 },
-      { status: "TO DO", avgDays: 10, issueCount: 100 },
-      { status: "DONE", avgDays: 5, issueCount: 100 },
+      { status: "Rare edge case", avgDays: 500, issueCount: 2 },
+      { status: "TO DO", avgDays: 5, issueCount: 100 },
+      { status: "DONE", avgDays: 3, issueCount: 100 },
     ];
     expect(detectStructuralBottleneck(timeInStatus)).toBeNull();
   });
