@@ -17,47 +17,49 @@ export function extractLinkedIssueKeys(description: string | null): string[] {
   return unique.filter((key) => !key.startsWith("RC-"));
 }
 
+export async function getProjectReleaseReadiness(projectId: string) {
+  const keywords = await db
+    .select({ keyword: projectReleaseKeywordsTable.keyword })
+    .from(projectReleaseKeywordsTable)
+    .where(eq(projectReleaseKeywordsTable.projectId, projectId));
+
+  if (keywords.length === 0) {
+    return { configured: false as const };
+  }
+
+  const matchConditions = keywords.flatMap((k) => [
+    ilike(releaseEpicsTable.summary, `%${k.keyword}%`),
+    ilike(releaseEpicsTable.description, `%${k.keyword}%`),
+  ]);
+
+  const epics = await db
+    .select()
+    .from(releaseEpicsTable)
+    .where(or(...matchConditions))
+    .orderBy(desc(releaseEpicsTable.jiraUpdatedAt))
+    .limit(5);
+
+  return {
+    configured: true as const,
+    epics: epics.map((e) => ({
+      issueKey: e.issueKey,
+      summary: e.summary,
+      description: e.description,
+      status: e.status,
+      statusCategory: e.statusCategory,
+      assignee: e.assignee,
+      jiraUpdatedAt: e.jiraUpdatedAt.toISOString(),
+      linkedIssueKeys: extractLinkedIssueKeys(e.description),
+    })),
+  };
+}
+
 router.get(
   "/projects/:projectId/release-readiness",
   requireAuth,
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0]! : req.params.projectId!;
-
-    const keywords = await db
-      .select({ keyword: projectReleaseKeywordsTable.keyword })
-      .from(projectReleaseKeywordsTable)
-      .where(eq(projectReleaseKeywordsTable.projectId, projectId));
-
-    if (keywords.length === 0) {
-      res.json({ configured: false });
-      return;
-    }
-
-    const matchConditions = keywords.flatMap((k) => [
-      ilike(releaseEpicsTable.summary, `%${k.keyword}%`),
-      ilike(releaseEpicsTable.description, `%${k.keyword}%`),
-    ]);
-
-    const epics = await db
-      .select()
-      .from(releaseEpicsTable)
-      .where(or(...matchConditions))
-      .orderBy(desc(releaseEpicsTable.jiraUpdatedAt))
-      .limit(5);
-
-    res.json({
-      configured: true,
-      epics: epics.map((e) => ({
-        issueKey: e.issueKey,
-        summary: e.summary,
-        description: e.description,
-        status: e.status,
-        statusCategory: e.statusCategory,
-        assignee: e.assignee,
-        jiraUpdatedAt: e.jiraUpdatedAt.toISOString(),
-        linkedIssueKeys: extractLinkedIssueKeys(e.description),
-      })),
-    });
+    res.json(await getProjectReleaseReadiness(projectId));
   }
 );
 

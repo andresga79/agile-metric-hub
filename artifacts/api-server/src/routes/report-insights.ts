@@ -6,13 +6,21 @@ import {
   getProjectBoardType,
   getResolvedJiraIssuesInRange,
   getEffectiveIssueType,
+  getStoryPoints,
   type JiraIssue,
 } from "../lib/jira";
 import { computeSprintMetrics } from "./sprint-metrics";
 import { computePeriodMetrics } from "./analytics";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { getEffectiveThresholds } from "../lib/health-thresholds";
-import { detectCompletionDrop, detectThresholdCrossing } from "../lib/report-insights";
+import {
+  detectCompletionDrop,
+  detectThresholdCrossing,
+  buildNextSteps,
+  type CompletionDropInsight,
+  type ThresholdCrossingInsight,
+} from "../lib/report-insights";
+import { getProjectReleaseReadiness } from "./release-readiness";
 
 const router: IRouter = Router();
 
@@ -46,7 +54,8 @@ router.get(
   requireSectionView("report"),
   async (req, res): Promise<void> => {
     const projectId = Array.isArray(req.params.projectId) ? req.params.projectId[0]! : req.params.projectId!;
-    const insights: unknown[] = [];
+    const insights: (CompletionDropInsight | ThresholdCrossingInsight)[] = [];
+    let activeSprintForNextSteps: { sprintName: string; completionRate: number; endDate: string | null } | null = null;
 
     // --- Completion drop between the last two closed sprints ---
     const boardType = await getProjectBoardType(projectId);
@@ -72,6 +81,16 @@ router.get(
         );
         const drop = detectCompletionDrop(summaries);
         if (drop) insights.push(drop);
+
+        const active = summaries.find((s) => s.state === "active");
+        if (active) {
+          const activeRaw = sprints.find((s) => s.name === active.name);
+          activeSprintForNextSteps = {
+            sprintName: active.name,
+            completionRate: active.completionRate,
+            endDate: activeRaw?.endDate ?? null,
+          };
+        }
       }
     }
 
@@ -108,7 +127,32 @@ router.get(
       if (leadCrossing) insights.push(leadCrossing);
     }
 
-    res.json(insights);
+    // --- Featured functionality: top resolved issues by story points this period ---
+    const featuredIssues = currentFiltered
+      .map((i) => ({
+        key: i.key,
+        summary: i.fields.summary,
+        assignee: i.fields.assignee?.displayName ?? null,
+        storyPoints: getStoryPoints(i),
+      }))
+      .filter((i) => i.storyPoints > 0)
+      .sort((a, b) => b.storyPoints - a.storyPoints)
+      .slice(0, 4);
+
+    // --- Next steps: insights + active sprint progress + release readiness ---
+    const releaseReadiness = await getProjectReleaseReadiness(projectId);
+    const releaseEpicsPendingCount = releaseReadiness.configured
+      ? releaseReadiness.epics.filter((e) => e.statusCategory !== "done").length
+      : 0;
+
+    const nextSteps = buildNextSteps({
+      activeSprint: activeSprintForNextSteps,
+      insights,
+      releaseReadinessConfigured: releaseReadiness.configured,
+      releaseEpicsPendingCount,
+    });
+
+    res.json({ insights, nextSteps, featuredIssues });
   }
 );
 
