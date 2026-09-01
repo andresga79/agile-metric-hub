@@ -30,6 +30,10 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
   const [sprintGoal, setSprintGoal] = useState<SprintGoal | null>(null);
   const [releaseReadiness, setReleaseReadiness] = useState<ReleaseReadiness | null>(null);
   const [insights, setInsights] = useState<any[]>([]);
+  const [structuralBottleneck, setStructuralBottleneck] = useState<any | null>(null);
+  const [nextSteps, setNextSteps] = useState<any[]>([]);
+  const [featuredIssues, setFeaturedIssues] = useState<any[]>([]);
+  const [healthDimensions, setHealthDimensions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const token = getAuthToken();
@@ -79,7 +83,11 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
         setSprints(sprintData?.sprints ?? []);
         setSprintGoal(goal ?? null);
         setReleaseReadiness(readiness ?? { configured: false });
-        setInsights(Array.isArray(insightRows) ? insightRows : []);
+        setInsights(Array.isArray(insightRows?.insights) ? insightRows.insights : []);
+        setNextSteps(Array.isArray(insightRows?.nextSteps) ? insightRows.nextSteps : []);
+        setFeaturedIssues(Array.isArray(insightRows?.featuredIssues) ? insightRows.featuredIssues : []);
+        setStructuralBottleneck(analytics?.structuralBottleneck ?? null);
+        setHealthDimensions(Array.isArray(health?.dimensions) ? health.dimensions : []);
       })
       .catch((err) => {
         console.error(err);
@@ -99,5 +107,6 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
   return {
     loading, error, cfdData, members, timeInStatus, healthScore, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
+    structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   };
 }
