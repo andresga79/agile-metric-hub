@@ -91,16 +91,17 @@ export function detectStructuralBottleneck(
 
 ### 2. `buildNextSteps(input)`
 
-Nueva función pura en `lib/report-insights.ts`.
+Nueva función pura en `lib/report-insights.ts`. **No incluye el bloqueo más
+antiguo** (corrección post brainstorming inicial, ver nota abajo) — cubre
+solo los tipos que son genuina regla de decisión con umbral.
 
 ```ts
 export interface NextStep {
-  type: "oldestBlocker" | "completionDrop" | "thresholdCrossing" | "activeSprint" | "productionReady";
+  type: "completionDrop" | "thresholdCrossing" | "activeSprint" | "productionReady";
   text: string; // ya compuesto en español, listo para renderizar
 }
 
 export function buildNextSteps(input: {
-  blockedIssues: { issueKey: string; summary: string; totalDays: number }[];
   activeSprint: { sprintName: string; completionRate: number; endDate: string | null } | null;
   insights: (CompletionDropInsight | ThresholdCrossingInsight)[];
   releaseReadinessConfigured: boolean;
@@ -108,40 +109,64 @@ export function buildNextSteps(input: {
 }): NextStep[]
 ```
 
-Reglas (orden = orden de aparición en la lista, sin reordenar por severidad —
-igual que el mockup):
-1. Si hay bloqueos activos → un ítem con el más antiguo (mayor `totalDays`).
-2. Un ítem por cada insight en `insights` (reusa el texto ya generado por
+Reglas (orden = orden de aparición en la lista):
+1. Un ítem por cada insight en `insights` (reusa el texto ya generado por
    `detectCompletionDrop`/`detectThresholdCrossing`, reformulado como acción:
    "revisar en retro la caída de finalización..." / "atender el cruce de
    umbral en...").
-3. Si hay sprint activo → un ítem con su nombre y % completado a la fecha.
-4. Si `releaseReadinessConfigured && releaseEpicsPendingCount > 0` → un ítem
+2. Si hay sprint activo → un ítem con su nombre y % completado a la fecha.
+3. Si `releaseReadinessConfigured && releaseEpicsPendingCount > 0` → un ítem
    genérico apuntando a la sección de Producción (sin fecha, ver "Fuera de
    alcance").
 
-Devuelve `[]` si no hay nada que decir (ningún KPI dispara, no hay bloqueos,
-no hay sprint activo) — la sección completa se omite en el frontend.
+Devuelve `[]` si no hay nada que decir.
 
-### 3. Bloque nuevo en la ruta `/report-insights`
+**Nota de corrección (post brainstorming, durante `writing-plans`):** el
+diseño original de esta función incluía un cuarto tipo, `oldestBlocker`,
+tomado de `blockedIssues`. Se descartó al escribir el plan de implementación
+por dos motivos concretos: (1) la detección de bloqueos activos en
+`analytics.ts` es ~250 líneas entrelazadas con lookups de overrides manuales
+en DB, sobre un conjunto de issues distinto al de "resueltos en el período"
+que ya se fetchea en esta ruta (bloqueos son casi siempre issues **no**
+resueltos) — reimplementarla acá para reusar solo `{key, summary, totalDays}`
+sería duplicar esa lógica sin necesidad; (2) el frontend (`artifacts/dashboard`)
+no puede importar código de `artifacts/api-server` (paquetes separados del
+monorepo), así que tampoco se puede compartir una función ahí. Como "tomar
+el bloqueo con más días" es un simple `sort`+`[0]`, no una regla de negocio
+con umbral, se resuelve componiéndolo en el frontend sobre `blockedIssues`
+que el hook ya trae de `/analytics/:period` (sin fetch nuevo), y anteponiendo
+ese ítem a la lista que devuelve `buildNextSteps`. Ver plan de implementación,
+Tasks 2 y 7.
 
-Junto al bloque existente de cycle/lead time, agregar:
+### 3. `detectStructuralBottleneck` se invoca en `/analytics/:period`, no en `/report-insights`
+
+**Nota de corrección (post brainstorming, durante `writing-plans`):** el
+diseño original asumía que `computePeriodMetrics` (ya llamado en
+`/report-insights` para cycle/lead time) devolvía `timeInStatus` y
+`blockedIssues`. No es así — esos campos se calculan en `analytics.ts` con
+una función separada (`computeTimeInStatus`) y lógica de ruta inline, sobre
+un conjunto de issues más amplio (`timeInStatusIssues`, no solo resueltos en
+el período). Recalcularlos en `/report-insights` sería duplicar esa
+preparación de datos. Se corrige así: `detectStructuralBottleneck` se llama
+directamente dentro del handler de `/analytics/:period`, inmediatamente
+después de que ese mismo handler calcula `timeInStatus` — sin fetch nuevo
+(el hook ya consume `/analytics/:period`), y se agrega `structuralBottleneck`
+a esa respuesta en vez de a la de `/report-insights`.
+
+### 4. Bloque nuevo en la ruta `/report-insights` (featured issues + next steps)
+
+Junto al bloque existente de cycle/lead time, agregar el cálculo de
+`featuredIssues` reusando `currentFiltered` (ya fetcheado y filtrado por esa
+misma ruta para cycle/lead time, sin segundo llamado a
+`getResolvedJiraIssuesInRange`):
 
 ```ts
-const periodIssues = await getResolvedJiraIssuesInRange(projectId, periodDays, 0, {})
-  .catch(() => [] as JiraIssue[]);
-const featuredIssues = periodIssues
-  .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+const featuredIssues = currentFiltered
   .map((i) => ({ key: i.key, summary: i.fields.summary, assignee: i.fields.assignee?.displayName ?? null, storyPoints: getStoryPoints(i) }))
   .filter((i) => i.storyPoints > 0)
   .sort((a, b) => b.storyPoints - a.storyPoints)
   .slice(0, 4);
 ```
-
-Reusa `currentIssues` (ya fetcheado por el bloque de cycle/lead time para el
-período actual) en vez de un segundo llamado a `getResolvedJiraIssuesInRange`
-— se filtra por tipo permitido y se ordena por story points sobre esa misma
-lista.
 
 El endpoint pasa a devolver una única respuesta compuesta en vez de solo
 `Insight[]`:
@@ -149,7 +174,6 @@ El endpoint pasa a devolver una única respuesta compuesta en vez de solo
 ```ts
 {
   insights: (CompletionDropInsight | ThresholdCrossingInsight)[],
-  structuralBottleneck: StructuralBottleneck | null,
   nextSteps: NextStep[],
   featuredIssues: FeaturedIssue[],
 }
@@ -157,7 +181,8 @@ El endpoint pasa a devolver una única respuesta compuesta en vez de solo
 
 (Cambio de shape de la respuesta — no es aditivo. El frontend de esta misma
 iteración se actualiza en el mismo commit/PR, no hay período de convivencia
-con clientes viejos.)
+con clientes viejos. `structuralBottleneck` viaja en la respuesta de
+`/analytics/:period`, no en esta.)
 
 ## Cambios de frontend
 
