@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useState, useCallback, useEffect } from "react";
+import { Link } from "wouter";
 import {
   useListAdminUsers,
   useCreateAdminUser,
@@ -577,6 +578,12 @@ export default function Admin() {
             {label}
           </button>
         ))}
+        <Link
+          href="/admin/release-keywords"
+          className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors border-border text-muted-foreground hover:bg-accent"
+        >
+          Releases
+        </Link>
       </div>
 
       {adminSection === "admin" && (
