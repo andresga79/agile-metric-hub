@@ -341,6 +341,24 @@ describe("resolveSprintWindowDays", () => {
     expect(result!.sprintsIncluded).toEqual(expect.arrayContaining([sprint2, sprint3]));
   });
 
+  it("bounds windowEnd to the most recently closed sprint, not now — so work resolved in a still-active later sprint doesn't leak in", () => {
+    const sprint1 = makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(60), endDate: daysAgo(46) });
+    const sprint2 = makeSprint({ id: 2, name: "Sprint 2", state: "closed", startDate: daysAgo(45), endDate: daysAgo(31), completeDate: daysAgo(30) });
+    const sprint3 = makeSprint({ id: 3, name: "Sprint 3", state: "active", startDate: daysAgo(29) });
+    const sprints = [sprint1, sprint2, sprint3];
+    const result = resolveSprintWindowDays(sprints, 2);
+    expect(result).not.toBeNull();
+    // completeDate takes precedence over the merely-planned endDate.
+    expect(result!.windowEnd?.toISOString()).toBe(sprint2.completeDate);
+  });
+
+  it("falls back to endDate for windowEnd when the most recently closed sprint has no completeDate", () => {
+    const sprint1 = makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(30), endDate: daysAgo(16) });
+    const result = resolveSprintWindowDays([sprint1], 1);
+    expect(result).not.toBeNull();
+    expect(result!.windowEnd?.toISOString()).toBe(new Date(sprint1.endDate!).toISOString());
+  });
+
   it("caps the returned days at the shared Jira lookback ceiling", () => {
     const sprints = [
       makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(200), endDate: daysAgo(186) }),

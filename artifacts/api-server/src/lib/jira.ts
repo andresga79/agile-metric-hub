@@ -639,7 +639,7 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
 export function resolveSprintWindowDays(
   sprints: JiraSprint[],
   sprintCount: number
-): { days: number; sprintsIncluded: JiraSprint[] } | null {
+): { days: number; sprintsIncluded: JiraSprint[]; windowStart: Date; windowEnd: Date | null } | null {
   const closed = sprints
     .filter((s) => s.state === "closed")
     .sort((a, b) => (sprintEndTime(b) ?? 0) - (sprintEndTime(a) ?? 0))
@@ -653,8 +653,23 @@ export function resolveSprintWindowDays(
   const startMs = new Date(earliest.startDate).getTime();
   if (Number.isNaN(startMs)) return null;
 
+  // `days` is a conservative (rounded-up) count used only to size the underlying Jira fetch —
+  // it's always >= the true span, so it never causes the fetch to miss anything. Callers that
+  // filter/aggregate results must use the exact `windowStart` below instead, or up to a day of
+  // work resolved BEFORE this sprint even started (rounding "up" to a whole day) leaks in.
   const rawDays = Math.max(1, Math.ceil((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
-  return { days: capLookbackDays(rawDays), sprintsIncluded: closed };
+  const windowStart = new Date(startMs);
+
+  // The most recently CLOSED of the included sprints bounds the window on the upper end too —
+  // otherwise "last N sprints" silently keeps growing to include whatever's being resolved in
+  // the currently-active sprint after that, which isn't one of the N sprints it claims to be.
+  // completeDate (when the sprint actually closed) takes precedence over the merely-planned
+  // endDate, matching the boundary buildSprintVelocityBuckets already uses per-sprint.
+  const mostRecentlyClosed = closed[0]!;
+  const endRaw = mostRecentlyClosed.completeDate ?? mostRecentlyClosed.endDate ?? null;
+  const windowEnd = endRaw ? new Date(endRaw) : null;
+
+  return { days: capLookbackDays(rawDays), sprintsIncluded: closed, windowStart, windowEnd };
 }
 
 // "<N>s" = últimos N sprints CERRADOS (solo válido para proyectos Scrum). Solo se soportan los

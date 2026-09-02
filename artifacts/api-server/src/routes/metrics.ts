@@ -91,9 +91,20 @@ async function computeMetrics(
   boardType: ProjectBoardType,
   sprints: JiraSprint[],
   allowedIssueTypes: string[],
-  sprintWindowSprints: JiraSprint[] | null
+  sprintWindowSprints: JiraSprint[] | null,
+  sprintWindowStart: Date | null,
+  sprintWindowEnd: Date | null
 ) {
-  const startDate = getStartDate(periodDays);
+  // periodDays is rounded UP to a whole calendar day (see resolveSprintWindowDays), so for a
+  // sprint-window period, getStartDate(periodDays) lands up to a day before the earliest included
+  // sprint actually started — use that sprint's exact start instead so "last N sprints" doesn't
+  // pull in work resolved before sprint 1 of the window even began.
+  const startDate = sprintWindowStart ?? getStartDate(periodDays);
+  // For a sprint-window period (2s/6s), don't let "resolved" bleed past the most recently
+  // closed of the included sprints — otherwise work finished in whatever sprint is active now
+  // keeps getting counted as part of "last N sprints" for as long as that sprint stays open.
+  const isWithinWindow = (resolvedAt: Date): boolean =>
+    resolvedAt >= startDate && (sprintWindowEnd === null || resolvedAt < sprintWindowEnd);
 
   const filteredIssues = issues.filter((issue) =>
     allowedIssueTypes.includes(getEffectiveIssueType(issue))
@@ -108,7 +119,7 @@ async function computeMetrics(
       }))
   );
   const resolved = resolvedWithDates
-    .filter((r) => r.resolvedAt && r.resolvedAt >= startDate)
+    .filter((r): r is { issue: JiraIssue; resolvedAt: Date } => r.resolvedAt !== null && isWithinWindow(r.resolvedAt))
     .map((r) => r.issue);
 
   const storyPointsTotal = resolved.reduce(
@@ -160,8 +171,8 @@ async function computeMetrics(
 
   const resolvedMap = new Map<string, Date>(
     resolvedWithDates
-      .filter((r) => r.resolvedAt && r.resolvedAt >= startDate)
-      .map((r) => [r.issue.id, r.resolvedAt!])
+      .filter((r): r is { issue: JiraIssue; resolvedAt: Date } => r.resolvedAt !== null && isWithinWindow(r.resolvedAt))
+      .map((r) => [r.issue.id, r.resolvedAt])
   );
 
   // Per-issue lead/cycle time, keyed by id — reused by both bucketing functions below so
@@ -414,7 +425,7 @@ router.get(
     }
 
     const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
-    const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindow?.sprintsIncluded ?? null);
+    const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindow?.sprintsIncluded ?? null, sprintWindow?.windowStart ?? null, sprintWindow?.windowEnd ?? null);
 
     // "vs previous period" trend badges on the report's KPI strip - only meaningful for the
     // fixed-length 1m/3m periods, not "Ns sprints" windows (whose previous window has no fixed
