@@ -912,7 +912,7 @@ type RCSearchResponse = {
       updated: string;
     };
   }[];
-  nextPageToken?: string;
+  isLast?: boolean;
 };
 
 // Jira project RC (Release Coordination) tracks production releases for all 5 células
@@ -922,17 +922,27 @@ export async function fetchReleaseCoordinationEpics(): Promise<RawRCEpic[]> {
   if (!isJiraConfigured()) return [];
 
   const fields = "summary,description,status,assignee,updated";
-  const jql = encodeURIComponent("project = RC ORDER BY updated DESC");
+  const maxResults = 50;
   const all: RawRCEpic[] = [];
-  let pageToken: string | null = null;
+  // Keyset pagination, not pageToken — see getOpenIssuesForProject's comment on why: Jira's
+  // nextPageToken never actually advances on this site. Without this, a >50-epic RC project
+  // wouldn't just undercount here — the dedup-free insert in release-sync.ts would throw on the
+  // table's unique(issue_key) constraint the moment a repeated page produced a duplicate key.
+  let lastSeenKey: string | null = null;
 
   try {
     for (let page = 0; page < 5; page++) {
+      const jql = encodeURIComponent(
+        `project = RC${lastSeenKey ? ` AND key > "${lastSeenKey}"` : ""} ORDER BY key ASC`
+      );
       const result: RCSearchResponse = await jiraFetch<RCSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=50&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}`
       );
 
-      for (const issue of result.issues ?? []) {
+      const pageIssues = result.issues ?? [];
+      if (pageIssues.length === 0) break;
+
+      for (const issue of pageIssues) {
         all.push({
           key: issue.key,
           summary: issue.fields.summary,
@@ -944,8 +954,8 @@ export async function fetchReleaseCoordinationEpics(): Promise<RawRCEpic[]> {
         });
       }
 
-      if (!result.nextPageToken) break;
-      pageToken = result.nextPageToken;
+      if (result.isLast || pageIssues.length < maxResults) break;
+      lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
   } catch (err) {
     logger.warn({ err }, "Failed to fetch RC (Release Coordination) epics");
@@ -1221,17 +1231,21 @@ export async function getSprintIssues(
     "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
   try {
     const allIssues: JiraIssue[] = [];
-    let pageToken: string | null = null;
+    // Keyset pagination, not pageToken — see getOpenIssuesForProject's comment on why: Jira's
+    // nextPageToken never actually advances on this site.
+    let lastSeenKey: string | null = null;
     for (let page = 0; page < 5; page++) {
-      const jql = encodeURIComponent(`sprint = ${sprintId} ORDER BY created DESC`);
+      const jql = encodeURIComponent(
+        `sprint = ${sprintId}${lastSeenKey ? ` AND key > "${lastSeenKey}"` : ""} ORDER BY key ASC`
+      );
       const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
       );
       const pageIssues = result.issues ?? [];
+      if (pageIssues.length === 0) break;
       allIssues.push(...pageIssues);
       if (result.isLast || pageIssues.length < maxResults) break;
-      pageToken = result.nextPageToken ?? null;
-      if (!pageToken) break;
+      lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
     return allIssues;
   } catch (err) {
@@ -1476,11 +1490,17 @@ export async function getFlaggedJiraIssuesForProject(
     const maxResults = 100;
     const MAX_PAGES = 50;
     const issues: JiraIssue[] = [];
-    let pageToken: string | null = null;
     let pageCount = 0;
-    const jql = encodeURIComponent(
-      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND Flagged is not EMPTY ORDER BY updated DESC`
-    );
+    // Keyset pagination, not pageToken — see getOpenIssuesForProject's comment on why: Jira's
+    // nextPageToken never actually advances on this site, and this query has no date range to
+    // chunk by (a long-flagged ticket has to stay visible no matter how old it is).
+    let lastSeenKey: string | null = null;
+    const buildJql = (afterKey: string | null): string =>
+      encodeURIComponent(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND Flagged is not EMPTY` +
+          (afterKey ? ` AND key > "${afterKey}"` : "") +
+          ` ORDER BY key ASC`
+      );
 
     for (;;) {
       if (++pageCount > MAX_PAGES) {
@@ -1489,15 +1509,16 @@ export async function getFlaggedJiraIssuesForProject(
       }
 
       const expandParam = includeChangelog ? "&expand=changelog" : "";
+      const jql = buildJql(lastSeenKey);
       const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}`
       );
 
       const pageIssues = result.issues ?? [];
+      if (pageIssues.length === 0) break;
       issues.push(...pageIssues);
       if (result.isLast || pageIssues.length < maxResults) break;
-      pageToken = result.nextPageToken ?? null;
-      if (!pageToken) break;
+      lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
 
     return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
