@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, TrendingUp } from "lucide-react";
+import { ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, TrendingUp, FlaskConical } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
 import {
   DropdownMenu,
@@ -12,10 +12,10 @@ import {
 
 const ORDERED_SECTIONS = [
   'health', 'evolution', 'flow', 'team', 'sprints', 'kanban',
-  'qa-rejected', 'forecast', 'analytics', 'report',
+  'qa-rejected', 'qa-work', 'forecast', 'analytics', 'report',
 ] as const;
 const PRIMARY_TAB_SECTIONS = ['health', 'flow', 'team', 'sprints', 'kanban', 'evolution'];
-const SECONDARY_TAB_SECTIONS = ['forecast', 'qa-rejected', 'analytics', 'report'];
+const SECONDARY_TAB_SECTIONS = ['forecast', 'qa-rejected', 'qa-work', 'analytics', 'report'];
 
 const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   sprints: <BarChart3 size={16} />,
@@ -31,6 +31,7 @@ const DROPDOWN_ICON_MAP: Record<string, React.ReactNode> = {
   analytics: <BarChart3 size={14} />,
   report: <FileText size={14} />,
   "qa-rejected": <ShieldAlert size={14} />,
+  "qa-work": <FlaskConical size={14} />,
 };
 
 const TAB_CLASS = "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md transition-colors";

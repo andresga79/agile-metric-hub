@@ -342,19 +342,23 @@ router.get(
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
     // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
-    const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    const isValueIssue = (i: JiraIssue): boolean => allowedIssueTypes.includes(getEffectiveIssueType(i));
+    // QA/test-management issue types (Test, Test Execution, Test Plan, Test Set) are tracked by a
+    // separate QA process, not customer-facing delivery — mixing them into cycle time/throughput/
+    // WIP is misleading (a Test Execution closes in minutes, a Historia takes days). Excluded here
+    // the same way Resumen's /metrics already excludes them; see the dedicated QA section for their
+    // own view of this work.
+    const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values()).filter(isValueIssue);
     const blockedSourceIssues = Array.from(
       new Map([...blockedScopeIssues, ...flaggedIssues].map((i) => [i.key, i])).values()
-    );
+    ).filter(isValueIssue);
     // Same period-scoped set, merged with every currently-open issue regardless of age — otherwise
     // time-in-status/bottleneck analysis silently drops any issue that's been open longer than the
     // selected period and wasn't resolved in it either.
     const timeInStatusIssues = Array.from(
       new Map([...uniqueIssues, ...openIssues].map((i) => [i.key, i])).values()
-    );
+    ).filter(isValueIssue);
 
-    // Issue type filter only applies to portfolio-level comparison.
-    // On the project detail page, ALL issue types are included for metrics.
     const metrics = await computePeriodMetrics(uniqueIssues, startDate, windowEnd ?? undefined);
 
     // --- WIP Aging Report (#2) ---
@@ -364,7 +368,7 @@ router.get(
     // period" on the 1M view, and silently disappears from its own aging report.
     const uniqueBlockedScopeIssues = Array.from(
       new Map(blockedScopeIssues.map((i) => [i.key, i])).values()
-    );
+    ).filter(isValueIssue);
     const inProgressIssues = uniqueBlockedScopeIssues.filter((i) => isIssueInProgress(i));
     const wipAging = await Promise.all(
       inProgressIssues.map(async (i) => {

@@ -12,9 +12,11 @@ import {
   getLeadTimeDays,
   getStoryPoints,
   mapIssueType,
+  getEffectiveIssueType,
   type JiraIssue,
 } from "../lib/jira";
 import { getEffectiveThresholds, normalize } from "../lib/health-thresholds";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
 
@@ -61,13 +63,19 @@ router.get(
     const isWithinWindow = (resolvedAt: Date): boolean =>
       resolvedAt >= startDate && (windowEnd === null || resolvedAt < windowEnd);
 
-    const [issues, thresholds] = await Promise.all([
+    const [allIssues, thresholds, allowedIssueTypes] = await Promise.all([
       // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
       // transition — without it, avgCycleTime silently degrades to lead time for every issue
       // (confirmed: this endpoint was returning avgCycleTime === avgLeadTime exactly).
       getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
       getEffectiveThresholds(projectId),
+      getPortfolioAllowedIssueTypes(),
     ]);
+    // QA/test-management issue types (Test, Test Execution, Test Plan, Test Set) are tracked by a
+    // separate QA process, not customer-facing delivery — mixing them into cycle time/throughput/
+    // WIP is misleading (a Test Execution closes in minutes, a Historia takes days). Excluded here
+    // the same way Resumen's /metrics already excludes them; see the dedicated QA section instead.
+    const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     // normalize()'s bad/good anchors come from Admin -> Health instead of fixed constants, so this
     // DORA-style score moves in lockstep with the rest of the app's health thresholds (same table

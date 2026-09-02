@@ -10,6 +10,7 @@ export const SECTION_NAMES = [
   "evolution",
   "team",
   "qa-rejected",
+  "qa-work",
   "analytics",
   "report",
   "targets",
@@ -94,6 +95,7 @@ export function getSectionLinks(
     { href: `/projects/${projectId}/evolution`, label: "Evolucion", section: "evolution" as ProjectSection },
     { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/qa-rejected`, label: "QA Rejected", section: "qa-rejected" as ProjectSection },
+    { href: `/projects/${projectId}/qa-work`, label: "QA", section: "qa-work" as ProjectSection },
     { href: `/projects/${projectId}/analytics`, label: "Analytics", section: "analytics" as ProjectSection },
     { href: `/projects/${projectId}/report`, label: "Report", section: "report" as ProjectSection },
   ];

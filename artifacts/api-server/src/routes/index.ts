@@ -24,6 +24,7 @@ import evolutionRouter from "./evolution";
 import blockedReasonsRouter from "./blocked-reasons";
 import reportInsightsRouter from "./report-insights";
 import releaseReadinessRouter from "./release-readiness";
+import qaWorkRouter from "./qa-work";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(adminRouter);
 router.use(blockedReasonsRouter);
 router.use(reportInsightsRouter);
 router.use(releaseReadinessRouter);
+router.use(qaWorkRouter);
 
 export default router;
