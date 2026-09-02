@@ -1506,6 +1506,7 @@ export async function getOpenIssuesForProject(
     const issues: JiraIssue[] = [];
     let pageToken: string | null = null;
     let pageCount = 0;
+    let lastSeenKey: string | null = null;
     // Scope "open" to work that's actually live: in progress, blocked (Flagged), or touched in
     // the last 30 days. The bare `resolutiondate is EMPTY` pulls in the project's entire backlog
     // (OLP alone had 27k+ such issues), forcing 50 sequential Jira pages (~30-60s) on every cache
@@ -1526,8 +1527,17 @@ export async function getOpenIssuesForProject(
       );
 
       const pageIssues = result.issues ?? [];
+      // Same nextPageToken-never-advances bug as getJiraIssuesForProject (see comment
+      // there): bail out the moment a page repeats instead of grinding through
+      // MAX_PAGES re-fetching identical results.
+      const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
+      if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
+        logger.warn({ projectId }, "Pagination stalled (Jira returned the same page again) while fetching open issues, stopping");
+        break;
+      }
       issues.push(...pageIssues);
       if (result.isLast || pageIssues.length < maxResults) break;
+      lastSeenKey = newLastKey;
       pageToken = result.nextPageToken ?? null;
       if (!pageToken) break;
     }

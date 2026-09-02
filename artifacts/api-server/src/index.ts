@@ -207,6 +207,30 @@ async function initDb() {
       );
     `);
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS release_epics (
+        id SERIAL PRIMARY KEY,
+        issue_key TEXT NOT NULL UNIQUE,
+        summary TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL,
+        status_category TEXT NOT NULL,
+        assignee TEXT,
+        jira_updated_at TIMESTAMPTZ NOT NULL,
+        synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_release_keywords (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (project_id, keyword)
+      );
+    `);
+
     // Clean stale cache entries from periods other than 30d
     await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
 
