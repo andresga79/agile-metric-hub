@@ -1269,8 +1269,12 @@ export async function getJiraIssuesForProject(
     // pagination at all. The inner loop below still attempts pagination
     // defensively in case a chunk genuinely exceeds 100, but bails out the
     // moment it detects the page isn't moving instead of grinding to MAX_PAGES.
+    // Jira treats a date-only JQL literal in a "<=" bound as that day's 00:00, not end-of-day —
+    // so `resolutiondate <= "2026-06-17"` silently excludes anything resolved after midnight on
+    // the 17th, and since the next chunk starts at "2026-06-18", that issue is never fetched by
+    // either chunk. Use an exclusive upper bound one day past `toDate` with "<" instead.
     const fetchPagedIssuesInRange = async (
-      buildJql: (from: string, to: string) => string,
+      buildJql: (from: string, toExclusive: string) => string,
       fromDate: Date,
       toDate: Date
     ): Promise<JiraIssue[]> => {
@@ -1278,7 +1282,8 @@ export async function getJiraIssuesForProject(
       let pageToken: string | null = null;
       let pageCount = 0;
       let lastSeenKey: string | null = null;
-      const jql = encodeURIComponent(buildJql(formatDate(fromDate), formatDate(toDate)));
+      const toExclusive = formatDate(new Date(toDate.getTime() + ONE_DAY_MS));
+      const jql = encodeURIComponent(buildJql(formatDate(fromDate), toExclusive));
 
       for (;;) {
         if (++pageCount > MAX_PAGES) break;
@@ -1290,7 +1295,7 @@ export async function getJiraIssuesForProject(
         const pageIssues = result.issues ?? [];
         const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
         if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
-          logger.warn({ projectId, jql: buildJql(formatDate(fromDate), formatDate(toDate)) }, "Pagination stalled (Jira returned the same page again), stopping");
+          logger.warn({ projectId, jql: buildJql(formatDate(fromDate), toExclusive) }, "Pagination stalled (Jira returned the same page again), stopping");
           break;
         }
         issues.push(...pageIssues);
@@ -1303,7 +1308,7 @@ export async function getJiraIssuesForProject(
       return issues;
     };
 
-    const fetchPagedIssuesChunked = async (buildJql: (from: string, to: string) => string): Promise<JiraIssue[]> => {
+    const fetchPagedIssuesChunked = async (buildJql: (from: string, toExclusive: string) => string): Promise<JiraIssue[]> => {
       const CHUNK_DAYS = 7;
       const CONCURRENCY = 4;
       const now = new Date();
@@ -1327,12 +1332,12 @@ export async function getJiraIssuesForProject(
     // Fetch resolved and unresolved streams separately so large active backlogs don't hide resolved issues.
     const [resolvedIssues, unresolvedIssues] = await Promise.all([
       fetchPagedIssuesChunked(
-        (from, to) =>
-          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate <= "${to}"`
+        (from, toExclusive) =>
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`
       ),
       fetchPagedIssuesChunked(
-        (from, to) =>
-          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${from}" AND created <= "${to}" AND resolutiondate is EMPTY`
+        (from, toExclusive) =>
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${from}" AND created < "${toExclusive}" AND resolutiondate is EMPTY`
       ),
     ]);
 
@@ -1381,9 +1386,12 @@ export async function getResolvedJiraIssuesInRange(
 
     const expandParam = includeChangelog ? "&expand=changelog" : "";
 
-    const fetchPage = async (from: string, to: string): Promise<JiraIssue[]> => {
+    // Same date-only "<=" boundary bug as getJiraIssuesForProject above: Jira reads a bare date
+    // in a "<=" bound as that day's 00:00, so anything resolved later that day falls into neither
+    // this chunk nor the next one. fetchPage's `to` here is always an exclusive upper bound.
+    const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> => {
       const jql = encodeURIComponent(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate <= "${to}"`
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`
       );
       const issues: JiraIssue[] = [];
       let pageToken: string | null = null;
@@ -1398,7 +1406,7 @@ export async function getResolvedJiraIssuesInRange(
         const pageIssues = result.issues ?? [];
         const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
         if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
-          logger.warn({ projectId, from, to }, "Pagination stalled (Jira returned the same page again), stopping");
+          logger.warn({ projectId, from, toExclusive }, "Pagination stalled (Jira returned the same page again), stopping");
           break;
         }
         issues.push(...pageIssues);
@@ -1421,7 +1429,11 @@ export async function getResolvedJiraIssuesInRange(
     const allIssues: JiraIssue[] = [];
     for (let i = 0; i < chunks.length; i += CONCURRENCY) {
       const batch = chunks.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(batch.map(([from, to]) => fetchPage(formatDate(from), formatDate(to))));
+      const results = await Promise.all(
+        batch.map(([from, to]) =>
+          fetchPage(formatDate(from), formatDate(new Date(to.getTime() + ONE_DAY_MS)))
+        )
+      );
       for (const r of results) allIssues.push(...r);
     }
 
