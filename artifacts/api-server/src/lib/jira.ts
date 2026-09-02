@@ -1531,16 +1531,25 @@ export async function getOpenIssuesForProject(
     const maxResults = 100;
     const MAX_PAGES = 50;
     const issues: JiraIssue[] = [];
-    let pageToken: string | null = null;
     let pageCount = 0;
+    // pageToken pagination doesn't survive contact with this Jira site for a large "open" result
+    // set (see getJiraIssuesForProject's comment on the same underlying bug: nextPageToken never
+    // actually advances the result window). getJiraIssuesForProject works around it by chunking
+    // the query into date ranges small enough to fit one page each, but "open" issues have no
+    // date range to chunk by — a long-open indeterminate issue has to stay visible regardless of
+    // how old it is. Use keyset pagination instead: sort by key and re-issue the query with
+    // `key > <last key seen>`, which never depends on Jira's broken cursor at all.
     let lastSeenKey: string | null = null;
     // Scope "open" to work that's actually live: in progress, blocked (Flagged), or touched in
     // the last 30 days. The bare `resolutiondate is EMPTY` pulls in the project's entire backlog
     // (OLP alone had 27k+ such issues), forcing 50 sequential Jira pages (~30-60s) on every cache
     // expiry while the vast majority of items sit untouched in To Do.
-    const jql = encodeURIComponent(
-      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND statusCategory != done AND (statusCategory = indeterminate OR Flagged is not EMPTY OR updated >= -30d) ORDER BY updated DESC`
-    );
+    const buildJql = (afterKey: string | null): string =>
+      encodeURIComponent(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND statusCategory != done AND (statusCategory = indeterminate OR Flagged is not EMPTY OR updated >= -30d)` +
+          (afterKey ? ` AND key > "${afterKey}"` : "") +
+          ` ORDER BY key ASC`
+      );
     const expandParam = includeChangelog ? "&expand=changelog" : "";
 
     for (;;) {
@@ -1549,24 +1558,16 @@ export async function getOpenIssuesForProject(
         break;
       }
 
+      const jql = buildJql(lastSeenKey);
       const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}`
       );
 
       const pageIssues = result.issues ?? [];
-      // Same nextPageToken-never-advances bug as getJiraIssuesForProject (see comment
-      // there): bail out the moment a page repeats instead of grinding through
-      // MAX_PAGES re-fetching identical results.
-      const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
-      if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
-        logger.warn({ projectId }, "Pagination stalled (Jira returned the same page again) while fetching open issues, stopping");
-        break;
-      }
+      if (pageIssues.length === 0) break;
       issues.push(...pageIssues);
       if (result.isLast || pageIssues.length < maxResults) break;
-      lastSeenKey = newLastKey;
-      pageToken = result.nextPageToken ?? null;
-      if (!pageToken) break;
+      lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
 
     return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
