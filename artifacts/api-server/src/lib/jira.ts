@@ -696,10 +696,13 @@ export async function resolvePeriodDays(
   projectId: string,
   period: string,
   boardType: ProjectBoardType
-): Promise<{ error: string } | { periodDays: number; sprintsIncluded: JiraSprint[] | null }> {
+): Promise<
+  | { error: string }
+  | { periodDays: number; sprintsIncluded: JiraSprint[] | null; windowStart: Date | null; windowEnd: Date | null }
+> {
   const sprintWindowCount = parseSprintWindowToken(period);
   if (sprintWindowCount === null) {
-    return { periodDays: periodToDays(period), sprintsIncluded: null };
+    return { periodDays: periodToDays(period), sprintsIncluded: null, windowStart: null, windowEnd: null };
   }
   if (boardType !== "scrum") {
     return { error: "Sprint-window periods (2s/6s) are only valid for Scrum projects." };
@@ -707,9 +710,18 @@ export async function resolvePeriodDays(
   const sprints = await getJiraSprints(projectId);
   const resolved = resolveSprintWindowDays(sprints, sprintWindowCount);
   if (!resolved) {
-    return { periodDays: periodToDays("3m"), sprintsIncluded: null };
+    return { periodDays: periodToDays("3m"), sprintsIncluded: null, windowStart: null, windowEnd: null };
   }
-  return { periodDays: resolved.days, sprintsIncluded: resolved.sprintsIncluded };
+  // windowStart/windowEnd are the exact sprint boundaries (see resolveSprintWindowDays) — callers
+  // must filter "resolved" against these, not against periodDays re-derived into a rounded
+  // calendar-day startDate, or they reproduce the same drift fixed in routes/metrics.ts: up to a
+  // day of work from before the window, and everything from whatever sprint is active now.
+  return {
+    periodDays: resolved.days,
+    sprintsIncluded: resolved.sprintsIncluded,
+    windowStart: resolved.windowStart,
+    windowEnd: resolved.windowEnd,
+  };
 }
 
 /** Groups resolved issues into one bucket per sprint (chronological order),

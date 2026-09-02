@@ -48,9 +48,18 @@ router.get(
       res.status(400).json({ error: resolvedWindow.error });
       return;
     }
-    const { periodDays } = resolvedWindow;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - periodDays);
+    const { periodDays, windowStart, windowEnd } = resolvedWindow;
+    // For a sprint-window period (2s/6s), bound "resolved" to the sprints' exact dates instead of
+    // a rounded periodDays-back calendar date with no upper bound — otherwise this drifts to
+    // include work from before the window started and everything resolved in whatever sprint is
+    // active now (same bug already fixed in routes/metrics.ts's /metrics/:period).
+    const startDate = windowStart ?? (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - periodDays);
+      return d;
+    })();
+    const isWithinWindow = (resolvedAt: Date): boolean =>
+      resolvedAt >= startDate && (windowEnd === null || resolvedAt < windowEnd);
 
     const [issues, thresholds] = await Promise.all([
       // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
@@ -77,7 +86,7 @@ router.get(
       }))
     );
     const resolved = resolvedWithDates
-      .filter((r) => r.resolvedAt && r.resolvedAt >= startDate)
+      .filter((r): r is { issue: JiraIssue; resolvedAt: Date } => r.resolvedAt !== null && isWithinWindow(r.resolvedAt))
       .map((r) => r.issue);
 
     const inProgress = issues.filter((i) => isIssueInProgress(i));

@@ -300,8 +300,11 @@ router.get(
       res.status(400).json({ error: resolvedWindow.error });
       return;
     }
-    const { periodDays } = resolvedWindow;
-    const startDate = getStartDate(periodDays);
+    const { periodDays, windowStart, windowEnd } = resolvedWindow;
+    // For a sprint-window period (2s/6s), bound to the sprints' exact dates instead of a rounded
+    // periodDays-back calendar date with no upper bound (same bug already fixed in
+    // routes/metrics.ts's /metrics/:period — see resolvePeriodDays' comment).
+    const startDate = windowStart ?? getStartDate(periodDays);
 
     if (req.query.refresh === "true") {
       await clearCache(issuesCacheKey(projectId, periodDays));
@@ -352,7 +355,7 @@ router.get(
 
     // Issue type filter only applies to portfolio-level comparison.
     // On the project detail page, ALL issue types are included for metrics.
-    const metrics = await computePeriodMetrics(uniqueIssues, startDate);
+    const metrics = await computePeriodMetrics(uniqueIssues, startDate, windowEnd ?? undefined);
 
     // --- WIP Aging Report (#2) ---
     // Use the wider 90-day fetch (same one blocked analysis uses), not the

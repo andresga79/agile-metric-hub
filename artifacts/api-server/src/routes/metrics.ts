@@ -472,7 +472,7 @@ router.get(
       res.status(400).json({ error: resolvedWindow.error });
       return;
     }
-    const { periodDays } = resolvedWindow;
+    const { periodDays, windowStart, windowEnd } = resolvedWindow;
 
     const [allProjects, issues, openIssues, allowedIssueTypes, portfolioRows] = await Promise.all([
       listJiraProjects(),
@@ -525,7 +525,12 @@ router.get(
 
     const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
     const openFiltered = openIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-    const startDate = getStartDate(periodDays);
+    // For a sprint-window period (2s/6s), bound to the sprints' exact dates instead of a rounded
+    // periodDays-back calendar date with no upper bound (same bug already fixed in
+    // routes/metrics.ts's /metrics/:period — see resolvePeriodDays' comment).
+    const startDate = windowStart ?? getStartDate(periodDays);
+    const isWithinWindow = (resolvedAt: Date): boolean =>
+      resolvedAt >= startDate && (windowEnd === null || resolvedAt < windowEnd);
 
     const memberMap = new Map<
       string,
@@ -567,7 +572,7 @@ router.get(
       if (!assignee) continue;
 
       const resolvedAt = await getResolutionDate(issue);
-      if (!isIssueDone(issue) || !resolvedAt || resolvedAt < startDate) continue;
+      if (!isIssueDone(issue) || !resolvedAt || !isWithinWindow(resolvedAt)) continue;
 
       const member = getOrCreateMember(assignee);
       member.resolved++;
