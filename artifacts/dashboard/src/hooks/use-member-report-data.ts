@@ -14,6 +14,7 @@ export function useMemberReportData(
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<any[]>([]);
+  const [wipAging, setWipAging] = useState<any[]>([]);
   const [healthDimensions, setHealthDimensions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export function useMemberReportData(
         setTrends(metricsData?.trends ?? null);
         setTimeInStatus(analytics?.timeInStatus ?? []);
         setBlockedIssues((analytics?.blockedIssues ?? []).filter((b: any) => b.isCurrentlyBlocked));
+        setWipAging(Array.isArray(analytics?.wipAging) ? analytics.wipAging : []);
         const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
         setHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
         setQaRejectionRate(
@@ -79,6 +81,6 @@ export function useMemberReportData(
 
   return {
     loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
-    blockedIssues, healthDimensions,
+    blockedIssues, wipAging, healthDimensions,
   };
 }

@@ -78,7 +78,7 @@ export default function ProjectMemberReport() {
   });
   const {
     loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
-    blockedIssues, healthDimensions,
+    blockedIssues, wipAging, healthDimensions,
   } = useMemberReportData(projectId, accountId, period);
 
   if (loading) return <div>{t("common.loading")}</div>;
@@ -93,6 +93,18 @@ export default function ProjectMemberReport() {
   const inDevelopment = memberIssues.filter((i: any) => i.isInProgress);
   const pending = memberIssues.filter((i: any) => !i.isInProgress && !i.isDone);
   const finished = memberIssues.filter((i: any) => i.isDone);
+
+  // Aging por issue: para "En desarrollo" reusamos el wipAging ya calculado por /analytics (misma
+  // detección de transición real a "in progress" y mismos umbrales de Admin -> Health que el resto
+  // de la app); para "Pendientes" no hay ese cálculo, así que mostramos días desde creado.
+  const wipAgingByKey = new Map(wipAging.map((w: any) => [w.key, w]));
+  const daysSince = (iso: string) =>
+    Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24)));
+  const AGING_BADGE_CLASSES: Record<string, string> = {
+    critical: "bg-red-500/15 text-red-400",
+    warning: "bg-orange-500/15 text-orange-400",
+    watch: "bg-amber-500/15 text-amber-400",
+  };
 
   // --- Desglose por tipo (Historia/Tarea/Bug/Epic/...), con lead/cycle time promedio por tipo ---
   const avgOf = (values: (number | null)[]) => {
@@ -208,12 +220,22 @@ export default function ProjectMemberReport() {
                 <p className="text-xs text-muted-foreground">{t("page.report.blockersEmpty")}</p>
               ) : (
                 <ul className="text-xs space-y-1">
-                  {items.slice(0, 8).map((i: any) => (
-                    <li key={i.id} className="truncate">
-                      <span className="font-mono text-primary mr-1">{i.key}</span>
-                      <span className="text-muted-foreground">{i.summary}</span>
-                    </li>
-                  ))}
+                  {items.slice(0, 8).map((i: any) => {
+                    const wip = wipAgingByKey.get(i.key);
+                    const agingDays = wip ? wip.daysInProgress : i.isDone ? null : daysSince(i.createdAt);
+                    const agingClass = wip?.alertLevel ? AGING_BADGE_CLASSES[wip.alertLevel] : "bg-muted text-muted-foreground";
+                    return (
+                      <li key={i.id} className="truncate">
+                        <span className="font-mono text-primary mr-1">{i.key}</span>
+                        <span className="text-muted-foreground">{i.summary}</span>
+                        {agingDays !== null && (
+                          <span className={`ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${agingClass}`}>
+                            {agingDays}d
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                   {items.length > 8 && (
                     <li className="text-muted-foreground">+{items.length - 8} {t("page.team.more")}</li>
                   )}
