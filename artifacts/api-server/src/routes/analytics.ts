@@ -341,8 +341,16 @@ router.get(
     ]);
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
+    // Optional per-team-member scoping (accountId), used by the member report page to reuse
+    // this same project-level computation for a single assignee instead of duplicating it.
+    const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+    const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
+    const matchesAssignee = (i: JiraIssue): boolean =>
+      !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId;
+
     // Dedup issues by key — Jira API pagination can return the same issue on multiple pages
-    const isValueIssue = (i: JiraIssue): boolean => allowedIssueTypes.includes(getEffectiveIssueType(i));
+    const isValueIssue = (i: JiraIssue): boolean =>
+      allowedIssueTypes.includes(getEffectiveIssueType(i)) && matchesAssignee(i);
     // QA/test-management issue types (Test, Test Execution, Test Plan, Test Set) are tracked by a
     // separate QA process, not customer-facing delivery — mixing them into cycle time/throughput/
     // WIP is misleading (a Test Execution closes in minutes, a Historia takes days). Excluded here
@@ -632,7 +640,7 @@ router.get(
       const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
         includeChangelog: true,
       }).catch(() => [] as JiraIssue[]);
-      const prevFiltered = prevIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+      const prevFiltered = prevIssues.filter(isValueIssue);
       if (prevFiltered.length > 0) {
         previousPeriod = await computePeriodMetrics(prevFiltered, prevStartDate, prevEndDate);
       }

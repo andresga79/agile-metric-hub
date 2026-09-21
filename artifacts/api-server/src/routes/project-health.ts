@@ -75,7 +75,13 @@ router.get(
     // separate QA process, not customer-facing delivery — mixing them into cycle time/throughput/
     // WIP is misleading (a Test Execution closes in minutes, a Historia takes days). Excluded here
     // the same way Resumen's /metrics already excludes them; see the dedicated QA section instead.
-    const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+    // Optional per-team-member scoping (accountId), used by the member report page to reuse
+    // this same project-level computation for a single assignee instead of duplicating it.
+    const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+    const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
+    const issues = allIssues
+      .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+      .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
 
     // normalize()'s bad/good anchors come from Admin -> Health instead of fixed constants, so this
     // DORA-style score moves in lockstep with the rest of the app's health thresholds (same table

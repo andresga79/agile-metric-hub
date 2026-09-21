@@ -10,6 +10,7 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import ProjectDetail from "@/pages/project-detail";
 import ProjectTeam from "@/pages/project-team";
+import ProjectMemberReport from "@/pages/project-member-report";
 import ProjectHealth from "@/pages/project-health";
 import ProjectForecast from "@/pages/project-forecast";
 import ProjectAnalytics from "@/pages/project-analytics";
@@ -117,6 +118,9 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/team">
         {() => <SectionRoute section="team" component={ProjectTeam} />}
+      </Route>
+      <Route path="/projects/:projectId/team/:accountId/report">
+        {() => <SectionRoute section="report" component={ProjectMemberReport} />}
       </Route>
       <Route path="/projects/:projectId/health">
         {() => <SectionRoute section="health" component={ProjectHealth} />}

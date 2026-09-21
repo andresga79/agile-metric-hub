@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Users, ExternalLink } from "lucide-react";
+import { ArrowLeft, Users, ExternalLink, FileText } from "lucide-react";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 
@@ -175,6 +175,13 @@ export default function ProjectTeam() {
                           </div>
                         )}
                         <span className="font-medium">{member.displayName}</span>
+                        <Link
+                          href={`/projects/${project.id}/team/${member.accountId}/report`}
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                          title={t('page.memberReport.title')}
+                        >
+                          <FileText size={14} />
+                        </Link>
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono">{member.issuesResolved}</TableCell>

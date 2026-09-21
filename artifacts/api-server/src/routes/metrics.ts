@@ -249,12 +249,15 @@ async function computeMetrics(
 async function computePreviousPeriodSummary(
   projectId: string,
   periodDays: number,
-  allowedIssueTypes: string[]
+  allowedIssueTypes: string[],
+  assigneeAccountId: string | null
 ): Promise<{ resolvedCount: number; avgCycleTime: number; avgLeadTime: number }> {
   const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
     includeChangelog: true,
   }).catch(() => [] as JiraIssue[]);
-  const filtered = prevIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+  const filtered = prevIssues
+    .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+    .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
 
   const leadTimes = (await Promise.all(filtered.map((i) => getLeadTimeDays(i)))).filter(
     (v): v is number => v !== null
@@ -424,7 +427,15 @@ router.get(
       }
     }
 
-    const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    // Optional per-team-member scoping (accountId), used by the member report page to reuse
+    // this same project-level computation for a single assignee instead of duplicating it.
+    const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+    const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
+
+    const uniqueAll = Array.from(new Map(issues.map((i) => [i.key, i])).values());
+    const unique = assigneeAccountId
+      ? uniqueAll.filter((i) => i.fields.assignee?.accountId === assigneeAccountId)
+      : uniqueAll;
     const metrics = await computeMetrics(unique, period, periodDays, projectId, boardType, sprints, allowedIssueTypes, sprintWindow?.sprintsIncluded ?? null, sprintWindow?.windowStart ?? null, sprintWindow?.windowEnd ?? null);
 
     // "vs previous period" trend badges on the report's KPI strip - only meaningful for the
@@ -434,7 +445,7 @@ router.get(
     let previousPeriod: { resolvedCount: number; avgCycleTime: number; avgLeadTime: number } | null = null;
     let trends: { resolvedCount: number; cycleTime: number; leadTime: number } | null = null;
     if (compareTo && sprintWindowCount === null) {
-      previousPeriod = await computePreviousPeriodSummary(projectId, periodDays, allowedIssueTypes);
+      previousPeriod = await computePreviousPeriodSummary(projectId, periodDays, allowedIssueTypes, assigneeAccountId);
       trends = {
         resolvedCount: calculateTrend(metrics.resolvedCount, previousPeriod.resolvedCount),
         cycleTime: calculateTrend(metrics.cycleTime, previousPeriod.avgCycleTime),
@@ -715,14 +726,23 @@ router.get(
       getOpenIssuesForProject(projectId),
       getPortfolioAllowedIssueTypes(),
     ]);
+    // Optional per-team-member scoping (accountId), used by the member report page to reuse
+    // this same project-level fetch for a single assignee instead of duplicating it.
+    const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+    const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
+
     const combined = Array.from(new Map([...issues, ...openIssues].map((i) => [i.id, i])).values());
-    const filtered = combined.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+    const filtered = combined
+      .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+      .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
 
     const mapped = await Promise.all(
       filtered.map(async (i) => {
         const resolvedAt = await getResolutionDate(i);
         const rawCycleTime = await getCycleTimeDays(i);
         const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
+        const rawLeadTime = await getLeadTimeDays(i);
+        const leadTimeDays = rawLeadTime !== null ? Math.round(rawLeadTime * 10) / 10 : null;
 
         return {
           id: i.id,
@@ -730,14 +750,19 @@ router.get(
           summary: i.fields.summary,
           status: i.fields.status.name,
           issueType: i.fields.issuetype.name,
+          // Same Story/Bug/Task/Epic/Subtask/Other bucketing sprint-metrics' breakdown already
+          // uses, so a per-member type breakdown reads consistently with the rest of the app.
+          mappedType: getEffectiveIssueType(i),
           priority: i.fields.priority.name,
           assignee: i.fields.assignee?.displayName ?? null,
           assigneeAccountId: i.fields.assignee?.accountId ?? null,
           isInProgress: isIssueInProgress(i),
+          isDone: isIssueDone(i),
           storyPoints: getStoryPoints(i) || null,
           createdAt: i.fields.created,
           resolvedAt: resolvedAt?.toISOString() ?? null,
           cycleTimeDays,
+          leadTimeDays,
         };
       })
     );

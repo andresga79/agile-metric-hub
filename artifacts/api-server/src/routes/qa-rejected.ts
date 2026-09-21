@@ -192,9 +192,14 @@ router.get(
       getDevReturnStatusSet(projectId),
     ]);
 
+    // Optional per-team-member scoping (accountId), used by the member report page to reuse
+    // this same project-level computation for a single assignee instead of duplicating it.
+    const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+    const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
+
     const issues = Array.from(
       new Map([...periodIssues, ...openIssues].map((issue) => [issue.id, issue])).values()
-    );
+    ).filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
 
     // --- Rejection detection (existing) ---
     // Only transitions inside the selected period should count toward "1m"/"3m"

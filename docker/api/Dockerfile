@@ -1,5 +1,8 @@
 FROM node:22-bullseye-slim AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+# bullseye is EOL — deb.debian.org/security.debian.org no longer serve some pinned bullseye
+# package builds (e.g. openssl 1.1.1w-0+deb11u8), so point apt at the archive instead.
+RUN printf 'deb http://archive.debian.org/debian bullseye main\n' > /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@10
 WORKDIR /app
 
