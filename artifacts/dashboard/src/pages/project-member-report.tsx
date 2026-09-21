@@ -94,17 +94,10 @@ export default function ProjectMemberReport() {
   const pending = memberIssues.filter((i: any) => !i.isInProgress && !i.isDone);
   const finished = memberIssues.filter((i: any) => i.isDone);
 
-  // Aging por issue: para "En desarrollo" reusamos el wipAging ya calculado por /analytics (misma
-  // detección de transición real a "in progress" y mismos umbrales de Admin -> Health que el resto
-  // de la app); para "Pendientes" no hay ese cálculo, así que mostramos días desde creado.
+  // Días trabajando en cada item "En desarrollo" — reusa el wipAging ya calculado por /analytics
+  // (misma detección de transición real a "in progress" que el resto de la app), sin el badge de
+  // color de alerta ni el dato de días-desde-creado en Pendientes (no aplica: todavía no arrancó).
   const wipAgingByKey = new Map(wipAging.map((w: any) => [w.key, w]));
-  const daysSince = (iso: string) =>
-    Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24)));
-  const AGING_BADGE_CLASSES: Record<string, string> = {
-    critical: "bg-red-500/15 text-red-400",
-    warning: "bg-orange-500/15 text-orange-400",
-    watch: "bg-amber-500/15 text-amber-400",
-  };
 
   // --- Desglose por tipo (Historia/Tarea/Bug/Epic/...), con lead/cycle time promedio por tipo ---
   const avgOf = (values: (number | null)[]) => {
@@ -221,16 +214,19 @@ export default function ProjectMemberReport() {
               ) : (
                 <ul className="text-xs space-y-1">
                   {items.slice(0, 8).map((i: any) => {
-                    const wip = wipAgingByKey.get(i.key);
-                    const agingDays = wip ? wip.daysInProgress : i.isDone ? null : daysSince(i.createdAt);
-                    const agingClass = wip?.alertLevel ? AGING_BADGE_CLASSES[wip.alertLevel] : "bg-muted text-muted-foreground";
+                    // Días trabajando en el item — solo tiene sentido para lo que está En desarrollo
+                    // (fecha real de entrada a "in progress", vía /analytics). Pendientes y Finalizados
+                    // no muestran este dato: uno no empezó, el otro ya no está "trabajándose".
+                    const workingDays = i.isInProgress ? wipAgingByKey.get(i.key)?.daysInProgress ?? null : null;
                     return (
-                      <li key={i.id} className="truncate">
-                        <span className="font-mono text-primary mr-1">{i.key}</span>
-                        <span className="text-muted-foreground">{i.summary}</span>
-                        {agingDays !== null && (
-                          <span className={`ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${agingClass}`}>
-                            {agingDays}d
+                      <li key={i.id} className="flex items-baseline gap-1.5">
+                        <span className="min-w-0 truncate">
+                          <span className="font-mono text-primary mr-1">{i.key}</span>
+                          <span className="text-muted-foreground">{i.summary}</span>
+                        </span>
+                        {workingDays !== null && (
+                          <span className="shrink-0 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                            {workingDays}d {t("page.memberReport.working")}
                           </span>
                         )}
                       </li>

@@ -344,6 +344,7 @@
   "page.memberReport.defectsAssigned": "Defects assigned",
   "page.memberReport.defectsResolved": "Resolved",
   "page.memberReport.defectsActive": "Active",
+  "page.memberReport.working": "working",
   "page.report.subtitle": "Project metrics summary",
   "page.report.reportTitle": "Project Report",
   "page.report.throughput": "Throughput",
