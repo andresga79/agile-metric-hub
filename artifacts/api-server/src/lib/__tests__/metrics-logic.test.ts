@@ -11,6 +11,7 @@ import {
   isCarryoverIssue,
   resolveSprintWindowDays,
   buildSprintVelocityBuckets,
+  sprintWindowHalves,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -422,5 +423,44 @@ describe("buildSprintVelocityBuckets", () => {
     const buckets = buildSprintVelocityBuckets([issueA, issueB], resolvedMap, [sprint1], leadCycleByIssueId);
 
     expect(buckets).toEqual([{ label: "Sprint 1", value: 0, avgCycleTime: 3, avgLeadTime: 5 }]);
+  });
+});
+
+describe("sprintWindowHalves", () => {
+  const s1 = makeSprint({ id: 1, name: "S1", startDate: "2026-06-01T00:00:00.000Z", endDate: "2026-06-12T00:00:00.000Z" });
+  // Gap between sprints + a longer second sprint: the case where a time-midpoint split
+  // doesn't line up with sprint boundaries.
+  const s2 = makeSprint({ id: 2, name: "S2", startDate: "2026-06-16T00:00:00.000Z", endDate: "2026-07-03T00:00:00.000Z" });
+
+  const issues = [
+    makeIssue({ id: "1", fields: { customfield_10016: 3 } }),
+    makeIssue({ id: "2", fields: { customfield_10016: 1 } }),
+    makeIssue({ id: "3", fields: { customfield_10016: 8 } }),
+    makeIssue({ id: "4", fields: { customfield_10016: 5 } }), // resolved in the gap -> no sprint
+  ];
+  const resolvedMap = new Map<string, Date>([
+    ["1", new Date("2026-06-05T00:00:00.000Z")],
+    ["2", new Date("2026-06-11T00:00:00.000Z")],
+    ["3", new Date("2026-06-17T00:00:00.000Z")], // early in S2, before the window's time midpoint
+    ["4", new Date("2026-06-14T00:00:00.000Z")],
+  ]);
+
+  it("compares per-sprint values using the same assignment as buildSprintVelocityBuckets", () => {
+    const halves = sprintWindowHalves(issues, resolvedMap, [s2, s1]);
+    const buckets = buildSprintVelocityBuckets(issues, resolvedMap, [s2, s1], new Map());
+    expect(halves).toEqual({ firstSp: buckets[0]!.value, secondSp: buckets[1]!.value, firstCount: 2, secondCount: 1 });
+    expect(halves).toEqual({ firstSp: 4, secondSp: 8, firstCount: 2, secondCount: 1 });
+  });
+
+  it("averages per sprint so an odd sprint count doesn't favor one half", () => {
+    const s3 = makeSprint({ id: 3, name: "S3", startDate: "2026-07-06T00:00:00.000Z", endDate: "2026-07-17T00:00:00.000Z" });
+    const withS3 = [...issues, makeIssue({ id: "5", fields: { customfield_10016: 2 } })];
+    const map = new Map(resolvedMap).set("5", new Date("2026-07-10T00:00:00.000Z"));
+    // first = [S1] -> 4 SP; second = [S2, S3] -> (8 + 2) / 2 = 5 SP
+    expect(sprintWindowHalves(withS3, map, [s1, s2, s3])).toEqual({ firstSp: 4, secondSp: 5, firstCount: 2, secondCount: 1 });
+  });
+
+  it("returns null for a single sprint", () => {
+    expect(sprintWindowHalves(issues, resolvedMap, [s1])).toBeNull();
   });
 });

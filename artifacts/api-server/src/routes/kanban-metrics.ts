@@ -18,6 +18,7 @@ import {
   KANBAN_EXCLUDED_ISSUE_TYPES,
 } from "../lib/portfolio-metric-settings";
 import { requireAuth, requireSectionView } from "../middleware/auth";
+import { isoWeekStart } from "../lib/iso-week";
 
 const router: IRouter = Router();
 const KANBAN_EXCLUDED_ISSUE_TYPES_SET: Set<string> = new Set(KANBAN_EXCLUDED_ISSUE_TYPES);
@@ -47,25 +48,6 @@ interface KanbanMetricsResponse {
     totalCompletedIssues: number;
     totalCompletedStoryPoints: number;
   };
-}
-
-function getISOWeek(date: Date): { year: number; week: number; weekStart: string } {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  // Use same ISO calculation as analytics.ts for consistency
-  const temp = new Date(d.valueOf());
-  temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
-  const year = temp.getFullYear();
-  const week = Math.floor((temp.getTime() - new Date(year, 0, 4).getTime()) / 604800000) + 1;
-  
-  // Calculate Monday of this ISO week: subtract days since Monday
-  // dayNum: 0=Monday, 1=Tuesday, ..., 6=Sunday
-  const dayNum = (d.getDay() + 6) % 7;
-  const monday = new Date(d.valueOf());
-  monday.setDate(monday.getDate() - dayNum);
-  const weekStartStr = monday.toISOString().split("T")[0]!;
-  
-  return { year, week, weekStart: weekStartStr };
 }
 
 function formatWeekLabel(weekStartStr: string): string {
@@ -115,11 +97,11 @@ router.get(
     // Generate week buckets using ISO weeks for consistency with analytics
     const emptyWeeks: WeekMetric[] = [];
     const now = new Date();
-    const startISO = getISOWeek(new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000));
-    const endISO = getISOWeek(now);
+    const startWeek = isoWeekStart(new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000));
+    const endWeek = isoWeekStart(now);
     
-    let currentDate = new Date(startISO.weekStart);
-    while (currentDate <= new Date(endISO.weekStart)) {
+    let currentDate = new Date(startWeek);
+    while (currentDate <= new Date(endWeek)) {
       const weekStartStr = currentDate.toISOString().split("T")[0]!;
       emptyWeeks.push({
         weekStart: weekStartStr,
@@ -163,8 +145,7 @@ router.get(
     // Group by ISO week
     const weekMap = new Map<string, JiraIssue[]>();
     for (const { issue, resolvedAt } of withResolved) {
-      const isoInfo = getISOWeek(resolvedAt);
-      const weekStart = isoInfo.weekStart;
+      const weekStart = isoWeekStart(resolvedAt);
       const existing = weekMap.get(weekStart) ?? [];
       existing.push(issue);
       weekMap.set(weekStart, existing);

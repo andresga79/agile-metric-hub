@@ -31,6 +31,7 @@ import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-t
 import { detectStructuralBottleneck } from "../lib/report-insights";
 import { db, blockedReasonsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
+import { isoWeekLabel } from "../lib/iso-week";
 
 const router: IRouter = Router();
 
@@ -60,15 +61,6 @@ function isFlaggedTransition(item: { field: string; fieldId?: string }): boolean
 const GENERIC_FLAG_COMMENT_RE = /^(marca (a[ñn]adida|quitada|removida)|flag (added|removed))\.?$/i;
 function isGenericFlagComment(text: string): boolean {
   return GENERIC_FLAG_COMMENT_RE.test(text.trim());
-}
-
-function getISOWeek(date: Date): string {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const year = d.getFullYear();
-  const week = Math.floor((d.getTime() - new Date(year, 0, 4).getTime()) / 604800000) + 1;
-  return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
 // Admin -> Health configures wipAging as a (goodValue, warningValue) pair (defaults 3d / 14d).
@@ -243,7 +235,7 @@ export async function computePeriodMetrics(
   const weekCount = new Map<string, number>();
   for (const r of resolvedWithDates) {
     if (!r.resolvedAt || r.resolvedAt < startDate || (endDate && r.resolvedAt >= endDate)) continue;
-    const week = getISOWeek(r.resolvedAt);
+    const week = isoWeekLabel(r.resolvedAt);
     weekCount.set(week, (weekCount.get(week) ?? 0) + 1);
   }
   const throughputOverTime = Array.from(weekCount.entries())

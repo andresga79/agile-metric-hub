@@ -5,6 +5,7 @@ import { requireAuth, requireSectionView } from "../middleware/auth";
 import { getJiraProject, getProjectBoardType, getJiraSprints, getSprintIssues } from "../lib/jira";
 import { getProjectSnapshots, computeSprintSnapshot } from "../lib/metric-snapshots";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
+import { isoWeek } from "../lib/iso-week";
 
 interface EvolutionPeriod {
   label: string;
@@ -59,19 +60,6 @@ async function buildSprintPeriods(projectId: string): Promise<EvolutionPeriod[]>
 // short, consistent recent window instead of growing unbounded as the daily sync piles up weeks.
 const MAX_EVOLUTION_WEEKS = 8;
 
-// ISO 8601 week number (1-53) for the Monday `weekStart` falls on. Short and collision-free on
-// the X axis - unlike "May 25"-style date labels, which Recharts starts silently dropping once a
-// chart has to fit more than ~8 of them, making the spacing look broken.
-function isoWeekNumber(weekStart: string): number {
-  const date = new Date(weekStart);
-  date.setHours(0, 0, 0, 0);
-  // Thursday of this week determines the ISO year/week per the standard.
-  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
-  const firstThursday = new Date(date.getFullYear(), 0, 4);
-  firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
-  return 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000));
-}
-
 // "Ago 10 - Ago 16": mirrors kanban-metrics.ts's formatWeekLabel so the tooltip here reads with
 // the exact same phrasing as the Kanban Semanal breakdown table - the "S25" tick is compact, but
 // hovering it should say the same thing that page already calls that week.
@@ -125,7 +113,7 @@ router.get(
     const periods: EvolutionPeriod[] = isScrum
       ? await buildSprintPeriods(projectId)
       : (await getProjectSnapshots(projectId)).slice(-MAX_EVOLUTION_WEEKS).map((s) => ({
-          label: `S${isoWeekNumber(s.weekStart)}`,
+          label: `S${isoWeek(new Date(s.weekStart)).week}`,
           rangeLabel: formatWeekRange(s.weekStart),
           start: s.weekStart,
           isActive: false,

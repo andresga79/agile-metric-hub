@@ -11,20 +11,11 @@ import {
   getDevReturnStatusSet,
   getStatusCategoryMap,
   findQaRejections,
+  JIRA_MAX_LOOKBACK_DAYS,
   type JiraIssue,
 } from "./jira";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
-
-/** Monday of the ISO week containing `date`, as a YYYY-MM-DD string.
- *  Matches the bucketing used by kanban-metrics.ts so weeks line up across views. */
-function isoWeekStart(date: Date): string {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const dayNum = (d.getDay() + 6) % 7; // 0=Monday .. 6=Sunday
-  const monday = new Date(d.valueOf());
-  monday.setDate(monday.getDate() - dayNum);
-  return monday.toISOString().split("T")[0]!;
-}
+import { isoWeekStart } from "./iso-week";
 
 interface WeekAccumulator {
   leadTimes: number[];
@@ -96,7 +87,7 @@ export async function computeWeeklySnapshots(
   // Changelogs can carry events from long before the lookback window (an issue
   // resolved this week may have been created months ago) - skip anything older
   // than the window so a single old transition can't create a phantom week.
-  const windowStart = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const windowStart = Date.now() - JIRA_MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
   for (const issue of issues) {
     const histories = issue.changelog?.histories ?? [];
     for (const h of histories) {
@@ -131,12 +122,25 @@ export async function computeWeeklySnapshots(
     .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
 }
 
-/** Recomputes and upserts weekly snapshots for a project. Rows for weeks still
+/** Weeks safe to persist: only those starting on/after the lookback window's start. The week
+ *  straddling the window edge is only partly covered by the fetched issues, and it's the one
+ *  about to age out - upserting it would overwrite a complete row with an ever-smaller partial
+ *  one each day, so the value that finally "freezes" is the most truncated one (seen live:
+ *  OLP's 2026-06-01/08/15 rows ended up stored as throughput 0). */
+export function snapshotsFullyInWindow<T extends { weekStart: string }>(
+  snapshots: T[],
+  windowStart: Date
+): T[] {
+  return snapshots.filter((s) => new Date(`${s.weekStart}T00:00:00Z`).getTime() >= windowStart.getTime());
+}
+
+/** Recomputes and upserts weekly snapshots for a project. Rows for weeks fully
  *  inside the live Jira lookback window get refreshed; rows for weeks that have
- *  since aged out of that window are left untouched, so they become the
+ *  started aging out of that window are left untouched, so they become the
  *  project's only remaining record of that period. */
 export async function storeWeeklySnapshots(projectId: string, issues: JiraIssue[]): Promise<void> {
-  const snapshots = await computeWeeklySnapshots(projectId, issues);
+  const windowStart = new Date(Date.now() - JIRA_MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const snapshots = snapshotsFullyInWindow(await computeWeeklySnapshots(projectId, issues), windowStart);
 
   for (const snapshot of snapshots) {
     await db

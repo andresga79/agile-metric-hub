@@ -768,6 +768,47 @@ export function buildSprintVelocityBuckets(
   });
 }
 
+/** Earlier-half vs later-half averages per sprint for a sprint-window period ("2s"/"6s"), using
+ *  the exact same sprint assignment as buildSprintVelocityBuckets so the trend badge agrees with
+ *  the per-sprint chart. Splitting the window at its time midpoint instead doesn't line up with
+ *  sprint boundaries (uneven sprint lengths, gaps between sprints) and inflated OLP's 2s trend
+ *  to +232% when its two sprints went 34 -> 47 SP (+38%). Averages (not totals) so an odd sprint
+ *  count doesn't give one half more sprints to sum over. Null for fewer than 2 sprints. */
+export function sprintWindowHalves(
+  resolved: JiraIssue[],
+  resolvedMap: Map<string, Date>,
+  closedSprints: JiraSprint[]
+): { firstSp: number; secondSp: number; firstCount: number; secondCount: number } | null {
+  // A single sprint has no halves to compare - caller falls back to the time-midpoint split.
+  if (closedSprints.length < 2) return null;
+  const chronological = [...closedSprints].sort((a, b) => {
+    const aStart = a.startDate ? new Date(a.startDate).getTime() : 0;
+    const bStart = b.startDate ? new Date(b.startDate).getTime() : 0;
+    return aStart - bStart;
+  });
+  const perSprint = chronological.map((sprint) => {
+    const start = sprint.startDate ? new Date(sprint.startDate).getTime() : -Infinity;
+    const endRaw = sprint.completeDate ?? sprint.endDate ?? null;
+    const end = endRaw ? new Date(endRaw).getTime() : Infinity;
+    const issues = resolved.filter((issue) => {
+      const t = resolvedMap.get(issue.id)?.getTime();
+      return t !== undefined && t >= start && t < end;
+    });
+    return { sp: issues.reduce((sum, i) => sum + getStoryPoints(i), 0), count: issues.length };
+  });
+
+  const mid = Math.floor(perSprint.length / 2);
+  const first = perSprint.slice(0, mid);
+  const second = perSprint.slice(mid);
+  const mean = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  return {
+    firstSp: mean(first.map((s) => s.sp)),
+    secondSp: mean(second.map((s) => s.sp)),
+    firstCount: mean(first.map((s) => s.count)),
+    secondCount: mean(second.map((s) => s.count)),
+  };
+}
+
 const JIRA_URL = process.env["JIRA_URL"] ?? "";
 const JIRA_TIMEOUT_MS = 10000;
 const JIRA_EMAIL = process.env["JIRA_EMAIL"] ?? "";
@@ -870,17 +911,17 @@ export async function listJiraProjects(options?: { forceRefresh?: boolean }): Pr
     return getMockProjects();
   }
 
+  // The fallback lives outside withCache on purpose: a Jira hiccup must not get cached as if it
+  // were real data (that used to pin the mock project list in place for the full 6h TTL).
   return withCache(projectsCacheKey(), async () => {
-    try {
-      const result = await jiraFetch<{ values: JiraProject[] }>(
-        "/project/search?maxResults=50&orderBy=name"
-      );
-      return result.values;
-    } catch (err) {
-      logger.warn({ err }, "Failed to fetch Jira projects, using mock data");
-      return getMockProjects();
-    }
-  }, options);
+    const result = await jiraFetch<{ values: JiraProject[] }>(
+      "/project/search?maxResults=50&orderBy=name"
+    );
+    return result.values;
+  }, options).catch((err) => {
+    logger.warn({ err }, "Failed to fetch Jira projects, using mock data");
+    return getMockProjects();
+  });
 }
 
 export async function getJiraProject(projectId: string): Promise<JiraProject | null> {
@@ -1061,53 +1102,18 @@ export async function getProjectBoardType(
     return withCache(`boardType:${projectId}`, async () => override, options);
   }
 
+  // Errors propagate out of withCache so they aren't cached; the "simple" fallback is applied
+  // below instead. Caching it turned a Scrum project into "simple" (no velocity, no sprint
+  // windows) for 6h after a single failed Jira call.
   return withCache(`boardType:${projectId}`, async () => {
-    try {
-      const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(
-        projectId
-      )}&maxResults=50`;
-      const data = await jiraAgileFetch<{
-        values?: { type?: string; location?: { projectId?: number; projectKey?: string } }[];
-      }>(url);
-      const boards = data.values ?? [];
-
-      const owned = boards.filter((b) => {
-        const loc = b.location;
-        if (!loc) return false;
-        return (
-          String(loc.projectId ?? "") === String(projectId) ||
-          String(loc.projectKey ?? "") === String(projectId)
-        );
-      });
-      if (owned.length === 0) return "simple";
-
-      // Prefer a Scrum board over the creation-order first - mirrors getBoardId's own
-      // preference below. A project can accumulate an old/unused Kanban board alongside the
-      // Scrum board the team actually works from (seen in practice: OLI has both "Tablero OLI"
-      // (Kanban, board 10, created first) and "Tablero de Scrum" (board 15) - picking
-      // creation-order-first previously misclassified it as Kanban).
-      const scrum = owned.find((b) => b.type === "scrum");
-      const primaryType = (scrum ?? owned[0]!).type;
-      if (primaryType === "scrum" || primaryType === "kanban") return primaryType;
-      return "simple";
-    } catch (err) {
-      logger.warn({ err, projectId }, "Failed to detect board type");
-      return "simple";
-    }
-  }, options);
-}
-
-export async function getBoardId(
-  projectId: string
-): Promise<number | null> {
-  if (!isJiraConfigured()) return null;
-  try {
-    const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(projectId)}&maxResults=50`;
+    const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(
+      projectId
+    )}&maxResults=50`;
     const data = await jiraAgileFetch<{
-      values?: { id: number; type?: string; location?: { projectId?: number; projectKey?: string } }[];
+      values?: { type?: string; location?: { projectId?: number; projectKey?: string } }[];
     }>(url);
     const boards = data.values ?? [];
-    // Find a board that belongs to this project (by location)
+
     const owned = boards.filter((b) => {
       const loc = b.location;
       if (!loc) return false;
@@ -1116,14 +1122,56 @@ export async function getBoardId(
         String(loc.projectKey ?? "") === String(projectId)
       );
     });
-    if (owned.length === 0) return null;
-    // Prefer a scrum board
+    if (owned.length === 0) return "simple";
+
+    // Prefer a Scrum board over the creation-order first - mirrors getBoardId's own
+    // preference below. A project can accumulate an old/unused Kanban board alongside the
+    // Scrum board the team actually works from (seen in practice: OLI has both "Tablero OLI"
+    // (Kanban, board 10, created first) and "Tablero de Scrum" (board 15) - picking
+    // creation-order-first previously misclassified it as Kanban).
     const scrum = owned.find((b) => b.type === "scrum");
-    return (scrum ?? owned[0]!).id ?? null;
+    const primaryType = (scrum ?? owned[0]!).type;
+    if (primaryType === "scrum" || primaryType === "kanban") return primaryType;
+    return "simple";
+  }, options).catch((err): "simple" => {
+    logger.warn({ err, projectId }, "Failed to detect board type");
+    return "simple";
+  });
+}
+
+export async function getBoardId(
+  projectId: string
+): Promise<number | null> {
+  if (!isJiraConfigured()) return null;
+  try {
+    return await findBoardId(projectId);
   } catch (err) {
     logger.warn({ err, projectId }, "Failed to get board ID");
     return null;
   }
+}
+
+/** Like getBoardId, but a Jira failure throws instead of reading as "no board" - for callers
+ *  that cache their result and must not cache a transient error as a real answer. */
+async function findBoardId(projectId: string): Promise<number | null> {
+  const url = `${JIRA_URL}/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(projectId)}&maxResults=50`;
+  const data = await jiraAgileFetch<{
+    values?: { id: number; type?: string; location?: { projectId?: number; projectKey?: string } }[];
+  }>(url);
+  const boards = data.values ?? [];
+  // Find a board that belongs to this project (by location)
+  const owned = boards.filter((b) => {
+    const loc = b.location;
+    if (!loc) return false;
+    return (
+      String(loc.projectId ?? "") === String(projectId) ||
+      String(loc.projectKey ?? "") === String(projectId)
+    );
+  });
+  if (owned.length === 0) return null;
+  // Prefer a scrum board
+  const scrum = owned.find((b) => b.type === "scrum");
+  return (scrum ?? owned[0]!).id ?? null;
 }
 
 /** Return the set of status names that are columns of the project's board, so
@@ -1185,7 +1233,7 @@ export async function getJiraSprints(
   return withCache(sprintsCacheKey(projectId), async () => {
     let boardId: number | null = null;
     try {
-      boardId = await getBoardId(projectId);
+      boardId = await findBoardId(projectId);
       if (!boardId) return [];
 
       // Fetch all sprints with pagination
@@ -1218,13 +1266,18 @@ export async function getJiraSprints(
     } catch (err) {
       const message = err instanceof Error ? err.message.toLowerCase() : "";
       if (message.includes("does not support sprints") || message.includes("no admite sprints")) {
+        // A real, stable answer about the board - fine to cache.
         logger.info({ projectId, boardId }, "Skipping sprint fetch for board without sprint support");
         return [];
       }
-      logger.warn({ err, projectId }, "Failed to fetch sprints");
-      return [];
+      // Anything else is a transient failure: rethrow so withCache doesn't store "no sprints"
+      // for 6h (which hid velocity and made every sprint-window period 400).
+      throw err;
     }
-  }, options);
+  }, options).catch((err): JiraSprint[] => {
+    logger.warn({ err, projectId }, "Failed to fetch sprints");
+    return [];
+  });
 }
 
 type JiraSearchResponse = {

@@ -18,6 +18,7 @@ import {
   resolveSprintWindowDays,
   resolvePeriodDays,
   buildSprintVelocityBuckets,
+  sprintWindowHalves,
   getEffectiveIssueType,
   mapIssueType,
   type JiraIssue,
@@ -191,9 +192,12 @@ async function computeMetrics(
     ? buildSprintVelocityBuckets(resolved, resolvedMap, sprintWindowSprints, leadCycleByIssueId)
     : buildWeeklyVelocity(resolved, resolvedMap, periodDays, isScrum, leadCycleByIssueId);
 
-  // Trend: compare first half vs second half of the period
-  const halfDays = Math.max(1, Math.floor(periodDays / 2));
-  const midDate = getStartDate(halfDays);
+  // Trend: compare first half vs second half of the period. The midpoint is taken over the
+  // actual window [startDate, end), not "now - periodDays/2": for a sprint window the end is the
+  // last included sprint's close, so a now-based midpoint made the second half shorter and
+  // skewed both trends negative.
+  const windowEndMs = (sprintWindowEnd ?? new Date()).getTime();
+  const midDate = new Date((startDate.getTime() + windowEndMs) / 2);
 
   const secondHalfSp = resolved
     .filter((i) => {
@@ -216,10 +220,20 @@ async function computeMetrics(
     return d && d >= startDate && d < midDate;
   }).length;
 
-  const velocityTrend = isScrum
-    ? calculateTrend(secondHalfSp, firstHalfSp)
+  // Sprint windows compare per-sprint averages from the same buckets as the velocity chart.
+  const sprintHalves = sprintWindowSprints !== null
+    ? sprintWindowHalves(resolved, resolvedMap, sprintWindowSprints)
+    : null;
+  const velocityTrend = sprintHalves
+    ? isScrum
+      ? calculateTrend(sprintHalves.secondSp, sprintHalves.firstSp)
+      : calculateTrend(sprintHalves.secondCount, sprintHalves.firstCount)
+    : isScrum
+      ? calculateTrend(secondHalfSp, firstHalfSp)
+      : calculateTrend(secondHalfCount, firstHalfCount);
+  const throughputTrend = sprintHalves
+    ? calculateTrend(sprintHalves.secondCount, sprintHalves.firstCount)
     : calculateTrend(secondHalfCount, firstHalfCount);
-  const throughputTrend = calculateTrend(secondHalfCount, firstHalfCount);
 
   const cycleTimeDistribution = await buildCycleTimeDistribution(resolved);
 
@@ -255,9 +269,21 @@ async function computePreviousPeriodSummary(
   const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
     includeChangelog: true,
   }).catch(() => [] as JiraIssue[]);
-  const filtered = prevIssues
+  // The range fetch works in whole calendar days, so it returns up to a day beyond each edge of
+  // the previous window (overlapping the current period). Apply the same precise
+  // done + resolved-in-window filter that computeMetrics uses for the current period, so both
+  // sides of the "vs previous period" delta count the same thing.
+  const prevEnd = getStartDate(periodDays);
+  const prevStart = getStartDate(periodDays * 2);
+  const candidates = prevIssues
+    .filter((i) => isIssueDone(i))
     .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
     .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
+  const resolvedAt = await Promise.all(candidates.map((i) => getResolutionDate(i)));
+  const filtered = candidates.filter((_, idx) => {
+    const d = resolvedAt[idx];
+    return d != null && d >= prevStart && d < prevEnd;
+  });
 
   const leadTimes = (await Promise.all(filtered.map((i) => getLeadTimeDays(i)))).filter(
     (v): v is number => v !== null
