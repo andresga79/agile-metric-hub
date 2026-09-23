@@ -37,4 +37,9 @@ export interface SprintMetric {
   carryoverStoryPoints: number;
   /** Percentage of this sprint's total story points that is carryover (0-100). */
   carryoverRate: number;
+  /**
+     * This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.
+     * @nullable
+     */
+  goal?: string | null;
 }

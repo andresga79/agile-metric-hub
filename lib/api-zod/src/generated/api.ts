@@ -447,7 +447,8 @@ export const GetProjectSprintMetricsResponse = zod.object({
 }),
   "carryoverCount": zod.number().describe('Number of issues in this sprint that were already assigned to an earlier sprint (per Jira\'s Sprint field history) whose end date precedes this sprint\'s start date — work that slipped from a previous sprint into this one.'),
   "carryoverStoryPoints": zod.number().describe('Story points belonging to carryoverCount issues.'),
-  "carryoverRate": zod.number().describe('Percentage of this sprint\'s total story points that is carryover (0-100).')
+  "carryoverRate": zod.number().describe('Percentage of this sprint\'s total story points that is carryover (0-100).'),
+  "goal": zod.string().nullish().describe('This sprint\'s goal, as set in Jira. Null when the sprint has no goal or it\'s blank.')
 })),
   "summary": zod.object({
   "totalSprints": zod.number().describe('Closed sprints the averages below are computed from. An active sprint (if any) is included in the top-level `sprints` array but excluded here — it\'s still in progress, so folding its partial numbers into these averages would misrepresent them as a decline.'),

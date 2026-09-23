@@ -1451,6 +1451,9 @@ components:
         carryoverRate:
           type: number
           description: Percentage of this sprint's total story points that is carryover (0-100).
+        goal:
+          type: ["string", "null"]
+          description: This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.
 
     IssueTypeBreakdown:
       type: object

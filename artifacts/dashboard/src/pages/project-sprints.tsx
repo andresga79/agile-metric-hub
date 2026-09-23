@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey, useGetProjectSprintMetrics, getGetProjectSprintMetricsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers } from "lucide-react";
+import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers, Target } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -348,7 +348,16 @@ export default function ProjectSprints() {
                   <TableBody>
                     {sprints.map((s, i) => (
                       <TableRow key={s.sprintId} className={`border-border hover:bg-accent/50 ${i % 2 === 0 ? 'bg-muted/30' : ''}`}>
-                        <TableCell className="font-medium">{s.sprintName}</TableCell>
+                        <TableCell className="font-medium">
+                          <span className="inline-flex items-center gap-1.5">
+                            {s.sprintName}
+                            {s.goal && (
+                              <span title={t('page.sprints.goalTooltip', { goal: s.goal })} className="shrink-0">
+                                <Target size={12} className="text-muted-foreground" />
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             s.state === "active"

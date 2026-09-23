@@ -454,6 +454,7 @@
   "page.sprints.spDone": "SP Completados",
   "page.sprints.carryover": "Carryover",
   "page.sprints.carryoverTooltip": "Issues que ya estaban en un sprint anterior cerrado y se arrastraron a este",
+  "page.sprints.goalTooltip": "Objetivo: {{goal}}",
   "page.sprints.completion": "Finalización",
   "page.sprints.reopened": "Reabiertos",
   "page.sprints.cycleTime": "Cycle Time",

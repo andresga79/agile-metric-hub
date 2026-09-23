@@ -51,6 +51,7 @@ export interface SprintMetric {
   carryoverCount: number;
   carryoverStoryPoints: number;
   carryoverRate: number;
+  goal: string | null;
 }
 
 interface SprintMetricsResponse {
@@ -134,6 +135,7 @@ export async function computeSprintMetrics(
     carryoverCount,
     carryoverStoryPoints,
     carryoverRate: totalSp > 0 ? (carryoverStoryPoints / totalSp) * 100 : 0,
+    goal: sprint.goal?.trim() || null,
   };
 }
 
