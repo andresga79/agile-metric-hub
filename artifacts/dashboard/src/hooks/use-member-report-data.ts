@@ -12,6 +12,10 @@ export function useMemberReportData(
   const [metrics, setMetrics] = useState<any | null>(null);
   const [trends, setTrends] = useState<{ resolvedCount: number; cycleTime: number; leadTime: number } | null>(null);
   const [healthScore, setHealthScore] = useState<number | null>(null);
+  // Issues/week as /health computes it (resolved / weeks in period) - the same value its Throughput
+  // dimension band is scored on. /metrics.throughput is the period TOTAL, which the KPI used to
+  // print as "/wk" (OLI 1m: "85.0 /wk" for 17/week).
+  const [throughputPerWeek, setThroughputPerWeek] = useState<number | null>(null);
   const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<any[]>([]);
   const [wipAging, setWipAging] = useState<any[]>([]);
@@ -64,6 +68,7 @@ export function useMemberReportData(
         setWipAging(Array.isArray(analytics?.wipAging) ? analytics.wipAging : []);
         const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
         setHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
+        setThroughputPerWeek(typeof health?.raw?.throughput === "number" ? health.raw.throughput : null);
         setQaRejectionRate(
           typeof qaRejected?.overallRejectionRate === "number" ? qaRejected.overallRejectionRate : null
         );
@@ -87,7 +92,7 @@ export function useMemberReportData(
   }, [projectId, accountId, period, token]);
 
   return {
-    loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
+    loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
     blockedIssues, wipAging, healthDimensions,
   };
 }

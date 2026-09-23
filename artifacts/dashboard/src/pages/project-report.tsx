@@ -78,7 +78,7 @@ export default function ProjectReport() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
   const {
-    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, qaRejectionRate,
+    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   } = useReportData(projectId, period);
@@ -153,7 +153,7 @@ export default function ProjectReport() {
           <p className="text-xs text-muted-foreground">{period.toUpperCase()} · {new Date().toLocaleDateString()}</p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <Kpi label={t("page.report.throughput")} value={`${metrics?.throughput?.toFixed(1) ?? "—"} /wk`} dimensionValue={dimensionValue("Throughput")} />
+          <Kpi label={t("page.report.throughput")} value={`${throughputPerWeek?.toFixed(1) ?? "—"} /wk`} dimensionValue={dimensionValue("Throughput")} />
           <Kpi
             label={t("page.report.cycleTime")}
             value={`${metrics?.cycleTime?.toFixed(1) ?? "—"}d`}
