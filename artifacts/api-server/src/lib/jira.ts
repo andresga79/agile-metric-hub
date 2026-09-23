@@ -1039,8 +1039,15 @@ export async function fetchReleaseCoordinationEpics(): Promise<RawRCEpic[]> {
   // table's unique(issue_key) constraint the moment a repeated page produced a duplicate key.
   let lastSeenKey: string | null = null;
 
+  // Sorted by key ASC, so a page cap drops the NEWEST releases first - keep it generous (27 RC
+  // epics today) and say so if it is ever reached instead of cutting silently.
+  const MAX_PAGES = 40;
   try {
-    for (let page = 0; page < 5; page++) {
+    for (let page = 0; ; page++) {
+      if (page >= MAX_PAGES) {
+        logger.warn({ fetched: all.length }, "RC epic fetch hit the page cap - newest releases truncated");
+        break;
+      }
       const jql = encodeURIComponent(
         `project = RC${lastSeenKey ? ` AND key > "${lastSeenKey}"` : ""} ORDER BY key ASC`
       );
@@ -1381,6 +1388,38 @@ export function capLookbackDays(periodDays: number): number {
   return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
 }
 
+/** Runs `jql` (no ORDER BY) to completion using keyset pagination: ORDER BY key ASC and re-issue
+ *  with `key > <last key seen>` for each next page. This Jira site's nextPageToken never advances
+ *  (page 2 == page 1), so the pageToken loops used before silently stopped at the first 100
+ *  results: OLI's created 2026-09-07..14 open chunk had 112 issues and 12 were dropped with only a
+ *  "Pagination stalled" warn. Logs a warning if it ever hits maxPages instead of truncating quietly. */
+async function searchAllByKey(
+  jql: string,
+  opts: { fields: string; includeChangelog: boolean; maxResults?: number; maxPages?: number; logContext?: Record<string, unknown> }
+): Promise<JiraIssue[]> {
+  const maxResults = opts.maxResults ?? 100;
+  const maxPages = opts.maxPages ?? 50;
+  const expandParam = opts.includeChangelog ? "&expand=changelog" : "";
+  const issues: JiraIssue[] = [];
+  let afterKey: string | null = null;
+
+  for (let page = 1; ; page++) {
+    if (page > maxPages) {
+      logger.warn({ ...opts.logContext, jql, fetched: issues.length }, "Jira search hit the page cap - results truncated");
+      break;
+    }
+    const pageJql = encodeURIComponent(`${jql}${afterKey ? ` AND key > "${afterKey}"` : ""} ORDER BY key ASC`);
+    const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+      `/search/jql?jql=${pageJql}&maxResults=${maxResults}&fields=${opts.fields}${expandParam}`
+    );
+    const pageIssues = result.issues ?? [];
+    issues.push(...pageIssues);
+    if (pageIssues.length === 0 || result.isLast || pageIssues.length < maxResults) break;
+    afterKey = pageIssues[pageIssues.length - 1]!.key;
+  }
+  return issues;
+}
+
 export async function getJiraIssuesForProject(
   projectId: string,
   periodDays: number,
@@ -1406,19 +1445,12 @@ export async function getJiraIssuesForProject(
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
     const fields = includeIssueLinks ? `${baseFields},issuelinks` : baseFields;
 
-    const maxResults = 100;
-    const MAX_PAGES = 5;
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
 
-    // This Jira site's /search/jql nextPageToken never actually advances the
-    // result window (confirmed directly against the API: page 2 returns the
-    // identical issues as page 1, regardless of sort field). Work around it by
-    // splitting the date range into weekly chunks small enough that a single
-    // page (100 results) covers each chunk, instead of depending on multi-page
-    // pagination at all. The inner loop below still attempts pagination
-    // defensively in case a chunk genuinely exceeds 100, but bails out the
-    // moment it detects the page isn't moving instead of grinding to MAX_PAGES.
+    // The range is fetched in weekly chunks (bounded result sets, some parallelism), and each
+    // chunk is paginated with searchAllByKey - this site's nextPageToken never advances, and a
+    // chunk CAN exceed 100 issues (it did: 112), so a single page is not enough.
     // Jira treats a date-only JQL literal in a "<=" bound as that day's 00:00, not end-of-day —
     // so `resolutiondate <= "2026-06-17"` silently excludes anything resolved after midnight on
     // the 17th, and since the next chunk starts at "2026-06-18", that issue is never fetched by
@@ -1428,34 +1460,12 @@ export async function getJiraIssuesForProject(
       fromDate: Date,
       toDate: Date
     ): Promise<JiraIssue[]> => {
-      const issues: JiraIssue[] = [];
-      let pageToken: string | null = null;
-      let pageCount = 0;
-      let lastSeenKey: string | null = null;
       const toExclusive = formatDate(new Date(toDate.getTime() + ONE_DAY_MS));
-      const jql = encodeURIComponent(buildJql(formatDate(fromDate), toExclusive));
-
-      for (;;) {
-        if (++pageCount > MAX_PAGES) break;
-
-        const expandParam = includeChangelog ? "&expand=changelog" : "";
-        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
-        );
-        const pageIssues = result.issues ?? [];
-        const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
-        if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
-          logger.warn({ projectId, jql: buildJql(formatDate(fromDate), toExclusive) }, "Pagination stalled (Jira returned the same page again), stopping");
-          break;
-        }
-        issues.push(...pageIssues);
-        if (result.isLast || pageIssues.length < maxResults) break;
-        lastSeenKey = newLastKey;
-        pageToken = result.nextPageToken ?? null;
-        if (!pageToken) break;
-      }
-
-      return issues;
+      return searchAllByKey(buildJql(formatDate(fromDate), toExclusive), {
+        fields,
+        includeChangelog,
+        logContext: { projectId },
+      });
     };
 
     const fetchPagedIssuesChunked = async (buildJql: (from: string, toExclusive: string) => string): Promise<JiraIssue[]> => {
@@ -1485,9 +1495,13 @@ export async function getJiraIssuesForProject(
         (from, toExclusive) =>
           `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`
       ),
+      // Created in the window, OR whose status category changed in it: this site's workflows often
+      // move issues to Done without setting a resolution (OLI: 599 done-without-resolution vs 168
+      // resolved in 90 days), so a done-in-period issue created before the window matched neither
+      // stream and silently vanished (7 in OLI's last 90 days).
       fetchPagedIssuesChunked(
         (from, toExclusive) =>
-          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND created >= "${from}" AND created < "${toExclusive}" AND resolutiondate is EMPTY`
+          `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate is EMPTY AND ((created >= "${from}" AND created < "${toExclusive}") OR (statusCategoryChangedDate >= "${from}" AND statusCategoryChangedDate < "${toExclusive}"))`
       ),
     ]);
 
@@ -1551,46 +1565,19 @@ export async function getResolvedJiraIssuesInRange(
 
     const fields =
       "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
-    const maxResults = 100;
-    const MAX_PAGES = 5;
     const CHUNK_DAYS = 7;
     const CONCURRENCY = 4;
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
 
-    const expandParam = includeChangelog ? "&expand=changelog" : "";
-
     // Same date-only "<=" boundary bug as getJiraIssuesForProject above: Jira reads a bare date
     // in a "<=" bound as that day's 00:00, so anything resolved later that day falls into neither
     // this chunk nor the next one. fetchPage's `to` here is always an exclusive upper bound.
-    const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> => {
-      const jql = encodeURIComponent(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`
+    const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> =>
+      searchAllByKey(
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`,
+        { fields, includeChangelog, logContext: { projectId } }
       );
-      const issues: JiraIssue[] = [];
-      let pageToken: string | null = null;
-      let pageCount = 0;
-      let lastSeenKey: string | null = null;
-
-      for (;;) {
-        if (++pageCount > MAX_PAGES) break;
-        const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-          `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}${expandParam}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
-        );
-        const pageIssues = result.issues ?? [];
-        const newLastKey = pageIssues[pageIssues.length - 1]?.key ?? null;
-        if (pageCount > 1 && newLastKey !== null && newLastKey === lastSeenKey) {
-          logger.warn({ projectId, from, toExclusive }, "Pagination stalled (Jira returned the same page again), stopping");
-          break;
-        }
-        issues.push(...pageIssues);
-        if (result.isLast || pageIssues.length < maxResults) break;
-        lastSeenKey = newLastKey;
-        pageToken = result.nextPageToken ?? null;
-        if (!pageToken) break;
-      }
-      return issues;
-    };
 
     const chunks: Array<[Date, Date]> = [];
     let chunkStart = rangeStart;
