@@ -84,10 +84,40 @@ haya más claridad sobre el SO del host y las políticas de acceso a la red inte
 
 ## 5. Backups
 
-`postgres_data` es un volumen Docker local — no hay backup automático a un servicio externo
-(a diferencia de Neon, que lo gestionaba). Definir una estrategia de backup (ej.
-`pg_dump` programado a un share de red) es trabajo pendiente antes de considerar esto
-producción-ready para datos que importe no perder.
+El servicio `backup` de `docker-compose.yml` (script `docker/backup/backup.sh`, imagen
+`postgres:16-alpine` igual que `db`) hace un `pg_dump` diario y rota las copias:
+
+| Qué | Dónde | Cuántas |
+|---|---|---|
+| Diario (a las `BACKUP_HOUR`, default 03:00 `TZ`) | `$BACKUP_DIR/daily/agile_metrics-AAAA-MM-DD.dump` | `BACKUP_KEEP_DAILY` (7) |
+| Semanal (copia del domingo) | `$BACKUP_DIR/weekly/` | `BACKUP_KEEP_WEEKLY` (4) |
+
+- Arranca y se detiene con el stack (`docker compose up -d`); si el host estuvo apagado a esa
+  hora, hace el backup del día al arrancar. Log: `docker logs agile_metrics_backup`.
+- Formato custom de `pg_dump` (comprimido). Incluye usuarios, permisos, umbrales, targets,
+  keywords, visibilidad de proyectos, snapshots y portfolio. **Excluye los datos de
+  `jira_cache`** (se regenera solo desde Jira en el próximo sync).
+- **`BACKUP_DIR` (en `.env`)**: por defecto `./backups` dentro del repo, en el mismo disco que el
+  volumen de Postgres. Para que sirva ante una falla de disco, apuntarlo a otro disco o a un share
+  de red montado en el host (ej. `BACKUP_DIR=/mnt/backups/agile-metric-hub`). Los archivos quedan
+  con dueño `root` (escritos desde el contenedor).
+
+### Restaurar
+
+```bash
+# Probar un backup sin tocar la base real (restaura en una base aparte y la podés inspeccionar):
+docker/backup/restore.sh backups/daily/agile_metrics-2026-09-23.dump restore_check
+docker exec agile_metrics_db psql -U agile_user -d restore_check -c "select count(*) from users;"
+docker exec agile_metrics_db dropdb -U agile_user restore_check
+
+# Restaurar sobre la base de la app (REEMPLAZA su contenido; pide confirmación):
+docker compose stop api
+docker/backup/restore.sh backups/daily/agile_metrics-2026-09-23.dump
+docker compose start api
+```
+
+Verificado el 2026-09-23: backup + restore en base aparte con conteos idénticos en todas las
+tablas (`jira_cache` vacía a propósito).
 
 ---
 

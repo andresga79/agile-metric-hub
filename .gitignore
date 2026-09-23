@@ -53,3 +53,6 @@ Thumbs.db
 .cache/
 .local/
 agile-metric-hub/
+
+# Postgres dumps from the backup service (docker/backup/backup.sh)
+/backups/

@@ -17,6 +17,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Daily pg_dump with rotation (7 daily + 4 weekly) - see docker/backup/backup.sh. Point
+  # BACKUP_DIR at a disk or mounted network share that isn't the same disk as the Docker volume,
+  # otherwise a disk failure takes the backups with it.
+  backup:
+    image: postgres:16-alpine
+    container_name: agile_metrics_backup
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-agile_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-agile_password}
+      PGDATABASE: ${POSTGRES_DB:-agile_metrics}
+      TZ: ${TZ:-America/Santiago}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+    volumes:
+      - ./docker/backup/backup.sh:/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   api:
     build:
       context: .

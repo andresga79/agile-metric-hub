@@ -19,6 +19,9 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - Reparar snapshots semanales de Evolution anteriores a la ventana de 90 días (admin):
   `curl -X POST "localhost:8000/api/admin/snapshots/backfill?days=180" -H "Authorization: Bearer <token>"`
   (opcional `&projectId=`). Correrlo una vez en cada DB con filas escritas antes del 2026-09-23.
+- Backups: servicio `backup` del compose, `pg_dump` diario con rotación 7 diarios + 4 semanales
+  en `$BACKUP_DIR` (default `./backups`, ignorado por git). Restaurar con
+  `docker/backup/restore.sh <dump> [base destino]` — ver `DEPLOY.md` §5.
 - Ver la skill `run-app` para el procedimiento completo verificado en vivo (incluye
   gotchas de Docker Desktop, `.env`, y reset de datos).
 
