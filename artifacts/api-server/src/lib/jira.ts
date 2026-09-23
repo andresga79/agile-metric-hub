@@ -99,6 +99,9 @@ export interface JiraIssue {
       created: string;
       items: { field: string; fieldId?: string; fromString?: string | null; toString?: string | null }[];
     }[];
+    // Present on search results: when total > histories.length the changelog was truncated.
+    total?: number;
+    maxResults?: number;
   };
   issuelinks?: {
     id: string;
@@ -1403,6 +1406,8 @@ export async function getSprintIssues(
       if (result.isLast || pageIssues.length < maxResults) break;
       lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
+    // "Done at sprint close" reads the status at the close instant from the changelog.
+    await completeTruncatedChangelogs(allIssues);
     return allIssues;
   } catch (err) {
     logger.warn({ err, sprintId }, "Failed to fetch sprint issues");
@@ -1414,6 +1419,45 @@ export const JIRA_MAX_LOOKBACK_DAYS = 90;
 
 export function capLookbackDays(periodDays: number): number {
   return Math.min(Math.max(1, periodDays), JIRA_MAX_LOOKBACK_DAYS);
+}
+
+/** Search results embed at most 40 changelog entries per issue, and it's the OLDEST ones that are
+ *  dropped. The resolution date survives (the last done transition is recent), but the first
+ *  move to In Progress - where cycle time starts - often doesn't, so cycle time came out too
+ *  short: measured over 90 days, 7 of OLP's 170 done issues were off by 16-213 days (~3.6 days,
+ *  ~11%, on the project's average), ORINI 5 of 91, OLI 4 of 289. This replaces each truncated
+ *  changelog (changelog.total > histories received) with the full one from /issue/{key}/changelog.
+ *  Mutates `issues` in place; a failed lookup keeps the partial changelog rather than dropping the
+ *  issue. Only a few percent of issues are truncated, so this is a handful of extra calls. */
+export async function completeTruncatedChangelogs(issues: JiraIssue[]): Promise<number> {
+  const truncated = issues.filter(
+    (i) => i.changelog && typeof i.changelog.total === "number" && i.changelog.total > i.changelog.histories.length
+  );
+  const CONCURRENCY = 4;
+  for (let n = 0; n < truncated.length; n += CONCURRENCY) {
+    await Promise.all(
+      truncated.slice(n, n + CONCURRENCY).map(async (issue) => {
+        try {
+          const histories: NonNullable<JiraIssue["changelog"]>["histories"] = [];
+          for (let startAt = 0; ; ) {
+            const page = await jiraFetch<{
+              values?: NonNullable<JiraIssue["changelog"]>["histories"];
+              isLast?: boolean;
+              total?: number;
+            }>(`/issue/${encodeURIComponent(issue.key)}/changelog?startAt=${startAt}&maxResults=100`);
+            const values = page.values ?? [];
+            histories.push(...values);
+            startAt += values.length;
+            if (page.isLast || values.length === 0 || (page.total !== undefined && startAt >= page.total)) break;
+          }
+          issue.changelog = { histories, total: histories.length, maxResults: histories.length };
+        } catch (err) {
+          logger.warn({ err, issueKey: issue.key }, "Could not fetch full changelog, keeping the truncated one");
+        }
+      })
+    );
+  }
+  return truncated.length;
 }
 
 /** Runs `jql` (no ORDER BY) to completion using keyset pagination: ORDER BY key ASC and re-issue
@@ -1445,6 +1489,7 @@ async function searchAllByKey(
     if (pageIssues.length === 0 || result.isLast || pageIssues.length < maxResults) break;
     afterKey = pageIssues[pageIssues.length - 1]!.key;
   }
+  if (opts.includeChangelog) await completeTruncatedChangelogs(issues);
   return issues;
 }
 
@@ -1687,6 +1732,7 @@ export async function getFlaggedJiraIssuesForProject(
       lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
 
+    if (includeChangelog) await completeTruncatedChangelogs(issues);
     return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
   }, { forceRefresh: options?.forceRefresh });
 }
@@ -1783,6 +1829,7 @@ export async function getOpenIssuesForProject(
       lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
     }
 
+    if (includeChangelog) await completeTruncatedChangelogs(issues);
     return Array.from(new Map(issues.map((issue) => [issue.id, issue])).values());
   }, { forceRefresh: options?.forceRefresh });
 }

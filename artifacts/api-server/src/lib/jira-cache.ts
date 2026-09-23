@@ -11,7 +11,11 @@ const DAILY_SYNC_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const JIRA_CACHE_NAMESPACE = (() => {
   const jiraUrl = (process.env["JIRA_URL"] ?? "").trim().toLowerCase();
   const jiraEmail = (process.env["JIRA_EMAIL"] ?? "").trim().toLowerCase();
-  return `tenant:${jiraUrl}|${jiraEmail}`;
+  // Bump CACHE_SCHEMA_VERSION when the SHAPE or completeness of cached Jira data changes, so a
+  // deploy doesn't keep serving old entries for up to the 6h TTL. v2: full changelogs
+  // (completeTruncatedChangelogs) - older entries hold changelogs truncated to 40 entries.
+  const CACHE_SCHEMA_VERSION = 2;
+  return `tenant:${jiraUrl}|${jiraEmail}|v${CACHE_SCHEMA_VERSION}`;
 })();
 
 function scopedCacheKey(cacheKey: string): string {

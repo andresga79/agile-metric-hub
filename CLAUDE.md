@@ -133,6 +133,11 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
   `statusCategoryChangedDate`, y la fecha real sale del changelog (`getResolutionDate`).
 - **`nextPageToken` de Jira no avanza** (la página 2 = la 1). Paginar siempre por clave
   (`searchAllByKey`: `ORDER BY key ASC` + `key > último`), nunca con pageToken.
+- **La búsqueda de Jira recorta el changelog a 40 entradas** y descarta las MÁS VIEJAS (el primer
+  paso a In Progress). Toda búsqueda con `expand=changelog` tiene que pasar por
+  `completeTruncatedChangelogs` (ya lo hacen `searchAllByKey`, sprint, open y flagged).
+- **Caché de Jira versionado** (`CACHE_SCHEMA_VERSION` en `lib/jira-cache.ts`): subirlo cuando
+  cambia la forma/completitud de lo que se cachea, así un deploy no sirve datos viejos 6 h.
 
 ## Pointers
 

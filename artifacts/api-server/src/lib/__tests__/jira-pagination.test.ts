@@ -119,3 +119,84 @@ describe("Jira throttling (429/503)", () => {
     expect(calls).toBe(2);
   });
 });
+
+describe("truncated changelogs", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env["JIRA_URL"] = "https://example.atlassian.net";
+    process.env["JIRA_EMAIL"] = "test@example.com";
+    process.env["JIRA_API_TOKEN"] = "token";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // 45 status changes; search only embeds the NEWEST 40, dropping the first move to In Progress.
+  const DAY = 86400000;
+  const start = Date.parse("2026-06-01T00:00:00.000Z");
+  const fullHistories = Array.from({ length: 45 }, (_, n) => ({
+    created: new Date(start + n * DAY).toISOString(),
+    items: [
+      n === 0
+        ? { field: "status", fromString: "To Do", toString: "En progreso" }
+        : n === 44
+          ? { field: "status", fromString: "En progreso", toString: "Listo" }
+          : { field: "status", fromString: "En progreso", toString: "En progreso" },
+    ],
+  }));
+
+  function stub(): { changelogCalls: number } {
+    const counter = { changelogCalls: 0 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/project/search")) return jsonResponse({ values: [{ id: "10003", key: "OLP", name: "OLP" }] });
+        if (url.includes("/issue/OLP-1/changelog")) {
+          counter.changelogCalls++;
+          const startAt = Number(new URL(url).searchParams.get("startAt") ?? 0);
+          const values = fullHistories.slice(startAt, startAt + 100);
+          return jsonResponse({ values, isLast: startAt + values.length >= fullHistories.length, total: fullHistories.length });
+        }
+        if (url.includes("/status")) return jsonResponse([]);
+        const jql = new URL(url).searchParams.get("jql") ?? "";
+        if (jql.includes('key > "OLP-1"')) return jsonResponse({ issues: [] });
+        return jsonResponse({
+          issues: [{
+            id: "1",
+            key: "OLP-1",
+            fields: {
+              summary: "Long-lived story",
+              status: { name: "Listo", statusCategory: { key: "done" } },
+              issuetype: { name: "Historia" },
+              priority: { name: "Medium" },
+              created: "2026-05-20T00:00:00.000Z",
+              updated: fullHistories[44]!.created,
+              resolutiondate: fullHistories[44]!.created,
+            },
+            changelog: { histories: fullHistories.slice(5), total: 45, maxResults: 40 },
+          }],
+        });
+      })
+    );
+    return counter;
+  }
+
+  it("replaces a truncated changelog with the full one, so cycle time starts at the real first In Progress", async () => {
+    const counter = stub();
+    const { getResolvedJiraIssuesInRange, getCycleTimeDays } = await import("../jira");
+    const [issue] = await getResolvedJiraIssuesInRange("10003", 3, 0, { includeChangelog: true });
+    expect(counter.changelogCalls).toBe(1);
+    expect(issue!.changelog!.histories).toHaveLength(45);
+    // Full history: In Progress on day 0, Done on day 44 -> 44 days (truncated view gave ~39).
+    expect(await getCycleTimeDays(issue!)).toBeCloseTo(44, 5);
+  });
+
+  it("doesn't fetch anything extra when the changelog wasn't truncated", async () => {
+    const counter = stub();
+    const { completeTruncatedChangelogs } = await import("../jira");
+    const issues = [{ id: "2", key: "OLP-2", fields: {} as never, changelog: { histories: [], total: 0, maxResults: 40 } }];
+    expect(await completeTruncatedChangelogs(issues)).toBe(0);
+    expect(counter.changelogCalls).toBe(0);
+  });
+});

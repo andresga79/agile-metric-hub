@@ -86,6 +86,10 @@ Días desde que **empezó el trabajo activo** hasta la resolución. Inicio = **p
 del changelog hacia un estado de categoría `"indeterminate"` (in-progress); fin = fecha de
 resolución. (`getCycleTimeDays`, `lib/jira.ts`)
 **Fallback:** si no hay changelog o no hay transición a in-progress, devuelve el Lead Time.
+El changelog es el **completo**: la búsqueda de Jira lo recorta a 40 entradas descartando las más
+viejas, y se completa con `/issue/{key}/changelog` (`completeTruncatedChangelogs`). Sin eso el
+inicio caía en una entrada a in-progress posterior y el cycle time salía corto (OLP 3m: 31.9 →
+36.0 días al corregirlo).
 Se promedia sin ponderar sobre los issues resueltos.
 
 ### Lead Time
