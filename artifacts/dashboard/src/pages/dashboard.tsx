@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { getAuthToken } from "@/lib/auth";
+import { useThresholds } from "@/hooks/use-thresholds";
 
 function formatDurationDays(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -103,7 +104,16 @@ export default function Dashboard() {
   } | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
   const [methodologyFilter, setMethodologyFilter] = useState<string>("all");
-  const [thresholds, setThresholds] = useState<Record<string, { goodValue: number; warningValue: number }>>({});
+  // Global effective thresholds (Admin -> Health). Previously read from the admin-only endpoint, so
+  // for members it 403'd and the table fell back to judging projects against the portfolio average.
+  const globalThresholds = useThresholds();
+  const thresholds = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(globalThresholds).map(([metric, t]) => [metric, { goodValue: t.good, warningValue: t.warning }])
+      ) as Record<string, { goodValue: number; warningValue: number }>,
+    [globalThresholds]
+  );
 
   const token = getAuthToken();
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
@@ -152,20 +162,6 @@ export default function Dashboard() {
       .catch(() => setPortfolioData([]))
       .finally(() => setPortfolioLoading(false));
     fetchSyncStatus();
-    fetch("/api/admin/metric-thresholds", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (r) => { const text = await r.text(); return text ? JSON.parse(text) : []; })
-      .then((data) => {
-        if (Array.isArray(data)) {
-          const map: Record<string, { goodValue: number; warningValue: number }> = {};
-          for (const t of data) {
-            map[t.metric] = { goodValue: Number(t.goodValue), warningValue: Number(t.warningValue) };
-          }
-          setThresholds(map);
-        }
-      })
-      .catch(() => {});
 
     const interval = window.setInterval(fetchSyncStatus, 10000);
     return () => window.clearInterval(interval);
@@ -279,7 +275,7 @@ export default function Dashboard() {
     const leadThreshold = thresholds["leadTime"];
     const flowThreshold = thresholds["flowLoad"];
 
-    // Portfolio averages (cycleRef/leadRef) are only a fallback while /api/admin/metric-thresholds
+    // Portfolio averages (cycleRef/leadRef) are only a fallback while the effective thresholds
     // is still loading — once it resolves, every project in this table is judged against the same
     // admin-configured cutoffs (Admin -> Health), not a value that shifts with the portfolio average.
     const cycleGood = cycleThreshold?.goodValue ?? cycleRef;

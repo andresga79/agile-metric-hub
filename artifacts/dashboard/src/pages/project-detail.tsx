@@ -12,8 +12,8 @@ import { ChevronRight, Download, Ban, Target } from "lucide-react";
 import { AreaChart, Area, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { useThresholds, type MetricThreshold } from "@/hooks/use-thresholds";
 
-type MetricThreshold = { good: number; warning: number };
 type ThresholdStatus = "good" | "warning" | "critical" | null;
 
 const DEFAULT_THRESHOLDS: Record<string, MetricThreshold> = {
@@ -42,7 +42,10 @@ export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const [period, setPeriod] = useState<TimeWindow>("1m");
   const [targets, setTargets] = useState<any[]>([]);
-  const [thresholds, setThresholds] = useState<Record<string, MetricThreshold>>(DEFAULT_THRESHOLDS);
+  // Effective thresholds incl. this project's overrides - this page used to read only the global
+  // (admin-only) rows, so it colored metrics differently from Analytics/Sprints/Health.
+  const loadedThresholds = useThresholds(projectId);
+  const thresholds: Record<string, MetricThreshold> = { ...DEFAULT_THRESHOLDS, ...loadedThresholds };
   const chartRef = useRef<HTMLDivElement>(null);
   const [exportingChart, setExportingChart] = useState(false);
   const token = localStorage.getItem("auth_token");
@@ -72,27 +75,6 @@ export default function ProjectDetail() {
       .then(setTargets)
       .catch(console.error);
   }, [projectId, period, token]);
-
-  useEffect(() => {
-    if (!token) return;
-    fetch("/api/admin/metric-thresholds", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((rows) => {
-        if (!Array.isArray(rows)) return;
-        const merged: Record<string, MetricThreshold> = { ...DEFAULT_THRESHOLDS };
-        for (const row of rows) {
-          if (!row?.metric || row.goodValue === undefined || row.warningValue === undefined) continue;
-          merged[row.metric] = {
-            good: Number(row.goodValue),
-            warning: Number(row.warningValue),
-          };
-        }
-        setThresholds(merged);
-      })
-      .catch(console.error);
-  }, [token]);
 
   const getTarget = (metric: string) => targets.find((t) => t.metric === metric && t.period === period);
 

@@ -24,7 +24,7 @@ interface RawHealth {
 }
 
 // Fallback copy of artifacts/api-server/src/routes/admin/constants.ts DEFAULT_HEALTH_THRESHOLDS,
-// used only until the /api/admin/metric-thresholds fetch below resolves. blocked is a percentage
+// used only until the effective-thresholds fetch below resolves. blocked is a percentage
 // of WIP (blocked / inProgressCount * 100), not an absolute issue count.
 const DEFAULT_THRESHOLDS = {
   cycleTime: { good: 15, warning: 25 },
@@ -51,10 +51,14 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
     Promise.all([
       fetch(`/api/projects/${projectId}/health/${period}`, { headers }).then((r) => r.json()),
       fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then((r) => r.json()),
-      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
-      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
+      // Effective thresholds (global + this project's overrides, merged server-side). Not the
+      // /api/admin/metric-thresholds pair this used before: those are admin-only, so for members
+      // they 403'd and every suggestion was judged against the factory defaults below.
+      fetch(`/api/projects/${projectId}/thresholds`, { headers })
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({})),
     ])
-      .then(([healthData, analyticsData, thresholds, projectOverrides]) => {
+      .then(([healthData, analyticsData, effectiveThresholds]) => {
         const raw: RawHealth = healthData.raw;
         const analytics = analyticsData;
         const result: Suggestion[] = [];
@@ -68,17 +72,10 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         for (const key of Object.keys(DEFAULT_THRESHOLDS)) {
           mergedThresholds[key] = { ...DEFAULT_THRESHOLDS[key as keyof typeof DEFAULT_THRESHOLDS] };
         }
-        // Global admin defaults first, then this project's overrides (if any) win.
-        for (const source of [thresholds, projectOverrides]) {
-          if (!Array.isArray(source)) continue;
-          for (const t of source) {
-            if (t.metric && t.goodValue !== undefined && t.warningValue !== undefined) {
-              mergedThresholds[t.metric] = {
-                good: Number(t.goodValue),
-                warning: Number(t.warningValue),
-              };
-            }
-          }
+        for (const [metric, t] of Object.entries(
+          effectiveThresholds as Record<string, { goodValue: number; warningValue: number }>
+        )) {
+          mergedThresholds[metric] = { good: Number(t.goodValue), warning: Number(t.warningValue) };
         }
 
         const isLowerBetter = (metric: string) =>

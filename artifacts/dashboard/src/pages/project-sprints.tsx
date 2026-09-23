@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
+import { useThresholds } from "@/hooks/use-thresholds";
 import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
@@ -90,24 +91,8 @@ export default function ProjectSprints() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectSprintMetricsQueryKey(projectId!, period) },
   });
 
-  const [completionThreshold, setCompletionThreshold] = useState(DEFAULT_COMPLETION_THRESHOLD);
+  const completionThreshold = useThresholds(projectId).sprintCompletion ?? DEFAULT_COMPLETION_THRESHOLD;
 
-  useEffect(() => {
-    if (!projectId || !token) return;
-    const headers = { Authorization: `Bearer ${token}` };
-    Promise.all([
-      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
-      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
-    ]).then(([globalRows, overrideRows]) => {
-      let merged = DEFAULT_COMPLETION_THRESHOLD;
-      for (const source of [globalRows, overrideRows]) {
-        if (!Array.isArray(source)) continue;
-        const row = source.find((t: any) => t.metric === "sprintCompletion");
-        if (row) merged = { good: Number(row.goodValue), warning: Number(row.warningValue) };
-      }
-      setCompletionThreshold(merged);
-    }).catch(() => {});
-  }, [projectId, token]);
 
   if (isLoading || loadingProject) return <div>{t('page.sprints.loading')}</div>;
   if (!project) return <div>{t('page.sprints.notFound')}</div>;

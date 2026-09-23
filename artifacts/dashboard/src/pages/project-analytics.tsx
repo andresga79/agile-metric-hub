@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DrillDownModal } from "@/components/drill-down-modal";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
+import { useThresholds } from "@/hooks/use-thresholds";
 
 type Period = "1m" | "3m";
 
@@ -37,9 +38,13 @@ export default function ProjectAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drillWeek, setDrillWeek] = useState<string | null>(null);
-  const [thresholds, setThresholds] = useState(DEFAULT_ANALYTICS_THRESHOLDS);
 
   const token = getAuthToken();
+  const loadedThresholds = useThresholds(projectId);
+  const thresholds = {
+    flowEfficiency: loadedThresholds.flowEfficiency ?? DEFAULT_ANALYTICS_THRESHOLDS.flowEfficiency,
+    slaCompliance: loadedThresholds.slaCompliance ?? DEFAULT_ANALYTICS_THRESHOLDS.slaCompliance,
+  };
 
   const { data: project } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
@@ -105,25 +110,6 @@ export default function ProjectAnalytics() {
     };
   }, [projectId, period, compare, token]);
 
-  useEffect(() => {
-    if (!projectId || !token) return;
-    const headers = { Authorization: `Bearer ${token}` };
-    Promise.all([
-      fetch(`/api/admin/metric-thresholds`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
-      fetch(`/api/admin/metric-thresholds/project/${projectId}`, { headers }).then((r) => r.json()).catch(() => [] as any[]),
-    ]).then(([globalRows, overrideRows]) => {
-      const merged = { ...DEFAULT_ANALYTICS_THRESHOLDS };
-      for (const source of [globalRows, overrideRows]) {
-        if (!Array.isArray(source)) continue;
-        for (const t of source) {
-          if (t.metric === "flowEfficiency" || t.metric === "slaCompliance") {
-            merged[t.metric as "flowEfficiency" | "slaCompliance"] = { good: Number(t.goodValue), warning: Number(t.warningValue) };
-          }
-        }
-      }
-      setThresholds(merged);
-    }).catch(() => {});
-  }, [projectId, token]);
 
   if (loading) return <div>{t('page.analytics.loading')}</div>;
   if (!project) return <div>{t('page.analytics.notFound')}</div>;

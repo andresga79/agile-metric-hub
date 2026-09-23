@@ -25,6 +25,7 @@ import blockedReasonsRouter from "./blocked-reasons";
 import reportInsightsRouter from "./report-insights";
 import releaseReadinessRouter from "./release-readiness";
 import qaWorkRouter from "./qa-work";
+import thresholdsRouter from "./thresholds";
 
 const router: IRouter = Router();
 
@@ -41,6 +42,7 @@ router.use(analyticsRouter);
 router.use(slaRouter);
 router.use(portfolioRouter);
 router.use(targetsRouter);
+router.use(thresholdsRouter);
 router.use(predictiveForecastRouter);
 router.use(issuesByWeekRouter);
 router.use(qaRejectedRouter);
