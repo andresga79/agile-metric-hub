@@ -80,3 +80,42 @@ describe("Jira search pagination", () => {
     expect(jqls).toHaveLength(1);
   });
 });
+
+describe("Jira throttling (429/503)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env["JIRA_URL"] = "https://example.atlassian.net";
+    process.env["JIRA_EMAIL"] = "test@example.com";
+    process.env["JIRA_API_TOKEN"] = "token";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throttleRetryDelayMs honours Retry-After (seconds or date), else backs off, and is capped", async () => {
+    const { throttleRetryDelayMs } = await import("../jira");
+    expect(throttleRetryDelayMs("2", 1)).toBe(2000);
+    expect(throttleRetryDelayMs("0", 1)).toBe(0);
+    const now = Date.parse("2026-09-23T15:00:00Z");
+    expect(throttleRetryDelayMs("Wed, 23 Sep 2026 15:00:05 GMT", 1, now)).toBe(5000);
+    expect(throttleRetryDelayMs(null, 1)).toBe(1000);
+    expect(throttleRetryDelayMs(null, 2)).toBe(2000);
+    expect(throttleRetryDelayMs("3600", 1)).toBe(30_000);
+  });
+
+  it("retries a 429 and returns the data instead of failing the fetch", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        if (calls === 1) return new Response("rate limited", { status: 429, headers: { "Retry-After": "0" } });
+        return jsonResponse({ values: [{ id: 15, type: "scrum", location: { projectId: 10013, projectKey: "OLI" } }] });
+      })
+    );
+    const { getProjectBoardType } = await import("../jira");
+    expect(await getProjectBoardType("10013")).toBe("scrum");
+    expect(calls).toBe(2);
+  });
+});

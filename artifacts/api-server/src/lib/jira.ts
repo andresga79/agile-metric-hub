@@ -888,11 +888,14 @@ function jiraHeaders(): Record<string, string> {
   };
 }
 
-// Retries only network-level failures (dropped/reset connections, abort timeouts) - an
-// HTTP error response (4xx/5xx) still resolves normally and is handled by the caller,
-// since retrying an actual bad request wouldn't help.
+// Retries network-level failures (dropped/reset connections, abort timeouts) and Jira's
+// throttling responses (429, plus 503 which Jira Cloud also uses under load), honouring
+// Retry-After when present. Any other HTTP error still resolves normally and is handled by the
+// caller - retrying an actual bad request wouldn't help. Without the 429 handling, one throttled
+// page failed its whole fetch and the metric silently fell back to empty data.
 const JIRA_FETCH_MAX_ATTEMPTS = 3;
 const JIRA_FETCH_RETRY_DELAY_MS = 500;
+const JIRA_RETRY_AFTER_MAX_MS = 30_000;
 
 function isTransientFetchError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -905,21 +908,46 @@ function isTransientFetchError(err: unknown): boolean {
   );
 }
 
+/** Delay before retrying a throttled response: Retry-After (seconds or HTTP date) if given,
+ *  otherwise exponential backoff. Capped so a bad header can't stall a request for minutes. */
+export function throttleRetryDelayMs(retryAfter: string | null, attempt: number, now: number = Date.now()): number {
+  let ms: number | null = null;
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) ms = seconds * 1000;
+    else {
+      const at = Date.parse(retryAfter);
+      if (!Number.isNaN(at)) ms = at - now;
+    }
+  }
+  if (ms === null || ms < 0) ms = JIRA_FETCH_RETRY_DELAY_MS * 2 ** attempt;
+  return Math.min(ms, JIRA_RETRY_AFTER_MAX_MS);
+}
+
 async function fetchWithRetry(url: string): Promise<Response> {
   for (let attempt = 1; attempt <= JIRA_FETCH_MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
+    let response: Response;
     try {
-      return await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
+      response = await fetch(url, { headers: jiraHeaders(), signal: controller.signal });
     } catch (err) {
       if (attempt === JIRA_FETCH_MAX_ATTEMPTS || !isTransientFetchError(err)) {
         throw err;
       }
       logger.warn({ err, url, attempt }, "Transient Jira fetch error, retrying");
       await new Promise((resolve) => setTimeout(resolve, JIRA_FETCH_RETRY_DELAY_MS * attempt));
+      continue;
     } finally {
       clearTimeout(timeout);
     }
+
+    const throttled = response.status === 429 || response.status === 503;
+    if (!throttled || attempt === JIRA_FETCH_MAX_ATTEMPTS) return response;
+    const delay = throttleRetryDelayMs(response.headers.get("retry-after"), attempt);
+    logger.warn({ url, status: response.status, attempt, delayMs: delay }, "Jira throttled the request, retrying");
+    await response.body?.cancel().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
   throw new Error("unreachable");
 }
