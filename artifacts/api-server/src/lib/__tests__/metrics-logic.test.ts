@@ -15,6 +15,9 @@ import {
   sprintWindowHalves,
   sprintCloseTime,
   wasIssueDoneAt,
+  getResolutionDate,
+  getLeadTimeDays,
+  getCycleTimeDays,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -546,5 +549,62 @@ describe("wasIssueDoneAt", () => {
       { from: "En curso", to: "Terminado", at: "2026-08-29T10:00:00.000Z" },
     ]);
     expect(wasIssueDoneAt(issue, close, categories)).toBe(true);
+  });
+});
+
+// --- Resolution / lead / cycle time: the base of every flow metric -----------------------------
+// No Jira in tests -> the status-category map is empty, so these exercise the status-name
+// fallback (the path this site relies on for workflows that don't set a resolution).
+describe("getResolutionDate / getLeadTimeDays / getCycleTimeDays", () => {
+  const done = { status: { name: "Listo", statusCategory: { key: "done" } } };
+
+  it("uses resolutiondate when Jira set one", async () => {
+    const issue = makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-05T12:00:00.000Z" } });
+    expect((await getResolutionDate(issue))?.toISOString()).toBe("2026-09-05T12:00:00.000Z");
+    expect(await getLeadTimeDays(issue)).toBeCloseTo(4.5, 5);
+  });
+
+  it("without resolutiondate, uses the LAST transition into a done status (re-done after reopen)", async () => {
+    const issue = withStatusHistory(makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z" } }), [
+      { from: "To Do", to: "En progreso", at: "2026-09-02T00:00:00.000Z" },
+      { from: "En progreso", to: "Listo", at: "2026-09-04T00:00:00.000Z" },
+      { from: "Listo", to: "En progreso", at: "2026-09-06T00:00:00.000Z" },
+      { from: "En progreso", to: "Listo", at: "2026-09-08T00:00:00.000Z" },
+    ]);
+    expect((await getResolutionDate(issue))?.toISOString()).toBe("2026-09-08T00:00:00.000Z");
+  });
+
+  it("returns null for an issue that isn't done and has no resolutiondate", async () => {
+    const issue = makeIssue({ fields: { status: { name: "En progreso", statusCategory: { key: "indeterminate" } } } });
+    expect(await getResolutionDate(issue)).toBeNull();
+    expect(await getLeadTimeDays(issue)).toBeNull();
+    expect(await getCycleTimeDays(issue)).toBeNull();
+  });
+
+  it("cycle time runs from the FIRST in-progress transition to resolution", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-10T00:00:00.000Z" } }),
+      [
+        { from: "To Do", to: "En progreso", at: "2026-09-03T00:00:00.000Z" },
+        { from: "En progreso", to: "To Do", at: "2026-09-04T00:00:00.000Z" },
+        { from: "To Do", to: "En progreso", at: "2026-09-06T00:00:00.000Z" },
+        { from: "En progreso", to: "Listo", at: "2026-09-10T00:00:00.000Z" },
+      ]
+    );
+    expect(await getCycleTimeDays(issue)).toBeCloseTo(7, 5);
+    expect(await getLeadTimeDays(issue)).toBeCloseTo(9, 5);
+  });
+
+  it("cycle time falls back to lead time when no in-progress transition was recorded", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-03T00:00:00.000Z" } }),
+      [{ from: "To Do", to: "Listo", at: "2026-09-03T00:00:00.000Z" }]
+    );
+    expect(await getCycleTimeDays(issue)).toBeCloseTo(2, 5);
+  });
+
+  it("lead time is measured in fractional days", async () => {
+    const issue = makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: new Date(Date.parse("2026-09-01T00:00:00.000Z") + 6 * 60 * 60 * 1000).toISOString() } });
+    expect(await getLeadTimeDays(issue)).toBeCloseTo(0.25, 5);
   });
 });
