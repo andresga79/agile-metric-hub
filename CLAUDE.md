@@ -10,10 +10,14 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   estándar de correr el proyecto en dev, no `pnpm dev` suelto.
 - `cp .env.example .env` antes del primer `up` si no existe `.env` (no viaja con git).
 - `pnpm run typecheck` — typecheck completo del workspace
-- `pnpm run lint` — ESLint (baseline: 0 errores, ~114 warnings a propósito, no fuerza
-  limpiar los `any` existentes de golpe)
-- `pnpm --filter @workspace/api-server test` — vitest, 22 tests de lógica pura de métricas
+- `pnpm run lint` — ESLint (baseline: 0 errores, ~141 warnings a propósito, no fuerza
+  limpiar los `any` existentes de golpe; no dejar que suba)
+- `pnpm --filter @workspace/api-server test` — vitest, 109 tests (lógica pura de métricas,
+  paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
+- Reparar snapshots semanales de Evolution anteriores a la ventana de 90 días (admin):
+  `curl -X POST "localhost:8000/api/admin/snapshots/backfill?days=180" -H "Authorization: Bearer <token>"`
+  (opcional `&projectId=`). Correrlo una vez en cada DB con filas escritas antes del 2026-09-23.
 - Ver la skill `run-app` para el procedimiento completo verificado en vivo (incluye
   gotchas de Docker Desktop, `.env`, y reset de datos).
 
@@ -30,8 +34,6 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 
 - `artifacts/api-server` — API Express: auth, sync de Jira, cálculo de métricas/portfolio
 - `artifacts/dashboard` — frontend Vite/React
-- `artifacts/mockup-sandbox` — **código muerto**, no está en `pnpm-workspace.yaml` ni se
-  construye; no tocar salvo que se decida revivirlo o borrarlo
 - `lib/db`, `lib/api-zod`, `lib/api-client-react` — paquetes compartidos del workspace
 - `lib/integrations` — referenciado en `pnpm-workspace.yaml` pero **no existe en git**
   (directorio fantasma); los Dockerfiles lo parchan con `mkdir -p` en build
@@ -50,9 +52,12 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   cuentas asignadas). Cuenta `member` compartida entre varias personas a la vez es válido
   por diseño (JWT stateless, sin estado de sesión en el server).
 - **Cap de 90 días en fetch de Jira** (`JIRA_MAX_LOOKBACK_DAYS`): toda consulta normal se
-  recorta en silencio a 90 días. Para comparaciones históricas más largas (período
-  anterior, etc.) existe `getResolvedJiraIssuesInRange`, que sí supera el cap — no subir
-  el límite global sin revisar Forecast/Analíticas.
+  recorta en silencio a 90 días. Excepciones que sí lo superan: `getResolvedJiraIssuesInRange`
+  (período anterior, backfill) y `getJiraIssuesForWindow` (ventanas `2s`/`6s`, hasta 150 días,
+  porque 6 sprints + el activo suelen pasar de 90). No subir el límite global sin revisar
+  Forecast/Analíticas.
+- **Completado de sprint = "done al cierre"** (`wasIssueDoneAt`, desde el changelog), no el
+  estado actual — si no, el trabajo arrastrado se acredita a cada sprint por el que pasó.
 - **Sync serializado (concurrency=1)**: `warmVisibleProjectsCache` y
   `calculateAndCachePortfolio` corren de a un proyecto por vez, a propósito — fix de un
   crash loop por OOM en el free tier de 512MB (ver `SESSION_LOG.md`, 2026-07-27). Más
@@ -60,7 +65,10 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - **RBAC de lectura**: validado server-side vía `requireSectionView(...)` para la mayoría
   de endpoints; `metrics`/`analytics`/`portfolio`/`targets`-GET quedan como "baseline"
   abierto a cualquier autenticado a propósito (alimentan el overview y el Resumen
-  Ejecutivo, que no están gateados por sección en el frontend).
+  Ejecutivo, que no están gateados por sección en el frontend). Los umbrales se leen de
+  `GET /api/thresholds` / `/api/projects/:id/thresholds` (cualquier rol), **no** de
+  `/api/admin/*`. El guard de `routes/admin.ts` está acotado a `/admin` porque ese router se
+  monta sin prefijo: sin acotar, respondía 403 a members en todo router registrado después.
 
 ## Product
 
@@ -109,20 +117,29 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 - **`drizzle-kit push`**: revisar siempre el diff propuesto antes de aplicar; ya hubo un
   caso donde proponía borrar `jira_cache` (resuelto, pero mantener la cautela con push en
   general).
-- **`pnpm` pineado en versión alpha** (`12.0.0-alpha.17`) en ambos Dockerfiles — necesita
-  `ca-certificates` en imágenes `node:*-slim` o falla "No CA certificates were loaded".
+- **`pnpm@10` en ambos Dockerfiles** (major flotante, sin `packageManager` en el
+  `package.json` raíz). Base `node:22-bullseye-slim`, que es EOL: los Dockerfiles apuntan apt a
+  `archive.debian.org` para poder instalar paquetes; migrar a bookworm cuando se toque Docker.
+- **La mayoría de los issues terminados no tienen `resolutiondate`** (los workflows de este
+  Jira no la setean: OLI, 90 días → 599 sin resolución vs 168 con). Toda consulta de
+  "resueltos" tiene que incluir `resolutiondate is EMPTY AND statusCategory = Done` por
+  `statusCategoryChangedDate`, y la fecha real sale del changelog (`getResolutionDate`).
+- **`nextPageToken` de Jira no avanza** (la página 2 = la 1). Paginar siempre por clave
+  (`searchAllByKey`: `ORDER BY key ASC` + `key > último`), nunca con pageToken.
 
 ## Pointers
 
 - `HEALTH-THRESHOLDS.md` — umbrales de Admin → Health personalizados manualmente (difieren
   del default de fábrica), con script SQL para restaurarlos en un Postgres nuevo/otra PC
-- `METRICS.md` — fórmula real de cada métrica calculada, con referencias `archivo:línea`
+- `METRICS.md` — fórmula real de cada métrica calculada, con referencias `archivo` + función
+  (actualizado 2026-09-23)
 - `DEPLOY.md` — arquitectura y pasos de deploy en máquina interna vía Docker Compose (Render
   Static + Render API Docker + Neon quedaron discontinuados, ver `SESSION_LOG.md` para esa
   historia)
-- `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-26):
-  Seguridad, Datos y Calidad mayormente cerrados (SEC-1/3/4, DAT-2/3/4, QA-3/4, OPS-1,
-  MET-1); parciales SEC-2, DAT-5, QA-1, DOC-1, FE-2; QA-2 bloqueado por scope `workflow`
-  del token de GitHub; sin tocar DAT-1, MET-2, FE-1/3/4/5/6, DEU-1/2/3/4, OPS-2
+- `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-26; la
+  pasada de consistencia de datos del 2026-09-23 cerró además DAT-1, DEU-2, DEU-4 y FE-6,
+  ver `git log`). Parciales: SEC-2, DAT-5 (falta limitador global), QA-1, DOC-1, FE-2; QA-2
+  (CI) pendiente; sin tocar MET-2, FE-1/3/4/5, DEU-1/3, OPS-2. La app es solo interna: la
+  prioridad es consistencia de datos, no hardening de seguridad.
 - `SESSION_LOG.md` — bitácora histórica completa: bugs encontrados y su causa raíz, todo
   el proceso de deploy, diagnóstico de incidentes de producción

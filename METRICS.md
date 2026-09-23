@@ -30,7 +30,9 @@ Estas afectan a **casi todas** las métricas:
    en bloques semanales. Antes se cortaba en 100 issues por bloque sin aviso (DAT-1: OLI perdía 12
    en una semana). El flujo de no-resueltos incluye además los issues cuyo **cambio de categoría
    de estado** cayó en la ventana, porque en este sitio la mayoría de los issues terminados **no
-   tienen `resolutiondate`** (OLI, 90 días: 599 terminados sin resolución vs 168 con).
+   tienen `resolutiondate`** (OLI, 90 días: 599 terminados sin resolución vs 168 con). La misma
+   regla aplica a `getResolvedJiraIssuesInRange` (período anterior): antes solo miraba
+   `resolutiondate` y el período anterior de OLI 1m contaba 49 en vez de 100.
 4. **Umbrales desde Admin.** Los colores/scores comparan contra los umbrales configurados en
    **Admin → Health** (`getEffectiveThresholds`: default global + override por proyecto), que el
    frontend lee de `GET /api/thresholds` y `GET /api/projects/:id/thresholds` (hook
@@ -241,8 +243,10 @@ Objetivos configurables en Admin, mapeados por prioridad:
 - **Kanban (por semana):** filas de `metric_snapshots`, una por proyecto y semana ISO, escritas
   en cada sync. Solo se guardan semanas **completamente dentro** de la ventana de 90 días
   (`snapshotsFullyInWindow`): la semana del borde está parcialmente cubierta, y reescribirla cada
-  día dejaba "congelado" el valor más truncado. ⚠️ Filas escritas antes del 2026-09-23 pueden
-  tener ese daño (p. ej. OLP 2026-06-01/08/15 con throughput 0).
+  día dejaba "congelado" el valor más truncado. Las filas dañadas antes del 2026-09-23 (p. ej.
+  OLP 2026-06-01/08/15 con throughput 0) se reparan con `POST /api/admin/snapshots/backfill`
+  (`backfillWeeklySnapshots`: recalcula lead/cycle time y throughput de semanas completas; la
+  tasa de rechazo QA se conserva porque necesita también los issues no resueltos).
 - **Scrum (por sprint):** `computeSprintSnapshot` sobre los issues del sprint, con la regla de
   "completado al cierre".
 
