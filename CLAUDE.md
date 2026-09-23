@@ -10,8 +10,12 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   estándar de correr el proyecto en dev, no `pnpm dev` suelto.
 - `cp .env.example .env` antes del primer `up` si no existe `.env` (no viaja con git).
 - `pnpm run typecheck` — typecheck completo del workspace
-- `pnpm run lint` — ESLint (baseline: 0 errores, ~141 warnings a propósito, no fuerza
-  limpiar los `any` existentes de golpe; no dejar que suba)
+- `pnpm run lint` — ESLint (baseline: 0 errores, 141 warnings a propósito, no fuerza
+  limpiar los `any` existentes de golpe). El CI corre `--max-warnings 141`: si se limpian
+  warnings, bajar ese número en `azure-pipelines.yml`.
+- **CI**: `azure-pipelines.yml`, job `Checks` en cada push a `main` (install
+  `--frozen-lockfile`, typecheck, tests de la API, lint). Es independiente del job `Sync`
+  (Azure → GitHub), que sigue corriendo aunque fallen los checks.
 - `pnpm --filter @workspace/api-server test` — vitest, 109 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
@@ -139,7 +143,7 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 - `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-26; la
   pasada de consistencia de datos del 2026-09-23 cerró además DAT-1, DEU-2, DEU-4 y FE-6,
   ver `git log`). Parciales: SEC-2, DAT-5 (falta limitador global), QA-1, DOC-1, FE-2; QA-2
-  (CI) pendiente; sin tocar MET-2, FE-1/3/4/5, DEU-1/3, OPS-2. La app es solo interna: la
+  (CI) resuelto en Azure Pipelines; sin tocar MET-2, FE-1/3/4/5, DEU-1/3, OPS-2. La app es solo interna: la
   prioridad es consistencia de datos, no hardening de seguridad.
 - `SESSION_LOG.md` — bitácora histórica completa: bugs encontrados y su causa raíz, todo
   el proceso de deploy, diagnóstico de incidentes de producción

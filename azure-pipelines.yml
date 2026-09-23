@@ -6,24 +6,61 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-steps:
-  - checkout: self
-    fetchDepth: 0
+# Two independent jobs: the GitHub sync must keep working even when checks fail, so
+# "Checks" has no dependsOn and doesn't gate "Sync".
+jobs:
+  - job: Sync
+    displayName: 'Sync main to GitHub'
+    steps:
+      - checkout: self
+        fetchDepth: 0
 
-  - script: |
-      set -e
-      GITHUB_HEAD=$(git ls-remote "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git" refs/heads/main | awk '{print $1}')
-      if [ -z "$GITHUB_HEAD" ]; then
-        echo "Unable to read GitHub remote, aborting"
-        exit 1
-      fi
-      if [ "$GITHUB_HEAD" = "$(git rev-parse HEAD)" ]; then
-        echo "GitHub already at $(git rev-parse HEAD), skipping sync"
-      else
-        git remote add github "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git"
-        git push github main --force
-        echo "GitHub synced to $(git rev-parse HEAD)"
-      fi
-    displayName: 'Sync main to GitHub (skip if already in sync)'
-    env:
-      GITHUB_PAT: $(GITHUB_PAT)
+      - script: |
+          set -e
+          GITHUB_HEAD=$(git ls-remote "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git" refs/heads/main | awk '{print $1}')
+          if [ -z "$GITHUB_HEAD" ]; then
+            echo "Unable to read GitHub remote, aborting"
+            exit 1
+          fi
+          if [ "$GITHUB_HEAD" = "$(git rev-parse HEAD)" ]; then
+            echo "GitHub already at $(git rev-parse HEAD), skipping sync"
+          else
+            git remote add github "https://x-access-token:$(GITHUB_PAT)@github.com/andresga79/agile-metric-hub.git"
+            git push github main --force
+            echo "GitHub synced to $(git rev-parse HEAD)"
+          fi
+        displayName: 'Sync main to GitHub (skip if already in sync)'
+        env:
+          GITHUB_PAT: $(GITHUB_PAT)
+
+  # Same toolchain as docker/*/Dockerfile (node 22, pnpm 10). --frozen-lockfile is the path the
+  # Docker build uses, so this also catches the spurious-lockfile gotcha from CLAUDE.md before a
+  # deploy does. Lint is capped at the current warning baseline so it can't creep up silently.
+  - job: Checks
+    displayName: 'Typecheck, tests, lint'
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '22.x'
+        displayName: 'Use Node 22'
+
+      - script: |
+          set -e
+          npm install -g pnpm@10
+          # lib/integrations is listed in pnpm-workspace.yaml but not in git (the Dockerfiles
+          # create it the same way).
+          mkdir -p lib/integrations
+          pnpm install --frozen-lockfile
+        displayName: 'Install (frozen lockfile)'
+
+      - script: pnpm run typecheck
+        displayName: 'Typecheck'
+
+      - script: pnpm --filter @workspace/api-server test
+        displayName: 'API tests'
+
+      - script: pnpm run lint --max-warnings 141
+        displayName: 'Lint (no new warnings)'
