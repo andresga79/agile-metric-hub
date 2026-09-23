@@ -66,8 +66,16 @@ export default function ProjectAnalytics() {
       return;
     }
 
+    // A superseded request (project/period/compare changed) must not touch state: its catch used to
+    // fire after the new request had started and leave the page stuck on an error. Only a real
+    // failure or a timeout shows one - and not the "no resolved issues" text, which read as empty data.
+    let superseded = false;
+    let timedOut = false;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 20000);
 
     setLoading(true);
     setError(null);
@@ -92,19 +100,22 @@ export default function ProjectAnalytics() {
       }),
     ])
       .then(([analytics, sla]) => {
+        if (superseded) return;
         setData(analytics);
         setSlaData(sla);
       })
       .catch((err) => {
+        if (superseded) return;
         console.error(err);
-        setError(t("page.analytics.noResolved"));
+        setError(t(timedOut ? "common.loadTimeout" : "common.loadFailed"));
       })
       .finally(() => {
         clearTimeout(timeout);
-        setLoading(false);
+        if (!superseded) setLoading(false);
       });
 
     return () => {
+      superseded = true;
       clearTimeout(timeout);
       controller.abort();
     };

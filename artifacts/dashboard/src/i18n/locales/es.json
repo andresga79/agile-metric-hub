@@ -648,5 +648,8 @@
   "status.noResolvedIssues": "No hay issues resueltos para calcular.",
   "status.noSlaData": "No hay issues resueltos para calcular SLA.",
   "status.noTransitionData": "Datos de transición insuficientes para calcular tiempo por estado.",
-  "status.noActiveItems": "Sin elementos activos"
+  "status.noActiveItems": "Sin elementos activos",
+
+  "common.loadFailed": "No se pudieron cargar los datos. Intente nuevamente en un momento.",
+  "common.loadTimeout": "Jira tardó demasiado en responder. Intente nuevamente en un momento."
 }

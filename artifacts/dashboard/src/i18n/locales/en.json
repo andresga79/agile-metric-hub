@@ -588,5 +588,8 @@
   "page.report.productionTitle": "Next steps to production",
   "page.report.productionNotConfigured": "Configure in Admin → Releases",
   "page.report.productionLinkedIssues": "Issues implementing this release",
-  "page.report.sprintsTitle": "Sprint breakdown"
+  "page.report.sprintsTitle": "Sprint breakdown",
+
+  "common.loadFailed": "Couldn't load the data. Try again in a moment.",
+  "common.loadTimeout": "Jira took too long to respond. Try again in a moment."
 }

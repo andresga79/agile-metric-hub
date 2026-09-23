@@ -12,6 +12,7 @@ import { ChevronRight, Download, Ban, Target } from "lucide-react";
 import { AreaChart, Area, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { useTimeWindow } from "@/hooks/use-time-window";
 import { useThresholds, type MetricThreshold } from "@/hooks/use-thresholds";
 
 type ThresholdStatus = "good" | "warning" | "critical" | null;
@@ -40,7 +41,6 @@ function formatDurationDays(value: number | null | undefined): string {
 export default function ProjectDetail() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<TimeWindow>("1m");
   const [targets, setTargets] = useState<any[]>([]);
   // Effective thresholds incl. this project's overrides - this page used to read only the global
   // (admin-only) rows, so it colored metrics differently from Analytics/Sprints/Health.
@@ -54,17 +54,15 @@ export default function ProjectDetail() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
 
+  // null until boardType is known - see useTimeWindow (avoids the 1m-then-2s double fetch).
+  const [selectedPeriod, setPeriod] = useTimeWindow(project?.boardType);
+  const periodReady = selectedPeriod !== null;
+  const period: TimeWindow = selectedPeriod ?? "1m";
+
   const { data: metrics, isLoading: loadingMetrics } = useGetProjectMetrics(projectId!, period, {
-    query: { enabled: !!projectId && !!token && !loadingProject, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token && periodReady, queryKey: getGetProjectMetricsQueryKey(projectId!, period) }
   });
 
-  useEffect(() => {
-    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
-      setPeriod("2s");
-    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
-      setPeriod("1m");
-    }
-  }, [project?.boardType]);
 
   useEffect(() => {
     if (!projectId || !token) return;
@@ -94,7 +92,7 @@ export default function ProjectDetail() {
     setExportingChart(false);
   };
 
-  if (loadingProject || loadingMetrics) return <DetailSkeleton />;
+  if (loadingProject || (!!project && !periodReady) || loadingMetrics) return <DetailSkeleton />;
   if (!project) return <div>{t('page.detail.notFound')}</div>;
 
   const noCompletedWork = !metrics?.resolvedCount;
@@ -216,7 +214,7 @@ export default function ProjectDetail() {
           sparklineData={metrics?.velocityByWeek}
         />
 
-        <BlockedKpiCard projectId={projectId!} period={period} />
+        {periodReady && <BlockedKpiCard projectId={projectId!} period={period} />}
       </div>
 
       <Card className="bg-card/40">

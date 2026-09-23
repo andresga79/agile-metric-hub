@@ -53,6 +53,10 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
     }
 
     const controller = new AbortController();
+    // A request superseded by a newer one (project/member/period changed) must not touch state:
+    // its catch used to run after the new request's setError(null) and leave the page on
+    // "signal is aborted" even once the new data had loaded.
+    let superseded = false;
     const timeout = setTimeout(() => controller.abort(), 20000);
     const headers = { Authorization: `Bearer ${token}` };
     const opts = { signal: controller.signal, headers };
@@ -80,6 +84,7 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
       fetch(`/api/projects/${projectId}/report-insights`, opts).then(jsonOrThrow("Report insights")),
     ])
       .then(([cfd, memberRows, metricsData, analytics, health, qaRejected, sprintData, goal, readiness, insightRows]) => {
+        if (superseded) return;
         setCfdData(cfd?.dataPoints ?? []);
         setMembers(Array.isArray(memberRows) ? memberRows : []);
         setMetrics(metricsData ?? null);
@@ -101,15 +106,17 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
         setHealthDimensions(Array.isArray(health?.dimensions) ? health.dimensions : []);
       })
       .catch((err) => {
+        if (superseded) return;
         console.error(err);
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         clearTimeout(timeout);
-        setLoading(false);
+        if (!superseded) setLoading(false);
       });
 
     return () => {
+      superseded = true;
       clearTimeout(timeout);
       controller.abort();
     };

@@ -14,18 +14,38 @@ export function DrillDownModal({ open, onClose, projectId, week, period }: Drill
   const { t } = useTranslation();
   const [issues, setIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!open || !projectId || !week) return;
+    // Ignore a superseded week's response (clicking weeks quickly used to show the previous
+    // week's issues), and show a failed request as a failure rather than "no issues".
+    let cancelled = false;
     setLoading(true);
+    setFailed(false);
     const token = localStorage.getItem("auth_token");
     fetch(`/api/projects/${projectId}/issues-by-week?week=${week}&period=${period}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
-      .then((d) => setIssues(d.issues ?? []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then((r) => {
+        if (!r.ok) throw new Error(`Issues-by-week request failed: ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setIssues(d.issues ?? []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(err);
+        setIssues([]);
+        setFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, projectId, week, period]);
 
   if (!open) return null;
@@ -43,6 +63,8 @@ export function DrillDownModal({ open, onClose, projectId, week, period }: Drill
         <div className="p-4 overflow-auto flex-1">
           {loading ? (
             <p className="text-muted-foreground">{t('page.drillDown.loading')}</p>
+          ) : failed ? (
+            <p className="text-destructive">{t('common.loadFailed')}</p>
           ) : issues.length === 0 ? (
             <p className="text-muted-foreground">{t('page.drillDown.noIssues')}</p>
           ) : (

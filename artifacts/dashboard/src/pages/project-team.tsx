@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Users, ExternalLink, FileText } from "lucide-react";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { useTimeWindow } from "@/hooks/use-time-window";
 
 // No Admin -> Health threshold exists for "WIP items carried by one person" (wipRatio there is
 // a project-wide %, not a per-person count) - this is a plain Kanban rule of thumb, not wired to
@@ -24,7 +25,6 @@ function wipColorClass(wip: number): string {
 export default function ProjectTeam() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<TimeWindow>("1m");
   const [memberFilter, setMemberFilter] = useState("all");
   const [showAllWorkItems, setShowAllWorkItems] = useState(false);
 
@@ -33,23 +33,17 @@ export default function ProjectTeam() {
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) }
   });
-
-  // Scrum projects speak in sprints, not calendar time - switch the filter's meaning (and default
-  // value) the moment we learn the board type, same as project-detail.tsx's Resumen tab.
-  useEffect(() => {
-    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
-      setPeriod("2s");
-    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
-      setPeriod("1m");
-    }
-  }, [project?.boardType]);
+  // null until boardType is known - see useTimeWindow (avoids the 1m-then-2s double fetch).
+  const [selectedPeriod, setPeriod] = useTimeWindow(project?.boardType);
+  const periodReady = selectedPeriod !== null;
+  const period: TimeWindow = selectedPeriod ?? "1m";
 
   const { data: members, isLoading: loadingMembers } = useGetProjectMembers(projectId!, period, {
-    query: { enabled: !!projectId && !!token, queryKey: getGetProjectMembersQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token && periodReady, queryKey: getGetProjectMembersQueryKey(projectId!, period) }
   });
 
   const { data: issues, isLoading: loadingIssues } = useGetProjectIssues(projectId!, period, {
-    query: { enabled: !!projectId && !!token, queryKey: getGetProjectIssuesQueryKey(projectId!, period) }
+    query: { enabled: !!projectId && !!token && periodReady, queryKey: getGetProjectIssuesQueryKey(projectId!, period) }
   });
 
   // Grouped by accountId, not display name — two people can share a display name in Jira, and
@@ -86,7 +80,7 @@ export default function ProjectTeam() {
     return source.filter((member) => member.accountId === memberFilter);
   }, [memberFilter, members]);
 
-  if (loadingProject || loadingMembers || loadingIssues) return <div>{t('page.team.loading')}</div>;
+  if (loadingProject || (!!project && !periodReady) || loadingMembers || loadingIssues) return <div>{t('page.team.loading')}</div>;
   if (!project) return <div>{t('page.team.notFound')}</div>;
 
   return (

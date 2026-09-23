@@ -47,6 +47,10 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
     const token = getAuthToken();
     const headers = { Authorization: `Bearer ${token}` };
+    // Drop responses from a superseded project/period so a slower earlier request can't overwrite
+    // the current one (e.g. switching Últimos 2 -> Últimos 6 while the first is still loading).
+    let cancelled = false;
+    setLoading(true);
 
     Promise.all([
       fetch(`/api/projects/${projectId}/health/${period}`, { headers }).then((r) => r.json()),
@@ -59,6 +63,7 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         .catch(() => ({})),
     ])
       .then(([healthData, analyticsData, effectiveThresholds]) => {
+        if (cancelled) return;
         const raw: RawHealth = healthData.raw;
         const analytics = analyticsData;
         const result: Suggestion[] = [];
@@ -249,9 +254,14 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
         setLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setFlowHealthScore(null);
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, period]);
 
   return { suggestions, flowHealthScore, loading };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey } from "@workspace/api-client-react";
@@ -9,6 +9,7 @@ import { useHealthSuggestions, type Suggestion } from "@/hooks/use-health-sugges
 import { ProjectTabs } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { useTimeWindow } from "@/hooks/use-time-window";
 import { MetricTooltip } from "@/components/metric-tooltip";
 
 // Same 0-100 scale normalize() produces server-side (100 = at/above the "good" admin
@@ -117,24 +118,17 @@ function SuggestionCard({ suggestion, index }: { suggestion: Suggestion; index: 
 export default function ProjectHealth() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<TimeWindow>("1m");
   const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
+  // null until boardType is known - see useTimeWindow (avoids the 1m-then-2s double fetch).
+  const [selectedPeriod, setPeriod] = useTimeWindow(project?.boardType);
+  const periodReady = selectedPeriod !== null;
+  const period: TimeWindow = selectedPeriod ?? "1m";
 
-  // Scrum projects speak in sprints, not calendar time - switch the filter's meaning (and default
-  // value) the moment we learn the board type, same as project-detail.tsx's Resumen tab.
-  useEffect(() => {
-    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
-      setPeriod("2s");
-    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
-      setPeriod("1m");
-    }
-  }, [project?.boardType]);
-
-  const { suggestions, flowHealthScore, loading: loadingHealth } = useHealthSuggestions(projectId, period);
+  const { suggestions, flowHealthScore, loading: loadingHealth } = useHealthSuggestions(periodReady ? projectId : undefined, period);
 
   if (loadingProject) {
     return (

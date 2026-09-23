@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
+import { useTimeWindow } from "@/hooks/use-time-window";
 
 const CATEGORY_LABEL: Record<string, string> = {
   new: "Por hacer",
@@ -28,7 +29,6 @@ const CATEGORY_BADGE_CLASS: Record<string, string> = {
 export default function ProjectFlow() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
-  const [period, setPeriod] = useState<TimeWindow>("1m");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,16 +44,10 @@ export default function ProjectFlow() {
   });
   const { data: currentUser } = useGetCurrentUser({ query: { enabled: !!token, queryKey: getGetCurrentUserQueryKey() } });
   const canEditFlagReason = currentUser?.role === "admin";
-
-  // Scrum projects speak in sprints, not calendar time - switch the filter's meaning (and default
-  // value) the moment we learn the board type, same as project-detail.tsx's Resumen tab.
-  useEffect(() => {
-    if (project?.boardType === "scrum" && (period === "1m" || period === "3m")) {
-      setPeriod("2s");
-    } else if (project?.boardType && project.boardType !== "scrum" && (period === "2s" || period === "6s")) {
-      setPeriod("1m");
-    }
-  }, [project?.boardType]);
+  // null until boardType is known - see useTimeWindow (avoids the 1m-then-2s double fetch).
+  const [selectedPeriod, setPeriod] = useTimeWindow(project?.boardType);
+  const periodReady = selectedPeriod !== null;
+  const period: TimeWindow = selectedPeriod ?? "1m";
 
   useEffect(() => {
     if (!projectId) {
@@ -68,9 +62,18 @@ export default function ProjectFlow() {
       setError(t("page.flow.notFound"));
       return;
     }
+    if (!periodReady) return;
 
+    // `superseded` = a newer request replaced this one (period/project changed): it must not touch
+    // state at all. A timeout also aborts, but that one IS a failure and has to leave the loading
+    // state - previously both were treated alike, so a slow /analytics stayed on "Cargando..." forever.
+    let superseded = false;
+    let timedOut = false;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 20000);
 
     setLoading(true);
     setError(null);
@@ -84,26 +87,25 @@ export default function ProjectFlow() {
         }
         return r.json();
       })
-      .then(setData)
+      .then((d) => {
+        if (!superseded) setData(d);
+      })
       .catch((err) => {
-        // An aborted request means a newer one superseded it (period changed, e.g. the
-        // boardType-driven 1m -> 2s switch right after load) - not a real failure, so don't
-        // flash the "no data" error over whatever the in-flight replacement is about to render.
-        if (controller.signal.aborted) return;
+        if (superseded) return;
         console.error(err);
-        setError(t("page.flow.noTransitionData"));
+        setError(t(timedOut ? "common.loadTimeout" : "common.loadFailed"));
       })
       .finally(() => {
         clearTimeout(timeout);
-        if (controller.signal.aborted) return;
-        setLoading(false);
+        if (!superseded) setLoading(false);
       });
 
     return () => {
+      superseded = true;
       clearTimeout(timeout);
       controller.abort();
     };
-}, [projectId, period, token]);
+}, [projectId, period, periodReady, token]);
 
   if (loading) return <div>{t('page.flow.loading')}</div>;
   if (!project) return <div>{t('page.flow.notFound')}</div>;

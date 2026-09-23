@@ -92,6 +92,8 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
+  // A failed /portfolio used to become [] and read as "no projects"; keep it distinguishable.
+  const [portfolioFailed, setPortfolioFailed] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
     lastSyncedAt: string | null;
     isSyncing: boolean;
@@ -157,9 +159,17 @@ export default function Dashboard() {
     fetch("/api/portfolio", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(async (r) => { if (!r.ok) return []; const text = await r.text(); return text ? JSON.parse(text) : []; })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Portfolio request failed: ${r.status}`);
+        const text = await r.text();
+        return text ? JSON.parse(text) : [];
+      })
       .then(setPortfolioData)
-      .catch(() => setPortfolioData([]))
+      .catch((err) => {
+        console.error(err);
+        setPortfolioData([]);
+        setPortfolioFailed(true);
+      })
       .finally(() => setPortfolioLoading(false));
     fetchSyncStatus();
 
@@ -603,6 +613,8 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+          ) : portfolioFailed ? (
+            <p className="text-sm text-destructive py-6 text-center">{t('common.loadFailed')}</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>

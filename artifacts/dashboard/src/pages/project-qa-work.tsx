@@ -36,6 +36,7 @@ export default function ProjectQaWork() {
   const [period, setPeriod] = useState<Period>("1m");
   const [data, setData] = useState<QaWorkData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const token = getAuthToken();
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
@@ -44,14 +45,33 @@ export default function ProjectQaWork() {
 
   useEffect(() => {
     if (!projectId || !token) return;
+    // A failed request (403/500) used to be parsed as data and render as "no QA work"; show it as
+    // a failure instead, and ignore responses from a superseded period.
+    let cancelled = false;
     setLoading(true);
+    setFailed(false);
     fetch(`/api/projects/${projectId}/qa-work/${period}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then((r) => {
+        if (!r.ok) throw new Error(`QA work request failed: ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(err);
+        setData(null);
+        setFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, period, token]);
 
   if (!token) return <div>{t("page.qaWork.notFound")}</div>;
@@ -135,7 +155,9 @@ export default function ProjectQaWork() {
           <CardDescription>{t("page.qaWork.tableDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {items.length === 0 ? (
+          {failed ? (
+            <p className="text-sm text-destructive py-6 text-center">{t("common.loadFailed")}</p>
+          ) : items.length === 0 ? (
             <EmptyState icon={FlaskConical} title={t("page.qaWork.empty")} />
           ) : (
             <div className="overflow-x-auto">

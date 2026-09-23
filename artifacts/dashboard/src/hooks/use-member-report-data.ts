@@ -27,6 +27,10 @@ export function useMemberReportData(
     }
 
     const controller = new AbortController();
+    // A request superseded by a newer one (project/member/period changed) must not touch state:
+    // its catch used to run after the new request's setError(null) and leave the page on
+    // "signal is aborted" even once the new data had loaded.
+    let superseded = false;
     const timeout = setTimeout(() => controller.abort(), 20000);
     const headers = { Authorization: `Bearer ${token}` };
     const opts = { signal: controller.signal, headers };
@@ -50,6 +54,7 @@ export function useMemberReportData(
       fetch(`/api/projects/${projectId}/issues/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("Issues")),
     ])
       .then(([memberRows, metricsData, analytics, health, qaRejected, issues]) => {
+        if (superseded) return;
         setMembers(Array.isArray(memberRows) ? memberRows : []);
         setMemberIssues(Array.isArray(issues) ? issues : []);
         setMetrics(metricsData ?? null);
@@ -65,15 +70,17 @@ export function useMemberReportData(
         setHealthDimensions(Array.isArray(health?.dimensions) ? health.dimensions : []);
       })
       .catch((err) => {
+        if (superseded) return;
         console.error(err);
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         clearTimeout(timeout);
-        setLoading(false);
+        if (!superseded) setLoading(false);
       });
 
     return () => {
+      superseded = true;
       clearTimeout(timeout);
       controller.abort();
     };
