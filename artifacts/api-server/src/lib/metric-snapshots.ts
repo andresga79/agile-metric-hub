@@ -1,5 +1,5 @@
 import { db, metricSnapshotsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { logger } from "./logger";
 import {
   isIssueDone,
@@ -14,6 +14,7 @@ import {
   JIRA_MAX_LOOKBACK_DAYS,
   sprintCloseTime,
   wasIssueDoneAt,
+  getResolvedJiraIssuesInRange,
   type JiraIssue,
   type JiraSprint,
 } from "./jira";
@@ -169,6 +170,82 @@ export async function storeWeeklySnapshots(projectId: string, issues: JiraIssue[
   }
 
   logger.debug({ projectId, weeks: snapshots.length }, "Stored weekly metric snapshots");
+}
+
+/** One-off repair of weekly snapshots older than the live 90-day window. Rows for those weeks were
+ *  written by the daily sync while they sat on the window edge, so each froze at its most
+ *  truncated value (OLP's 2026-06-01/08/15 read throughput 0 vs ~5/~21/7+ in Jira). This refetches
+ *  the resolved issues of [now - days, now - 83d) - the upper bound overlaps the live window by a
+ *  week so the edge week is covered completely - and rewrites every full week in that slice that
+ *  the live sync no longer touches (weekStart before the live window start).
+ *  Only lead/cycle time and throughput are rewritten: QA rejection rate needs every issue that
+ *  entered QA that week, resolved or not, which a resolved-only fetch can't provide - recomputing
+ *  it from resolved issues alone would bias it, so the stored value is kept. */
+export async function backfillWeeklySnapshots(
+  projectId: string,
+  days: number
+): Promise<{ weeksUpdated: string[] }> {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const UPPER_DAYS_AGO = JIRA_MAX_LOOKBACK_DAYS - 7;
+  if (days <= UPPER_DAYS_AGO) return { weeksUpdated: [] };
+
+  const now = Date.now();
+  const rangeStart = new Date(now - days * DAY_MS);
+  const rangeEnd = new Date(now - UPPER_DAYS_AGO * DAY_MS);
+  const liveWindowStart = new Date(now - JIRA_MAX_LOOKBACK_DAYS * DAY_MS);
+
+  const issues = await getResolvedJiraIssuesInRange(projectId, days, UPPER_DAYS_AGO, { includeChangelog: true });
+  const computed = await computeWeeklySnapshots(projectId, issues);
+  const weekMs = (w: string) => new Date(`${w}T00:00:00Z`).getTime();
+  const repairable = computed.filter(
+    (w) =>
+      weekMs(w.weekStart) >= rangeStart.getTime() &&
+      weekMs(w.weekStart) + 7 * DAY_MS <= rangeEnd.getTime() &&
+      weekMs(w.weekStart) < liveWindowStart.getTime()
+  );
+
+  for (const snapshot of repairable) {
+    await db
+      .insert(metricSnapshotsTable)
+      .values({
+        projectId,
+        weekStart: snapshot.weekStart,
+        leadTimeAvg: snapshot.leadTimeAvg?.toString() ?? null,
+        cycleTimeAvg: snapshot.cycleTimeAvg?.toString() ?? null,
+        throughput: snapshot.throughput,
+        qaRejectionRate: null,
+      })
+      .onConflictDoUpdate({
+        target: [metricSnapshotsTable.projectId, metricSnapshotsTable.weekStart],
+        set: {
+          leadTimeAvg: snapshot.leadTimeAvg?.toString() ?? null,
+          cycleTimeAvg: snapshot.cycleTimeAvg?.toString() ?? null,
+          throughput: snapshot.throughput,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  // Weeks in the slice with no resolved work at all are genuinely empty - write them as 0 too, or a
+  // row frozen at a partial non-zero value (or a stale 0 next to real work) would stay wrong.
+  const computedWeeks = new Set(repairable.map((w) => w.weekStart));
+  const emptyWeeks: string[] = [];
+  const firstMonday = new Date(`${isoWeekStart(rangeStart)}T00:00:00Z`).getTime();
+  for (let t = firstMonday; t + 7 * DAY_MS <= rangeEnd.getTime(); t += 7 * DAY_MS) {
+    const w = new Date(t).toISOString().split("T")[0]!;
+    if (t < rangeStart.getTime() || t >= liveWindowStart.getTime() || computedWeeks.has(w)) continue;
+    emptyWeeks.push(w);
+  }
+  for (const w of emptyWeeks) {
+    await db
+      .update(metricSnapshotsTable)
+      .set({ leadTimeAvg: null, cycleTimeAvg: null, throughput: 0, updatedAt: new Date() })
+      .where(and(eq(metricSnapshotsTable.projectId, projectId), eq(metricSnapshotsTable.weekStart, w)));
+  }
+
+  const weeksUpdated = [...repairable.map((w) => w.weekStart), ...emptyWeeks].sort();
+  logger.info({ projectId, days, weeks: weeksUpdated.length }, "Backfilled weekly metric snapshots");
+  return { weeksUpdated };
 }
 
 /** Computes Lead Time, Cycle Time, Throughput and QA rejection rate for a single sprint's

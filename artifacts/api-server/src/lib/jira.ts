@@ -1582,7 +1582,8 @@ export async function getResolvedJiraIssuesInRange(
 
   const includeChangelog = options?.includeChangelog === true;
   const canonicalProjectId = await getCanonicalProjectId(projectId);
-  const cacheKey = `issues:${canonicalProjectId}:range:${fromDaysAgo}-${toDaysAgo}${includeChangelog ? ":changelog" : ""}`;
+  // ":v2" = includes done-without-resolution issues; old entries (without them) are not reused.
+  const cacheKey = `issues:${canonicalProjectId}:range:v2:${fromDaysAgo}-${toDaysAgo}${includeChangelog ? ":changelog" : ""}`;
 
   return withCache(cacheKey, async () => {
     const now = new Date();
@@ -1601,9 +1602,14 @@ export async function getResolvedJiraIssuesInRange(
     // Same date-only "<=" boundary bug as getJiraIssuesForProject above: Jira reads a bare date
     // in a "<=" bound as that day's 00:00, so anything resolved later that day falls into neither
     // this chunk nor the next one. fetchPage's `to` here is always an exclusive upper bound.
+    // "Resolved" must include issues moved to Done without a resolution date - the majority on this
+    // site (OLI, 60..30 days ago: 49 with resolutiondate vs 197 done without). Matching only
+    // resolutiondate made every "vs previous period" compare a full current period (whose fetch
+    // does include them) against a previous period missing most of its work. Their completion
+    // date is statusCategoryChangedDate; getResolutionDate then derives it from the changelog.
     const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> =>
       searchAllByKey(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}"`,
+        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND ((resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}") OR (resolutiondate is EMPTY AND statusCategory = Done AND statusCategoryChangedDate >= "${from}" AND statusCategoryChangedDate < "${toExclusive}"))`,
         { fields, includeChangelog, logContext: { projectId } }
       );
 
