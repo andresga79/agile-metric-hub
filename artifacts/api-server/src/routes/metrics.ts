@@ -794,7 +794,21 @@ router.get(
       })
     );
 
-    res.json(mapped);
+    // Done issues only count if resolved inside the same window the KPIs use (/metrics, /members):
+    // exact sprint bounds for 2s/6s, [now - periodDays, now) otherwise. The fetch also returns work
+    // finished in the currently active sprint and up to a day past each calendar edge, so the member
+    // report's "Terminados" list read 39 against a KPI of 25 for the same person on 2s. Open issues
+    // are always kept - they're current state, not period activity.
+    const windowStartMs = (resolvedWindow.windowStart ?? getStartDate(resolvedWindow.periodDays)).getTime();
+    const windowEndMs = resolvedWindow.windowEnd?.getTime() ?? Infinity;
+    const inWindow = mapped.filter((i) => {
+      if (!i.isDone) return true;
+      if (!i.resolvedAt) return false;
+      const t = new Date(i.resolvedAt).getTime();
+      return t >= windowStartMs && t < windowEndMs;
+    });
+
+    res.json(inWindow);
   }
 );
 

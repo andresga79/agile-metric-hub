@@ -1691,6 +1691,32 @@ export async function getFlaggedJiraIssuesForProject(
   }, { forceRefresh: options?.forceRefresh });
 }
 
+/** Every open QA/test-management issue (the given types) with no activity filter. The general
+ *  open-issues fetch below only keeps in-progress, flagged or recently-updated work to stay fast on
+ *  huge backlogs, which silently dropped exactly what QA Work's "stale" count is about: a Test
+ *  Execution parked in To Do for months (DCX: ~30 open, ~20 untouched 30+ days; the view showed 9
+ *  and 0). QA-type sets are small (tens per project), so fetching them all is cheap. */
+export async function getOpenQaIssuesForProject(
+  projectId: string,
+  qaIssueTypes: readonly string[],
+  options?: { forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId).filter((issue) => !isIssueDone(issue) && qaIssueTypes.includes(issue.fields.issuetype.name));
+  }
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  const typeList = qaIssueTypes.map((t) => `"${t}"`).join(", ");
+  return withCache(`issues:${canonicalProjectId}:open-qa`, async () => {
+    const fields =
+      "summary,status,issuetype,priority,assignee,created,resolutiondate,updated";
+    const issues = await searchAllByKey(
+      `project = "${canonicalProjectId}" AND issuetype in (${typeList}) AND statusCategory != done`,
+      { fields, includeChangelog: false, logContext: { projectId } }
+    );
+    return Array.from(new Map(issues.map((i) => [i.id, i])).values());
+  }, options);
+}
+
 /** All currently unresolved issues for a project, with no age bound at all — unlike
  * getJiraIssuesForProject(periodDays), which only ever returns an issue that's still open if it
  * was ALSO created within the period window. That makes it unsuitable for "what's actually open

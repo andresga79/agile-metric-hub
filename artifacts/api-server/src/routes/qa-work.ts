@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
-  getOpenIssuesForProject,
+  getOpenQaIssuesForProject,
   getJiraIssuesForProject,
   getEffectiveIssueType,
   isIssueInProgress,
@@ -41,9 +41,10 @@ router.get(
       return;
     }
 
-    // Unbounded by date, like getOpenIssuesForProject's other consumers — a QA item stuck since
-    // before this period started still needs to show up here; that's the whole point of this view.
-    const openIssues = await getOpenIssuesForProject(projectId as string, { includeChangelog: false });
+    // Every open QA item regardless of age or activity - a Test Execution stuck in To Do since
+    // before this period started is exactly what "stale" is for (getOpenIssuesForProject's
+    // activity filter used to hide those entirely).
+    const openIssues = await getOpenQaIssuesForProject(projectId as string, KANBAN_EXCLUDED_ISSUE_TYPES);
     const qaOpenIssues = openIssues.filter((i) => QA_ISSUE_TYPES.has(getEffectiveIssueType(i)));
 
     // Not getResolvedJiraIssuesInRange — that only trusts Jira's `resolutiondate` field, which this
@@ -57,7 +58,10 @@ router.get(
         .filter((i) => QA_ISSUE_TYPES.has(getEffectiveIssueType(i)) && isIssueDone(i))
         .map((i) => getResolutionDate(i))
     );
-    const qaResolvedCount = qaResolvedInPeriod.filter((d) => d !== null).length;
+    // Resolved within the period, not merely "done": the period fetch runs in whole calendar days,
+    // so its edges reach up to a day past the window.
+    const periodStart = Date.now() - periodDays * 86400000;
+    const qaResolvedCount = qaResolvedInPeriod.filter((d) => d !== null && d.getTime() >= periodStart).length;
 
     const now = Date.now();
     const items: QaWorkItem[] = qaOpenIssues.map((i) => ({
