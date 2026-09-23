@@ -10,8 +10,11 @@ import {
   computeQaRejectionRate,
   isCarryoverIssue,
   resolveSprintWindowDays,
+  SPRINT_WINDOW_MAX_LOOKBACK_DAYS,
   buildSprintVelocityBuckets,
   sprintWindowHalves,
+  sprintCloseTime,
+  wasIssueDoneAt,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -360,13 +363,24 @@ describe("resolveSprintWindowDays", () => {
     expect(result!.windowEnd?.toISOString()).toBe(new Date(sprint1.endDate!).toISOString());
   });
 
-  it("caps the returned days at the shared Jira lookback ceiling", () => {
+  it("does NOT truncate a window that spans past the 90-day fetch cap (6 sprints ~= 93 days)", () => {
+    // Real OLI shape on 2026-09-23: the oldest of the last 6 closed sprints started 93 days ago.
+    // Capping to 90 used to drop that sprint's first 3 days of resolved work.
+    const sprints = [
+      makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(93), endDate: daysAgo(79) }),
+    ];
+    const result = resolveSprintWindowDays(sprints, 1);
+    expect(result!.days).toBeGreaterThanOrEqual(93);
+    expect(result!.windowStart.getTime()).toBe(new Date(daysAgo(93)).getTime());
+  });
+
+  it("caps the returned days at SPRINT_WINDOW_MAX_LOOKBACK_DAYS", () => {
     const sprints = [
       makeSprint({ id: 1, name: "Sprint 1", state: "closed", startDate: daysAgo(200), endDate: daysAgo(186) }),
     ];
     const result = resolveSprintWindowDays(sprints, 1);
     expect(result).not.toBeNull();
-    expect(result!.days).toBeLessThanOrEqual(90);
+    expect(result!.days).toBe(SPRINT_WINDOW_MAX_LOOKBACK_DAYS);
   });
 
   it("ignores sprints without a startDate when picking the earliest", () => {
@@ -462,5 +476,75 @@ describe("sprintWindowHalves", () => {
 
   it("returns null for a single sprint", () => {
     expect(sprintWindowHalves(issues, resolvedMap, [s1])).toBeNull();
+  });
+});
+
+describe("sprintCloseTime", () => {
+  it("uses completeDate over endDate for closed sprints, null for active ones", () => {
+    const closed = makeSprint({ id: 1, name: "S", state: "closed", endDate: "2026-08-28T22:05:00.000Z", completeDate: "2026-08-31T14:06:00.000Z" });
+    expect(sprintCloseTime(closed)?.toISOString()).toBe("2026-08-31T14:06:00.000Z");
+    expect(sprintCloseTime(makeSprint({ id: 2, name: "S", state: "closed", endDate: "2026-08-28T22:05:00.000Z" }))?.toISOString()).toBe("2026-08-28T22:05:00.000Z");
+    expect(sprintCloseTime(makeSprint({ id: 3, name: "S", state: "active", endDate: "2026-09-25T21:00:00.000Z" }))).toBeNull();
+  });
+});
+
+describe("wasIssueDoneAt", () => {
+  const close = new Date("2026-08-31T14:06:00.000Z");
+  const categories = new Map([
+    ["to do", "new"],
+    ["en curso", "indeterminate"],
+    ["listo", "done"],
+  ]);
+  const doneNow = { status: { name: "Listo", statusCategory: { key: "done" } } };
+  const openNow = { status: { name: "En curso", statusCategory: { key: "indeterminate" } } };
+
+  it("done before close -> completed", () => {
+    const issue = withStatusHistory(makeIssue({ fields: doneNow }), [
+      { from: "To Do", to: "En curso", at: "2026-08-20T10:00:00.000Z" },
+      { from: "En curso", to: "Listo", at: "2026-08-29T10:00:00.000Z" },
+    ]);
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(true);
+  });
+
+  it("finished after the sprint closed (carried over) -> not completed by this sprint", () => {
+    const issue = withStatusHistory(makeIssue({ fields: doneNow }), [
+      { from: "To Do", to: "En curso", at: "2026-08-20T10:00:00.000Z" },
+      { from: "En curso", to: "Listo", at: "2026-09-10T13:55:00.000Z" },
+    ]);
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(false);
+  });
+
+  it("done at close but reopened later -> still completed by this sprint", () => {
+    const issue = withStatusHistory(makeIssue({ fields: openNow }), [
+      { from: "En curso", to: "Listo", at: "2026-08-29T10:00:00.000Z" },
+      { from: "Listo", to: "En curso", at: "2026-09-02T10:00:00.000Z" },
+    ]);
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(true);
+  });
+
+  it("no status change before close: uses the status it left on its first later change", () => {
+    const issue = withStatusHistory(makeIssue({ fields: doneNow }), [
+      { from: "To Do", to: "Listo", at: "2026-09-05T10:00:00.000Z" },
+    ]);
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(false);
+  });
+
+  it("never changed status: uses the current status", () => {
+    const issue = { ...makeIssue({ fields: doneNow }), changelog: { histories: [] } };
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(true);
+  });
+
+  it("without a changelog falls back to done now + resolved by close", () => {
+    const early = makeIssue({ fields: { ...doneNow, resolutiondate: "2026-08-30T10:00:00.000Z" } });
+    const late = makeIssue({ fields: { ...doneNow, resolutiondate: "2026-09-01T10:00:00.000Z" } });
+    expect(wasIssueDoneAt(early, close, categories)).toBe(true);
+    expect(wasIssueDoneAt(late, close, categories)).toBe(false);
+  });
+
+  it("falls back to the done-name pattern for statuses missing from the category map", () => {
+    const issue = withStatusHistory(makeIssue({ fields: doneNow }), [
+      { from: "En curso", to: "Terminado", at: "2026-08-29T10:00:00.000Z" },
+    ]);
+    expect(wasIssueDoneAt(issue, close, categories)).toBe(true);
   });
 });

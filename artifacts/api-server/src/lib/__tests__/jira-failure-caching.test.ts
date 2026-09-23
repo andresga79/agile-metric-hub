@@ -103,3 +103,53 @@ describe("Jira failures are not cached", () => {
     expect(cacheWrites()).toBe(0);
   });
 });
+
+describe("getJiraIssuesForWindow", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    execute.mockReset();
+    execute.mockResolvedValue({ rows: [] });
+    process.env["JIRA_URL"] = "https://example.atlassian.net";
+    process.env["JIRA_EMAIL"] = "test@example.com";
+    process.env["JIRA_API_TOKEN"] = "token";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Records every JQL sent, answers each search with no issues. */
+  function stubSearch(): string[] {
+    const jqls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const jql = new URL(url).searchParams.get("jql");
+        if (jql) jqls.push(jql);
+        if (url.includes("/project/search")) return jsonResponse({ values: [{ id: "10013", key: "OLI", name: "OLI" }] });
+        return jsonResponse({ issues: [], values: [] });
+      })
+    );
+    return jqls;
+  }
+
+  it("within the 90-day cap issues exactly the same queries as getJiraIssuesForProject", async () => {
+    const baseline = stubSearch();
+    const { getJiraIssuesForProject } = await import("../jira");
+    await getJiraIssuesForProject("10013", 60);
+
+    vi.resetModules();
+    const jqls = stubSearch();
+    const { getJiraIssuesForWindow } = await import("../jira");
+    await getJiraIssuesForWindow("10013", 60);
+    expect(jqls).toEqual(baseline);
+  });
+
+  it("beyond the cap also fetches resolved issues older than 90 days", async () => {
+    const jqls = stubSearch();
+    const { getJiraIssuesForWindow } = await import("../jira");
+    await getJiraIssuesForWindow("10013", 93);
+    const since = new Date(Date.now() - 93 * 86400000).toISOString().split("T")[0]!;
+    expect(jqls.some((q) => q.includes(`resolutiondate >= "${since}"`))).toBe(true);
+  });
+});

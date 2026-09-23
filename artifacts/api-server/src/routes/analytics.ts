@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { clearCache, getCacheTimestamp, issuesCacheKey } from "../lib/jira-cache";
 import {
   getJiraIssuesForProject,
+  getJiraIssuesForWindow,
   getResolvedJiraIssuesInRange,
   getFlaggedJiraIssuesForProject,
   getOpenIssuesForProject,
@@ -308,7 +309,7 @@ router.get(
     }
 
     const [issues, blockedScopeIssues, flaggedIssues, openIssues, allowedIssueTypes, effectiveThresholds] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }).catch((err) => {
+      getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true }).catch((err) => {
         logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
         return [] as JiraIssue[];
       }),

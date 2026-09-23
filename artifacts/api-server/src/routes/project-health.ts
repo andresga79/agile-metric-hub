@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
-  getJiraIssuesForProject,
+  getJiraIssuesForWindow,
   isIssueDone,
   isIssueInProgress,
   getProjectBoardType,
@@ -67,7 +67,7 @@ router.get(
       // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
       // transition — without it, avgCycleTime silently degrades to lead time for every issue
       // (confirmed: this endpoint was returning avgCycleTime === avgLeadTime exactly).
-      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
+      getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true }),
       getEffectiveThresholds(projectId),
       getPortfolioAllowedIssueTypes(),
     ]);

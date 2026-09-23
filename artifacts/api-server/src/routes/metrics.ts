@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   getJiraIssuesForProject,
+  getJiraIssuesForWindow,
   getResolvedJiraIssuesInRange,
   getOpenIssuesForProject,
   getProjectBoardType,
@@ -407,7 +408,7 @@ router.get(
       : null;
     const periodDays = sprintWindow?.days ?? periodToDays(period);
 
-    const issues = await getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true });
+    const issues = await getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true });
 
     let project = allProjects.find(
       (p) => p.id === projectId || p.key === projectId
@@ -515,7 +516,7 @@ router.get(
       listJiraProjects(),
       // includeChangelog is required for getCycleTimeDays() below to find the actual
       // first-in-progress transition — without it, every issue silently falls back to lead time.
-      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
+      getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true }),
       // Unbounded by period — an issue opened before the period window but still open/blocked
       // today must still count against its assignee's current WIP.
       getOpenIssuesForProject(projectId),
@@ -746,7 +747,7 @@ router.get(
     const [issues, openIssues, allowedIssueTypes] = await Promise.all([
       // includeChangelog: required for getCycleTimeDays() to find the real first-in-progress
       // transition — without it this silently degrades to lead time for every issue.
-      getJiraIssuesForProject(projectId, resolvedWindow.periodDays, { includeChangelog: true }),
+      getJiraIssuesForWindow(projectId, resolvedWindow.periodDays, { includeChangelog: true }),
       // Merged in below so "currently open" issues older than the period window still show up —
       // otherwise a ticket opened 60 days ago and still in progress silently vanishes from a 1M view.
       getOpenIssuesForProject(projectId),

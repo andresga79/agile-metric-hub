@@ -127,6 +127,56 @@ export function isIssueDone(issue: JiraIssue): boolean {
   );
 }
 
+/** When a sprint's timebox ended, for deciding what it actually completed: completeDate (when it
+ *  was really closed) over the planned endDate. Null for active/future sprints, whose "done" is
+ *  simply the current status. */
+export function sprintCloseTime(sprint: JiraSprint): Date | null {
+  if (sprint.state !== "closed") return null;
+  const raw = sprint.completeDate ?? sprint.endDate ?? null;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Whether `issue` was in a done-category status at instant `at`, reconstructed from its status
+ *  changelog - the same "completed at sprint close" rule Jira's own sprint report uses. Needed for
+ *  closed sprints: checking the *current* status let a sprint keep "completing" work finished in
+ *  later sprints (OLI's Sprint 45 counted 13 issues resolved after it closed), pushing every old
+ *  sprint to ~100% and counting a carried-over issue's points in every sprint it passed through.
+ *  Without a changelog, falls back to "done now and resolved by `at`". `categoryMap` is
+ *  getStatusCategoryMap()'s lowercased status name -> category key. */
+export function wasIssueDoneAt(issue: JiraIssue, at: Date, categoryMap: Map<string, string>): boolean {
+  const histories = issue.changelog?.histories;
+  if (!histories) {
+    const resolved = issue.fields.resolutiondate ? new Date(issue.fields.resolutiondate) : null;
+    return isIssueDone(issue) && resolved !== null && resolved.getTime() <= at.getTime();
+  }
+
+  const atMs = at.getTime();
+  const transitions = histories
+    .flatMap((h) =>
+      h.items
+        .filter((it) => it.field === "status")
+        .map((it) => ({ ms: new Date(h.created).getTime(), from: it.fromString ?? "", to: it.toString ?? "" }))
+    )
+    .sort((a, b) => a.ms - b.ms);
+
+  const isDoneName = (name: string): boolean => {
+    const key = name.trim().toLowerCase();
+    const cat = categoryMap.get(key);
+    if (cat) return cat === "done";
+    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(key);
+  };
+
+  const lastBefore = [...transitions].reverse().find((t) => t.ms <= atMs);
+  if (lastBefore) return isDoneName(lastBefore.to);
+  // No status change up to `at`: it was still in the status it left on its first later change.
+  const firstAfter = transitions[0];
+  if (firstAfter) return isDoneName(firstAfter.from);
+  // Never changed status: current status is the one it had all along.
+  return isIssueDone(issue);
+}
+
 /** A Jira issue is in progress when its status category is "indeterminate". */
 export function isIssueInProgress(issue: JiraIssue): boolean {
   return issue.fields.status.statusCategory?.key === "indeterminate";
@@ -629,9 +679,8 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
 }
 
 /** Days from now back to the start of the earliest sprint among the last
- * `sprintCount` CLOSED sprints (by end date), capped by capLookbackDays so the
- * day count returned here always matches what getJiraIssuesForProject will
- * actually fetch. Also returns the exact sprint list selected, so callers have
+ * `sprintCount` CLOSED sprints (by end date), capped at SPRINT_WINDOW_MAX_LOOKBACK_DAYS
+ * (not the 90-day JIRA_MAX_LOOKBACK_DAYS) - fetch it with getJiraIssuesForWindow. Also returns the exact sprint list selected, so callers have
  * a single source of truth for "which sprints" instead of re-deriving a
  * (potentially different) set via their own date filter. Returns null when
  * there are no closed sprints, or the earliest candidate has no startDate —
@@ -669,7 +718,14 @@ export function resolveSprintWindowDays(
   const endRaw = mostRecentlyClosed.completeDate ?? mostRecentlyClosed.endDate ?? null;
   const windowEnd = endRaw ? new Date(endRaw) : null;
 
-  return { days: capLookbackDays(rawDays), sprintsIncluded: closed, windowStart, windowEnd };
+  // Not capped at JIRA_MAX_LOOKBACK_DAYS: callers fetch with getJiraIssuesForWindow, which covers
+  // the part of the window older than that cap instead of silently dropping it.
+  return {
+    days: Math.min(rawDays, SPRINT_WINDOW_MAX_LOOKBACK_DAYS),
+    sprintsIncluded: closed,
+    windowStart,
+    windowEnd,
+  };
 }
 
 // "<N>s" = últimos N sprints CERRADOS (solo válido para proyectos Scrum). Solo se soportan los
@@ -1440,6 +1496,30 @@ export async function getJiraIssuesForProject(
 
     return deduped;
   }, { forceRefresh: options?.forceRefresh });
+}
+
+/** Upper bound for a sprint window's fetch ("last 6 sprints" of 3-week sprints ~= 126 days).
+ *  Only sprint windows may exceed JIRA_MAX_LOOKBACK_DAYS, via getJiraIssuesForWindow below. */
+export const SPRINT_WINDOW_MAX_LOOKBACK_DAYS = 150;
+
+/** getJiraIssuesForProject for a period that may exceed the 90-day cap - in practice a sprint
+ *  window (resolveSprintWindowDays), since 6 closed sprints plus the active one routinely span
+ *  91-126 days. Up to the cap it is exactly getJiraIssuesForProject. Beyond it, the part older
+ *  than the cap is filled in with resolved issues from getResolvedJiraIssuesInRange (which ignores
+ *  the cap); without this the oldest sprint of "6s" lost its first days - OLI's Sprint 41 missed
+ *  13 issues / 30 SP resolved 06-22..06-25 and 6s velocity read ~10% low. Only resolved issues are
+ *  needed from that older slice: every sprint-window metric is built on resolved-in-window work. */
+export async function getJiraIssuesForWindow(
+  projectId: string,
+  periodDays: number,
+  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  const recent = await getJiraIssuesForProject(projectId, periodDays, options);
+  const totalDays = Math.min(Math.ceil(periodDays), SPRINT_WINDOW_MAX_LOOKBACK_DAYS);
+  if (totalDays <= JIRA_MAX_LOOKBACK_DAYS || !isJiraConfigured()) return recent;
+
+  const older = await getResolvedJiraIssuesInRange(projectId, totalDays, JIRA_MAX_LOOKBACK_DAYS, options);
+  return Array.from(new Map([...older, ...recent].map((i) => [i.key, i])).values());
 }
 
 /** Resolved issues only, in an arbitrary [now - fromDaysAgo, now - toDaysAgo) historical slice —

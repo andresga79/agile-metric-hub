@@ -12,6 +12,9 @@ import {
   mapIssueType,
   getEffectiveIssueType,
   periodToDays,
+  sprintCloseTime,
+  wasIssueDoneAt,
+  getStatusCategoryMap,
   type JiraSprint,
   type JiraIssue,
   isJiraConfigured,
@@ -79,7 +82,13 @@ export async function computeSprintMetrics(
   allSprints: JiraSprint[]
 ): Promise<SprintMetric> {
   const filtered = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-  const doneIssues = filtered.filter((i) => isIssueDone(i));
+  // A closed sprint completed only what was done when it closed - not work carried over and
+  // finished in a later sprint (see wasIssueDoneAt). An active sprint uses the current status.
+  const closeTime = sprintCloseTime(sprint);
+  const categoryMap = closeTime ? await getStatusCategoryMap() : null;
+  const doneIssues = filtered.filter((i) =>
+    closeTime && categoryMap ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i)
+  );
   const totalSp = filtered.reduce((sum, i) => sum + getStoryPoints(i), 0);
   const doneSp = doneIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 

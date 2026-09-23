@@ -43,7 +43,7 @@ async function buildSprintPeriods(projectId: string): Promise<EvolutionPeriod[]>
   return Promise.all(
     ordered.map(async (sprint) => {
       const issues = await getSprintIssues(sprint.id);
-      const metrics = await computeSprintSnapshot(projectId, issues);
+      const metrics = await computeSprintSnapshot(projectId, issues, sprint);
       return {
         label: shortSprintLabel(sprint.name),
         rangeLabel: null,

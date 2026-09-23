@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middleware/auth";
 import { isoWeekLabel } from "../lib/iso-week";
 import {
-  getJiraIssuesForProject,
+  getJiraIssuesForWindow,
   getProjectBoardType,
   getEffectiveIssueType,
   isIssueDone,
@@ -49,7 +49,7 @@ router.get(
 
     const [issues, allowedIssueTypes] = await Promise.all([
       // includeChangelog matches the analytics fetch, so this reuses its cache entry.
-      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
+      getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true }),
       getPortfolioAllowedIssueTypes(),
     ]);
     const uniqueIssues = Array.from(new Map(issues.map((i) => [i.key, i])).values()).filter((i) =>

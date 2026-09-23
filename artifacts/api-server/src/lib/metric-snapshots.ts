@@ -12,7 +12,10 @@ import {
   getStatusCategoryMap,
   findQaRejections,
   JIRA_MAX_LOOKBACK_DAYS,
+  sprintCloseTime,
+  wasIssueDoneAt,
   type JiraIssue,
+  type JiraSprint,
 } from "./jira";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { isoWeekStart } from "./iso-week";
@@ -174,7 +177,8 @@ export async function storeWeeklySnapshots(projectId: string, issues: JiraIssue[
  *  `sprint = {sprintId}` JQL), so every issue's full history counts toward this one row. */
 export async function computeSprintSnapshot(
   projectId: string,
-  issues: JiraIssue[]
+  issues: JiraIssue[],
+  sprint: JiraSprint
 ): Promise<{ leadTimeAvg: number | null; cycleTimeAvg: number | null; throughput: number; qaRejectionRate: number | null }> {
   const [allowedIssueTypes, qaStatusSet, devStatusSet] = await Promise.all([
     getPortfolioAllowedIssueTypes(),
@@ -185,22 +189,26 @@ export async function computeSprintSnapshot(
   const filteredIssues = issues.filter((issue) =>
     allowedIssueTypes.includes(getEffectiveIssueType(issue))
   );
-  const doneIssues = filteredIssues.filter((issue) => isIssueDone(issue));
-
-  await getStatusCategoryMap();
+  const categoryMap = await getStatusCategoryMap();
+  // Same "completed at sprint close" rule as computeSprintMetrics, so Evolution's per-sprint
+  // throughput matches the Sprints tab instead of growing as carried-over work gets finished.
+  const closeTime = sprintCloseTime(sprint);
+  const doneIssues = filteredIssues.filter((issue) =>
+    closeTime ? wasIssueDoneAt(issue, closeTime, categoryMap) : isIssueDone(issue)
+  );
 
   const resolvedIssues = await Promise.all(
     doneIssues.map(async (issue) => ({
-      resolvedAt: await getResolutionDate(issue),
       leadTime: await getLeadTimeDays(issue),
       cycleTime: await getCycleTimeDays(issue),
     }))
   );
 
   const acc = emptyAccumulator();
-  for (const { resolvedAt, leadTime, cycleTime } of resolvedIssues) {
-    if (!resolvedAt) continue;
-    acc.throughput += 1;
+  // Throughput counts every issue done at close, even one reopened since (its current resolution
+  // date is gone, but the sprint still completed it) - matching computeSprintMetrics.
+  acc.throughput = doneIssues.length;
+  for (const { leadTime, cycleTime } of resolvedIssues) {
     if (leadTime !== null) acc.leadTimes.push(leadTime);
     if (cycleTime !== null) acc.cycleTimes.push(cycleTime);
   }
