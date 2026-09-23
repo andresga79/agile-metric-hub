@@ -122,8 +122,11 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
   caso donde proponía borrar `jira_cache` (resuelto, pero mantener la cautela con push en
   general).
 - **`pnpm@10` en ambos Dockerfiles** (major flotante, sin `packageManager` en el
-  `package.json` raíz). Base `node:22-bullseye-slim`, que es EOL: los Dockerfiles apuntan apt a
-  `archive.debian.org` para poder instalar paquetes; migrar a bookworm cuando se toque Docker.
+  `package.json` raíz), sobre `node:22-bookworm-slim` (necesita `ca-certificates` o el
+  instalador de pnpm falla con "No CA certificates were loaded").
+- **Heap de la API**: solo vía `API_MAX_OLD_SPACE_MB` (default 1024) → `NODE_OPTIONS` en el
+  compose. No volver a poner `--max-old-space-size` en el `CMD` del Dockerfile: un flag de línea
+  de comando pisa a `NODE_OPTIONS` en silencio (así estuvo capado a ~448 MB hasta 2026-09-23).
 - **La mayoría de los issues terminados no tienen `resolutiondate`** (los workflows de este
   Jira no la setean: OLI, 90 días → 599 sin resolución vs 168 con). Toda consulta de
   "resueltos" tiene que incluir `resolutiondate is EMPTY AND statusCategory = Done` por

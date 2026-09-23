@@ -1,7 +1,15 @@
+# json-file logs grow without bound by default (pino logs every request); cap them per service.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16-alpine
     container_name: agile_metrics_db
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agile_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agile_password}
@@ -23,6 +31,7 @@ services:
   backup:
     image: postgres:16-alpine
     container_name: agile_metrics_backup
+    logging: *default-logging
     entrypoint: ["/bin/sh", "/backup.sh"]
     environment:
       PGHOST: db
@@ -46,8 +55,11 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     container_name: agile_metrics_api
+    logging: *default-logging
     environment:
-      NODE_OPTIONS: "--max-old-space-size=4096"
+      # V8 old-space heap in MB. Measured peak ~290 MiB RSS on a cold-cache report load (OLI);
+      # 1024 leaves headroom for bigger projects / 150-day sprint windows. Raise if the host allows.
+      NODE_OPTIONS: "--max-old-space-size=${API_MAX_OLD_SPACE_MB:-1024}"
       PORT: "8000"
       DATABASE_URL: postgresql://${POSTGRES_USER:-agile_user}:${POSTGRES_PASSWORD:-agile_password}@db:5432/${POSTGRES_DB:-agile_metrics}
       JIRA_URL: ${JIRA_URL:-}
@@ -62,6 +74,13 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      # slim image has no curl; Node 22 has fetch built in.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   web:
     build:
@@ -70,10 +89,12 @@ services:
       args:
         SKIP_CODEGEN: '1'
     container_name: agile_metrics_web
+    logging: *default-logging
     ports:
       - "80:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

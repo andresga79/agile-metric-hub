@@ -1,8 +1,7 @@
-FROM node:22-bullseye-slim AS builder
-# bullseye is EOL — deb.debian.org/security.debian.org no longer serve some pinned bullseye
-# package builds (e.g. openssl 1.1.1w-0+deb11u8), so point apt at the archive instead.
-RUN printf 'deb http://archive.debian.org/debian bullseye main\n' > /etc/apt/sources.list \
-    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+FROM node:22-bookworm-slim AS builder
+# ca-certificates: the pnpm installer fails with "No CA certificates were loaded" on
+# the bare -slim image.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@10
 WORKDIR /app
 
@@ -21,14 +20,14 @@ ENV npm_config_fetch_timeout=$npm_config_fetch_timeout \
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @workspace/api-server run build
 
-FROM node:22-bullseye-slim AS prod
+FROM node:22-bookworm-slim AS prod
 WORKDIR /app
 
 COPY --from=builder /app/artifacts /app/artifacts
 COPY --from=builder /app/node_modules /app/node_modules
 
 EXPOSE 8000
-# Cap V8's old-space heap below the 512 MB free-tier container limit so it GCs
-# aggressively and stays within bounds, instead of growing until the container
-# kills the process. Tune up if the instance gets more RAM.
-CMD ["node", "--enable-source-maps", "--max-old-space-size=400", "artifacts/api-server/dist/index.mjs"]
+# Heap size comes from NODE_OPTIONS in docker-compose.yml (API_MAX_OLD_SPACE_MB). It used to be
+# hard-coded here as --max-old-space-size=400 for the old 512 MB free tier, which silently
+# overrode the compose value: command-line flags win over NODE_OPTIONS.
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
