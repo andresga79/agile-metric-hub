@@ -570,31 +570,3 @@ export const GetDashboardSummaryResponse = zod.object({
 })
 
 
-/**
- * @summary Get project visibility settings
- */
-export const GetProjectVisibilitySettingsResponse = zod.object({
-  "projects": zod.array(zod.object({
-  "projectId": zod.string(),
-  "projectKey": zod.string(),
-  "name": zod.string(),
-  "visible": zod.boolean()
-}))
-})
-
-
-/**
- * @summary Update project visibility settings
- */
-export const UpdateProjectVisibilitySettingsBody = zod.object({
-  "projects": zod.array(zod.object({
-  "projectKey": zod.string(),
-  "visible": zod.boolean()
-}))
-})
-
-export const UpdateProjectVisibilitySettingsResponse = zod.object({
-  "message": zod.string()
-})
-
-

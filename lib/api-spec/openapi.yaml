@@ -20,8 +20,6 @@ tags:
     description: Agile metrics operations
   - name: dashboard
     description: Dashboard summary operations
-  - name: settings
-    description: Admin settings operations
 paths:
   /healthz:
     get:
@@ -659,58 +657,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
-  /settings/project-visibility:
-    get:
-      operationId: getProjectVisibilitySettings
-      tags: [settings]
-      summary: Get project visibility settings
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Project visibility settings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectVisibilitySettings"
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    put:
-      operationId: updateProjectVisibilitySettings
-      tags: [settings]
-      summary: Update project visibility settings
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateProjectVisibilityRequest"
-      responses:
-        "200":
-          description: Settings updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        "400":
-          description: Invalid request body
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
 components:
   securitySchemes:
     bearerAuth:
@@ -932,43 +878,6 @@ components:
           type: string
         visible:
           type: boolean
-
-    ProjectVisibilityItem:
-      type: object
-      required: [projectId, projectKey, name, visible]
-      properties:
-        projectId:
-          type: string
-        projectKey:
-          type: string
-        name:
-          type: string
-        visible:
-          type: boolean
-
-    ProjectVisibilitySettings:
-      type: object
-      required: [projects]
-      properties:
-        projects:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectVisibilityItem"
-
-    UpdateProjectVisibilityRequest:
-      type: object
-      required: [projects]
-      properties:
-        projects:
-          type: array
-          items:
-            type: object
-            required: [projectKey, visible]
-            properties:
-              projectKey:
-                type: string
-              visible:
-                type: boolean
 
     ProjectMetrics:
       type: object

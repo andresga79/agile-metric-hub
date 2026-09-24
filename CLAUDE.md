@@ -10,10 +10,10 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   estándar de correr el proyecto en dev, no `pnpm dev` suelto.
 - `cp .env.example .env` antes del primer `up` si no existe `.env` (no viaja con git).
 - `pnpm run typecheck` — typecheck completo del workspace
-- `pnpm run lint` — ESLint (baseline: 0 errores, 141 warnings a propósito, no fuerza
+- `pnpm run lint` — ESLint (baseline: 0 errores, 140 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
-- `pnpm --filter @workspace/api-server test` — vitest, 109 tests (lógica pura de métricas,
+- `pnpm --filter @workspace/api-server test` — vitest, 115 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
 - Reparar snapshots semanales de Evolution anteriores a la ventana de 90 días (admin):
@@ -39,8 +39,6 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - `artifacts/api-server` — API Express: auth, sync de Jira, cálculo de métricas/portfolio
 - `artifacts/dashboard` — frontend Vite/React
 - `lib/db`, `lib/api-zod`, `lib/api-client-react` — paquetes compartidos del workspace
-- `lib/integrations` — referenciado en `pnpm-workspace.yaml` pero **no existe en git**
-  (directorio fantasma); los Dockerfiles lo parchan con `mkdir -p` en build
 
 ## Architecture decisions
 
@@ -151,7 +149,7 @@ validado en sesiones previas, ver `SESSION_LOG.md` sección 2):
 - `MEJORAS-PROPUESTAS.md` — auditoría crítica del proyecto (actualizada 2026-08-26; la
   pasada de consistencia de datos del 2026-09-23 cerró además DAT-1, DEU-2, DEU-4 y FE-6,
   ver `git log`). Parciales: SEC-2, DAT-5 (falta limitador global), QA-1, DOC-1, FE-2; QA-2
-  (CI) descartado (2026-09-23: no hay pipeline registrado en Azure DevOps); sin tocar MET-2, FE-1/3/4/5, DEU-1/3, OPS-2. La app es solo interna: la
+  (CI) descartado (2026-09-23: no hay pipeline registrado en Azure DevOps); sin tocar MET-2, FE-1/3/4/5, DEU-1, OPS-2. La app es solo interna: la
   prioridad es consistencia de datos, no hardening de seguridad.
 - `SESSION_LOG.md` — bitácora histórica completa: bugs encontrados y su causa raíz, todo
   el proceso de deploy, diagnóstico de incidentes de producción

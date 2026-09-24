@@ -184,26 +184,6 @@ export interface ProjectVisibilityUpdate {
   visible: boolean;
 }
 
-export interface ProjectVisibilityItem {
-  projectId: string;
-  projectKey: string;
-  name: string;
-  visible: boolean;
-}
-
-export interface ProjectVisibilitySettings {
-  projects: ProjectVisibilityItem[];
-}
-
-export type UpdateProjectVisibilityRequestProjectsItem = {
-  projectKey: string;
-  visible: boolean;
-};
-
-export interface UpdateProjectVisibilityRequest {
-  projects: UpdateProjectVisibilityRequestProjectsItem[];
-}
-
 /**
  * Agile board methodology detected from Jira boards
  */

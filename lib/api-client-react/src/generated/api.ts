@@ -38,13 +38,11 @@ import type {
   MemberStats,
   Project,
   ProjectMetrics,
-  ProjectVisibilitySettings,
   ProjectVisibilityUpdate,
   ProjectWithVisibility,
   QaRejectedResponse,
   SprintMetricsResponse,
   SuccessResponse,
-  UpdateProjectVisibilityRequest,
   User
 } from './api.schemas';
 
@@ -1914,151 +1912,4 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 
 
 
-
-export const getGetProjectVisibilitySettingsUrl = () => {
-
-
-
-
-  return `/api/settings/project-visibility`
-}
-
-/**
- * @summary Get project visibility settings
- */
-export const getProjectVisibilitySettings = async ( options?: RequestInit): Promise<ProjectVisibilitySettings> => {
-
-  return customFetch<ProjectVisibilitySettings>(getGetProjectVisibilitySettingsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetProjectVisibilitySettingsQueryKey = () => {
-    return [
-    `/api/settings/project-visibility`
-    ] as const;
-    }
-
-
-export const getGetProjectVisibilitySettingsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetProjectVisibilitySettingsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectVisibilitySettings>>> = ({ signal }) => getProjectVisibilitySettings({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetProjectVisibilitySettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectVisibilitySettings>>>
-export type GetProjectVisibilitySettingsQueryError = ErrorType<ErrorResponse>
-
-
-/**
- * @summary Get project visibility settings
- */
-
-export function useGetProjectVisibilitySettings<TData = Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVisibilitySettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetProjectVisibilitySettingsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
-
-export const getUpdateProjectVisibilitySettingsUrl = () => {
-
-
-
-
-  return `/api/settings/project-visibility`
-}
-
-/**
- * @summary Update project visibility settings
- */
-export const updateProjectVisibilitySettings = async (updateProjectVisibilityRequest: UpdateProjectVisibilityRequest, options?: RequestInit): Promise<SuccessResponse> => {
-
-  return customFetch<SuccessResponse>(getUpdateProjectVisibilitySettingsUrl(),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(updateProjectVisibilityRequest)
-  }
-);}
-
-
-
-
-export const getUpdateProjectVisibilitySettingsMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext> => {
-
-const mutationKey = ['updateProjectVisibilitySettings'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, {data: BodyType<UpdateProjectVisibilityRequest>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  updateProjectVisibilitySettings(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateProjectVisibilitySettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>>
-    export type UpdateProjectVisibilitySettingsMutationBody = BodyType<UpdateProjectVisibilityRequest>
-    export type UpdateProjectVisibilitySettingsMutationError = ErrorType<ErrorResponse>
-
-    /**
- * @summary Update project visibility settings
- */
-export const useUpdateProjectVisibilitySettings = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectVisibilitySettings>>, TError,{data: BodyType<UpdateProjectVisibilityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof updateProjectVisibilitySettings>>,
-        TError,
-        {data: BodyType<UpdateProjectVisibilityRequest>},
-        TContext
-      > => {
-      return useMutation(getUpdateProjectVisibilitySettingsMutationOptions(options));
-    }
 

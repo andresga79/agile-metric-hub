@@ -15,7 +15,6 @@ COPY lib/api-client-react ./lib/api-client-react
 COPY lib/db ./lib/db
 COPY artifacts/dashboard ./artifacts/dashboard
 
-RUN mkdir -p lib/integrations
 ARG npm_config_fetch_timeout=600000
 ARG npm_config_fetch_retries=8
 ARG npm_config_network_concurrency=4

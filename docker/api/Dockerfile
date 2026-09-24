@@ -10,7 +10,6 @@ COPY lib/api-zod ./lib/api-zod
 COPY lib/db ./lib/db
 COPY artifacts/api-server ./artifacts/api-server
 
-RUN mkdir -p lib/integrations
 ARG npm_config_fetch_timeout=600000
 ARG npm_config_fetch_retries=8
 ARG npm_config_network_concurrency=4

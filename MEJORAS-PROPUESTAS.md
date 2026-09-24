@@ -100,7 +100,7 @@ madura en features, inmadura en robustez.
 | OPS-2 | Estado de sync solo en memoria (se pierde al reiniciar) | 🟡 Bajo | 🟡 Medio | Ops | Pendiente |
 | DEU-1 | `lib/jira.ts` (1410 líneas) y `admin.tsx` (1162) son god-files | 🟡 Bajo | 🔴 Alto | Deuda | Pendiente |
 | DEU-2 | ~5 reimplementaciones de `getISOWeek` / semana ISO | 🟡 Bajo | 🟢 Bajo | Deuda | Pendiente |
-| DEU-3 | `pnpm` en versión alpha; `lib/integrations` fantasma; deps sin usar | 🟡 Bajo | 🟢 Bajo | Deuda | Pendiente |
+| DEU-3 | `pnpm` en versión alpha; `lib/integrations` fantasma; deps sin usar | 🟡 Bajo | 🟢 Bajo | Deuda | ✅ Hecho 2026-09-24 (`lib/integrations`, restos de Replit y deps sin usar fuera) |
 | DEU-4 | `artifacts/mockup-sandbox` es código muerto (no está en el workspace) | 🟢 Bajo | 🟢 Bajo | Deuda | Pendiente |
 | DOC-1 | Sin README ni doc de arquitectura (solo `replit.md` + `SESSION_LOG`) | 🟠 Medio | 🟡 Medio | Docs | 🟡 Parcial (`METRICS.md` hecho, sigue sin `README.md`) |
 
