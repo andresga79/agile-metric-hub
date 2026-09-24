@@ -56,3 +56,7 @@ agile-metric-hub/
 
 # Postgres dumps from the backup service (docker/backup/backup.sh)
 /backups/
+
+# Local tool output
+/.playwright-mcp/
+/graphify-out/
