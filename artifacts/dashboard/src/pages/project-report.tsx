@@ -51,6 +51,7 @@ function Kpi({
   trendLowerBetter?: boolean;
   trendLabel?: string;
 }) {
+  const { t } = useTranslation();
   const band = dimensionBand(dimensionValue);
   return (
     <div className="border border-border rounded p-3">
@@ -58,7 +59,7 @@ function Kpi({
       <div className="text-xl font-bold">{value}</div>
       {band && (
         <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${BAND_CLASSES[band]}`}>
-          {band}
+          {t(`page.health.${band}`)}
         </span>
       )}
       {typeof trendPct === "number" && trendLabel && (

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 vi.mock("@workspace/db", () => ({
   db: { execute: vi.fn().mockResolvedValue({ rows: [] }) },
@@ -36,5 +38,31 @@ describe("withCache", () => {
     expect(calls).toBe(1);
     expect(a).toBe(42);
     expect(b).toBe(42);
+  });
+});
+
+describe("purgeStaleCacheEntries", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("deletes every row outside the current tenant + schema-version namespace", async () => {
+    vi.stubEnv("JIRA_URL", "https://Example.atlassian.net/");
+    vi.stubEnv("JIRA_EMAIL", "Someone@Example.com");
+    const { db } = await import("@workspace/db");
+    const execute = vi.mocked(db.execute);
+    execute.mockClear();
+    execute.mockResolvedValueOnce({ rows: [], rowCount: 110 } as never);
+
+    const { purgeStaleCacheEntries } = await import("../jira-cache");
+    const purged = await purgeStaleCacheEntries();
+
+    expect(purged).toBe(110);
+    const query = new PgDialect().sqlToQuery(execute.mock.calls[0]![0] as SQL);
+    const prefix = "tenant:https://example.atlassian.net/|someone@example.com|v2:";
+    // Compares the exact key prefix (not LIKE, whose `_` wildcard would also match look-alikes).
+    expect(query.sql).toBe("DELETE FROM jira_cache WHERE left(cache_key, $1) <> $2");
+    expect(query.params).toEqual([prefix.length, prefix]);
+    vi.unstubAllEnvs();
   });
 });

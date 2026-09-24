@@ -351,6 +351,18 @@ export async function getCacheTimestamp(cacheKey: string): Promise<Date | null> 
   return rows.length > 0 ? (rows[0]!.fetched_at as unknown as Date) : null;
 }
 
+/** Deletes rows written under any other namespace - an older CACHE_SCHEMA_VERSION (never read
+ *  again after a bump; the v2 bump left 110 rows / ~20 MB of v1 behind) or another Jira
+ *  site/account. Within one namespace keys are relative (`30`, `range:v2:60-30`), so rows are
+ *  overwritten in place and don't pile up. Runs at startup. */
+export async function purgeStaleCacheEntries(): Promise<number> {
+  const prefix = `${JIRA_CACHE_NAMESPACE}:`;
+  const result = await db.execute(
+    sql`DELETE FROM jira_cache WHERE left(cache_key, ${prefix.length}) <> ${prefix}`
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function clearTenantCache(): Promise<void> {
   const prefix = `${JIRA_CACHE_NAMESPACE}:%`;
   await db.execute(sql`DELETE FROM jira_cache WHERE cache_key LIKE ${prefix}`);

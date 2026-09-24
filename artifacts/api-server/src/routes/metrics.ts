@@ -46,9 +46,9 @@ function isValidPeriod(p: string): p is Period {
   return (VALID_PERIODS as readonly string[]).includes(p);
 }
 
-// Only the /projects/:projectId/metrics/:period route understands "Ns" sprint-window
-// tokens (via sprintWindowCount/resolveSprintWindowDays below) — the other routes in
-// this file (members, team/in-progress, issues) call periodToDays(period) directly,
+// The metrics and issues (list + CSV) routes understand "Ns" sprint-window tokens (via
+// resolveSprintWindowDays / resolvePeriodDays) — the other routes in this file
+// (members, team/in-progress) call periodToDays(period) directly,
 // which has no "Ns" case and would silently fall to its 90-day default. Keep them on
 // the strict isValidPeriod so a token like "2s" still 400s there.
 function isValidMetricsPeriod(p: string): boolean {
@@ -717,145 +717,154 @@ router.get(
   }
 );
 
+type ProjectIssueRow = {
+  id: string;
+  key: string;
+  summary: string;
+  status: string;
+  issueType: string;
+  mappedType: string;
+  priority: string;
+  assignee: string | null;
+  assigneeAccountId: string | null;
+  isInProgress: boolean;
+  isDone: boolean;
+  storyPoints: number | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  cycleTimeDays: number | null;
+  leadTimeDays: number | null;
+};
+
+// Shared by the issue list and its CSV export so both return the same rows for the same period:
+// the CSV used to run its own fetch (periodToDays, so "2s" silently became 90 days - 332 rows vs
+// the list's 137 for OLI), without the open issues and without the resolved-in-window filter.
+async function buildProjectIssueRows(
+  projectId: string,
+  period: string,
+  assigneeAccountId: string | null
+): Promise<{ error: string } | { rows: ProjectIssueRow[] }> {
+  if (!isValidMetricsPeriod(period)) {
+    return { error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." };
+  }
+
+  const boardType = await getProjectBoardType(projectId);
+  const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
+  if ("error" in resolvedWindow) return { error: resolvedWindow.error };
+
+  const [issues, openIssues, allowedIssueTypes] = await Promise.all([
+    // includeChangelog: required for getCycleTimeDays() to find the real first-in-progress
+    // transition — without it this silently degrades to lead time for every issue.
+    getJiraIssuesForWindow(projectId, resolvedWindow.periodDays, { includeChangelog: true }),
+    // Merged in below so "currently open" issues older than the period window still show up —
+    // otherwise a ticket opened 60 days ago and still in progress silently vanishes from a 1M view.
+    getOpenIssuesForProject(projectId),
+    getPortfolioAllowedIssueTypes(),
+  ]);
+
+  const combined = Array.from(new Map([...issues, ...openIssues].map((i) => [i.id, i])).values());
+  const filtered = combined
+    .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+    .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
+
+  const mapped = await Promise.all(
+    filtered.map(async (i): Promise<ProjectIssueRow> => {
+      const resolvedAt = await getResolutionDate(i);
+      const rawCycleTime = await getCycleTimeDays(i);
+      const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
+      const rawLeadTime = await getLeadTimeDays(i);
+      const leadTimeDays = rawLeadTime !== null ? Math.round(rawLeadTime * 10) / 10 : null;
+
+      return {
+        id: i.id,
+        key: i.key,
+        summary: i.fields.summary,
+        status: i.fields.status.name,
+        issueType: i.fields.issuetype.name,
+        // Same Story/Bug/Task/Epic/Subtask/Other bucketing sprint-metrics' breakdown already
+        // uses, so a per-member type breakdown reads consistently with the rest of the app.
+        mappedType: getEffectiveIssueType(i),
+        priority: i.fields.priority.name,
+        assignee: i.fields.assignee?.displayName ?? null,
+        assigneeAccountId: i.fields.assignee?.accountId ?? null,
+        isInProgress: isIssueInProgress(i),
+        isDone: isIssueDone(i),
+        storyPoints: getStoryPoints(i) || null,
+        createdAt: i.fields.created,
+        resolvedAt: resolvedAt?.toISOString() ?? null,
+        cycleTimeDays,
+        leadTimeDays,
+      };
+    })
+  );
+
+  // Done issues only count if resolved inside the same window the KPIs use (/metrics, /members):
+  // exact sprint bounds for 2s/6s, [now - periodDays, now) otherwise. The fetch also returns work
+  // finished in the currently active sprint and up to a day past each calendar edge, so the member
+  // report's "Terminados" list read 39 against a KPI of 25 for the same person on 2s. Open issues
+  // are always kept - they're current state, not period activity.
+  const windowStartMs = (resolvedWindow.windowStart ?? getStartDate(resolvedWindow.periodDays)).getTime();
+  const windowEndMs = resolvedWindow.windowEnd?.getTime() ?? Infinity;
+  const rows = mapped.filter((i) => {
+    if (!i.isDone) return true;
+    if (!i.resolvedAt) return false;
+    const t = new Date(i.resolvedAt).getTime();
+    return t >= windowStartMs && t < windowEndMs;
+  });
+
+  return { rows };
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 router.get(
   "/projects/:projectId/issues/:period",
   requireAuth,
   requireSectionView("team"),
   async (req, res): Promise<void> => {
-    const rawId = Array.isArray(req.params.projectId)
-      ? req.params.projectId[0]
-      : req.params.projectId;
-    const rawPeriod = Array.isArray(req.params.period)
-      ? req.params.period[0]
-      : req.params.period;
-
-    const projectId = rawId ?? "";
-    const period = rawPeriod ?? "1m";
-
-    if (!isValidMetricsPeriod(period)) {
-      res.status(400).json({ error: "Invalid period. Use 1m, 3m, or Ns (e.g. 2s, 6s) for Scrum projects." });
-      return;
-    }
-
-    const boardType = await getProjectBoardType(projectId);
-    const resolvedWindow = await resolvePeriodDays(projectId, period, boardType);
-    if ("error" in resolvedWindow) {
-      res.status(400).json({ error: resolvedWindow.error });
-      return;
-    }
-
-    const [issues, openIssues, allowedIssueTypes] = await Promise.all([
-      // includeChangelog: required for getCycleTimeDays() to find the real first-in-progress
-      // transition — without it this silently degrades to lead time for every issue.
-      getJiraIssuesForWindow(projectId, resolvedWindow.periodDays, { includeChangelog: true }),
-      // Merged in below so "currently open" issues older than the period window still show up —
-      // otherwise a ticket opened 60 days ago and still in progress silently vanishes from a 1M view.
-      getOpenIssuesForProject(projectId),
-      getPortfolioAllowedIssueTypes(),
-    ]);
+    const projectId = firstParam(req.params.projectId) ?? "";
+    const period = firstParam(req.params.period) ?? "1m";
     // Optional per-team-member scoping (accountId), used by the member report page to reuse
     // this same project-level fetch for a single assignee instead of duplicating it.
     const rawAssignee = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
     const assigneeAccountId = typeof rawAssignee === "string" && rawAssignee.length > 0 ? rawAssignee : null;
 
-    const combined = Array.from(new Map([...issues, ...openIssues].map((i) => [i.id, i])).values());
-    const filtered = combined
-      .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
-      .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
-
-    const mapped = await Promise.all(
-      filtered.map(async (i) => {
-        const resolvedAt = await getResolutionDate(i);
-        const rawCycleTime = await getCycleTimeDays(i);
-        const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
-        const rawLeadTime = await getLeadTimeDays(i);
-        const leadTimeDays = rawLeadTime !== null ? Math.round(rawLeadTime * 10) / 10 : null;
-
-        return {
-          id: i.id,
-          key: i.key,
-          summary: i.fields.summary,
-          status: i.fields.status.name,
-          issueType: i.fields.issuetype.name,
-          // Same Story/Bug/Task/Epic/Subtask/Other bucketing sprint-metrics' breakdown already
-          // uses, so a per-member type breakdown reads consistently with the rest of the app.
-          mappedType: getEffectiveIssueType(i),
-          priority: i.fields.priority.name,
-          assignee: i.fields.assignee?.displayName ?? null,
-          assigneeAccountId: i.fields.assignee?.accountId ?? null,
-          isInProgress: isIssueInProgress(i),
-          isDone: isIssueDone(i),
-          storyPoints: getStoryPoints(i) || null,
-          createdAt: i.fields.created,
-          resolvedAt: resolvedAt?.toISOString() ?? null,
-          cycleTimeDays,
-          leadTimeDays,
-        };
-      })
-    );
-
-    // Done issues only count if resolved inside the same window the KPIs use (/metrics, /members):
-    // exact sprint bounds for 2s/6s, [now - periodDays, now) otherwise. The fetch also returns work
-    // finished in the currently active sprint and up to a day past each calendar edge, so the member
-    // report's "Terminados" list read 39 against a KPI of 25 for the same person on 2s. Open issues
-    // are always kept - they're current state, not period activity.
-    const windowStartMs = (resolvedWindow.windowStart ?? getStartDate(resolvedWindow.periodDays)).getTime();
-    const windowEndMs = resolvedWindow.windowEnd?.getTime() ?? Infinity;
-    const inWindow = mapped.filter((i) => {
-      if (!i.isDone) return true;
-      if (!i.resolvedAt) return false;
-      const t = new Date(i.resolvedAt).getTime();
-      return t >= windowStartMs && t < windowEndMs;
-    });
-
-    res.json(inWindow);
+    const result = await buildProjectIssueRows(projectId, period, assigneeAccountId);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result.rows);
   }
 );
+
+export function csvField(value: string | number | null): string {
+  const s = value === null ? "" : String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 router.get(
   "/projects/:projectId/issues/:period/csv",
   requireAuth,
   requireSectionView("team"),
   async (req, res): Promise<void> => {
-    const projectId = Array.isArray(req.params.projectId)
-      ? req.params.projectId[0]
-      : req.params.projectId;
-    const period = Array.isArray(req.params.period)
-      ? req.params.period[0]
-      : req.params.period;
+    const projectId = firstParam(req.params.projectId) ?? "";
+    const period = firstParam(req.params.period) ?? "1m";
 
-    const [issues, allowedIssueTypes] = await Promise.all([
-      // includeChangelog: required for getCycleTimeDays() below to find the real first-in-progress
-      // transition — without it this silently degrades to lead time for every issue.
-      getJiraIssuesForProject(projectId!, periodToDays(period ?? "1m"), { includeChangelog: true }),
-      getPortfolioAllowedIssueTypes(),
-    ]);
-    const filtered = issues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-
-    const rows = await Promise.all(
-      filtered.map(async (i) => {
-        const resolvedAt = await getResolutionDate(i);
-        const rawCycleTime = await getCycleTimeDays(i);
-        const cycleTimeDays = rawCycleTime !== null ? Math.round(rawCycleTime * 10) / 10 : null;
-        return {
-          key: i.key,
-          summary: i.fields.summary,
-          status: i.fields.status.name,
-          issueType: i.fields.issuetype.name,
-          priority: i.fields.priority.name,
-          assignee: i.fields.assignee?.displayName ?? "",
-          storyPoints: getStoryPoints(i) || "",
-          createdAt: i.fields.created,
-          resolvedAt: resolvedAt?.toISOString() ?? "",
-          cycleTimeDays: cycleTimeDays ?? "",
-        };
-      })
-    );
+    const result = await buildProjectIssueRows(projectId, period, null);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
 
     const header = "key,summary,status,issueType,priority,assignee,storyPoints,createdAt,resolvedAt,cycleTimeDays";
-    const csv = rows
+    const csv = result.rows
       .map((r) =>
-        [r.key, `"${r.summary.replace(/"/g, '""')}"`, r.status, r.issueType, r.priority, r.assignee, r.storyPoints, r.createdAt, r.resolvedAt, r.cycleTimeDays].join(",")
+        [r.key, r.summary, r.status, r.issueType, r.priority, r.assignee, r.storyPoints, r.createdAt, r.resolvedAt, r.cycleTimeDays]
+          .map(csvField)
+          .join(",")
       )
       .join("\n");
 

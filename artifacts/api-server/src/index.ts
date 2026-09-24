@@ -4,7 +4,7 @@ import { db, usersTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { logger } from "./lib/logger";
-import { ensureCacheTable } from "./lib/jira-cache";
+import { ensureCacheTable, purgeStaleCacheEntries } from "./lib/jira-cache";
 import { assertJwtConfig } from "./lib/jwt";
 import { BCRYPT_ROUNDS } from "./lib/security";
 
@@ -231,8 +231,8 @@ async function initDb() {
       );
     `);
 
-    // Clean stale cache entries from periods other than 30d
-    await db.execute(sql`DELETE FROM jira_cache WHERE cache_key ~ '^[a-z]+:[^:]+:(?:84|90|180)$'`);
+    const purgedCacheRows = await purgeStaleCacheEntries();
+    if (purgedCacheRows > 0) logger.info({ purgedCacheRows }, "Purged stale Jira cache entries");
 
     logger.info("Database tables ready");
 
