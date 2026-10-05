@@ -177,6 +177,7 @@ async function initDb() {
       ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS lead_time_avg_previous NUMERIC;
       ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS health_score_previous INTEGER;
       ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS qa_rejection_rate_previous NUMERIC;
+      ALTER TABLE portfolio_cache ADD COLUMN IF NOT EXISTS lead_time_p50 NUMERIC;
     `);
 
     await db.execute(sql`

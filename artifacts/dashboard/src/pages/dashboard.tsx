@@ -300,11 +300,13 @@ export default function Dashboard() {
       const wip = p.inProgressCount ?? 0;
       const flowLoad = throughput > 0 ? wip / throughput : wip > 0 ? 5 : 0;
       const cycle = p.cycleTimeP50 ?? cycleRef;
-      const lead = p.leadTimeAvg ?? leadRef;
+      // Lead time is judged by its median, like cycle time: the average jumps for 90 days every time
+      // a team closes out old backlog (one 500-day ticket outweighs dozens of normal ones).
+      const lead = p.leadTimeP50 ?? leadRef;
 
       const flowStatus: DimStatus = flowLoad >= flowWarn ? "fail" : flowLoad >= flowGood ? "warn" : "ok";
       const cycleStatus: DimStatus = p.cycleTimeP50 === null ? "ok" : cycle > cycleWarn ? "fail" : cycle > cycleGood ? "warn" : "ok";
-      const leadStatus: DimStatus = p.leadTimeAvg === null ? "ok" : lead > leadWarn ? "fail" : lead > leadGood ? "warn" : "ok";
+      const leadStatus: DimStatus = p.leadTimeP50 == null ? "ok" : lead > leadWarn ? "fail" : lead > leadGood ? "warn" : "ok";
       // Delivery is a structural stall check (nothing shipping while work sits in progress), not a
       // tunable metric threshold, so it intentionally stays outside the admin thresholds table.
       const deliveryStatus: DimStatus =
@@ -332,7 +334,7 @@ export default function Dashboard() {
         {
           key: "lead",
           label: "Lead Time",
-          value: p.leadTimeAvg !== null ? formatDurationDays(lead) : "—",
+          value: p.leadTimeP50 != null ? formatDurationDays(lead) : "—",
           ref: `ref: ${formatDurationDays(leadGood)}`,
           status: leadStatus,
         },
@@ -628,7 +630,7 @@ export default function Dashboard() {
                       Tiempo en proceso <MetricTooltip description="Mediana del tiempo que tarda una tarea desde que se empieza hasta que se termina (Cycle Time P50)." />
                     </TableHead>
                     <TableHead className="text-right">
-                      Tiempo hasta cierre <MetricTooltip description="Promedio del tiempo desde que se crea una tarea hasta que se entrega (Lead Time Avg)." />
+                      Tiempo hasta cierre <MetricTooltip description="Mediana del tiempo desde que se crea una tarea hasta que se entrega (Lead Time P50)." />
                     </TableHead>
                     <TableHead className="text-right">Entregas · En curso</TableHead>
                     <TableHead>Accion sugerida</TableHead>
@@ -678,7 +680,7 @@ export default function Dashboard() {
                       <TableCell className={`text-right font-mono text-xs ${
                         leadDim?.status === "fail" ? "text-red-400" : leadDim?.status === "warn" ? "text-amber-600 dark:text-yellow-300" : "text-muted-foreground"
                       }`}>
-                        {formatDurationDays(p.leadTimeAvg)}
+                        {formatDurationDays(p.leadTimeP50)}
                         {leadDim && leadDim.status !== "ok" && (
                           <div className="text-muted-foreground/60 font-sans">{leadDim.ref}</div>
                         )}

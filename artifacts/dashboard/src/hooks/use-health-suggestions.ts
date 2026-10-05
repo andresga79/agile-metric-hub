@@ -12,8 +12,8 @@ export interface Suggestion {
 
 interface RawHealth {
   throughput: number;
-  avgCycleTime: number;
-  avgLeadTime: number;
+  cycleTimeP50: number | null;
+  leadTimeP50: number | null;
   cfr: number;
   wipRatio: number;
   predictability: number;
@@ -117,13 +117,12 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
           });
         };
 
-        // --- Cycle Time (mean, not median — the Resumen tab shows P50 for this same metric;
-        // labeled explicitly so the two don't read as contradictory) ---
+        // --- Cycle Time (median, same statistic as the Resumen semaphore) ---
         evalMetric(
-          "cycleTime", "Cycle Time (promedio)", raw.avgCycleTime, mergedThresholds.cycleTime,
+          "cycleTime", "Cycle Time (mediana)", raw.cycleTimeP50, mergedThresholds.cycleTime,
           (v, t) => v > t
-            ? `El cycle time promedio es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Los issues tardan demasiado en completarse una vez iniciados.`
-            : `El cycle time promedio de ${v.toFixed(1)}d está dentro del rango saludable (≤${t}d).`,
+            ? `La mediana del cycle time es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Los issues tardan demasiado en completarse una vez iniciados.`
+            : `La mediana del cycle time, ${v.toFixed(1)}d, está dentro del rango saludable (≤${t}d).`,
           [
             "Limitar el WIP a 3-4 items por columna para reducir el multitasking.",
             "Identificar el estado del flujo con mayor tiempo de permanencia y optimizarlo.",
@@ -134,10 +133,10 @@ export function useHealthSuggestions(projectId: string | undefined, period: stri
 
         // --- Lead Time ---
         evalMetric(
-          "leadTime", "Lead Time (promedio)", raw.avgLeadTime, mergedThresholds.leadTime,
+          "leadTime", "Lead Time (mediana)", raw.leadTimeP50, mergedThresholds.leadTime,
           (v, t) => v > t
-            ? `El lead time promedio es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Desde que se crea un issue hasta que se entrega pasa demasiado tiempo.`
-            : `El lead time promedio de ${v.toFixed(1)}d está dentro del rango saludable (≤${t}d).`,
+            ? `La mediana del lead time es de ${v.toFixed(1)}d, superando el umbral recomendado de ${t}d. Desde que se crea un issue hasta que se entrega pasa demasiado tiempo.`
+            : `La mediana del lead time, ${v.toFixed(1)}d, está dentro del rango saludable (≤${t}d).`,
           [
             "Revisar cuánto tiempo pasan los issues en el backlog antes de empezarlos — un cycle time sano con lead time alto suele significar demasiada espera previa al arranque.",
             "Priorizar y refinar el backlog con más frecuencia para reducir el tiempo de espera antes de iniciar el trabajo.",

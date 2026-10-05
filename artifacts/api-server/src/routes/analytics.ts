@@ -33,6 +33,7 @@ import { detectStructuralBottleneck } from "../lib/report-insights";
 import { db, blockedReasonsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { isoWeekLabel } from "../lib/iso-week";
+import { median } from "../lib/stats";
 
 const router: IRouter = Router();
 
@@ -187,6 +188,8 @@ export async function computePeriodMetrics(
   flowEfficiency: number | null;
   avgCycleTime: number | null;
   avgLeadTime: number | null;
+  cycleTimeP50: number | null;
+  leadTimeP50: number | null;
   issueTypeDistribution: { name: string; count: number; percentage: number }[];
   throughputByPriority: { priority: string; count: number }[];
   throughputOverTime: { week: string; count: number }[];
@@ -269,7 +272,17 @@ export async function computePeriodMetrics(
     ? Math.round((avgCycleTime / avgLeadTime) * 100)
     : null;
 
-  return { flowEfficiency, avgCycleTime, avgLeadTime, issueTypeDistribution, throughputByPriority, throughputOverTime, leadTimeDistribution };
+  return {
+    flowEfficiency,
+    avgCycleTime,
+    avgLeadTime,
+    cycleTimeP50: median(cycleTimes),
+    leadTimeP50: median(leadTimes),
+    issueTypeDistribution,
+    throughputByPriority,
+    throughputOverTime,
+    leadTimeDistribution,
+  };
 }
 
 router.get(

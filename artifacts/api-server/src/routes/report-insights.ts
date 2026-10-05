@@ -117,12 +117,12 @@ router.get(
       const thresholds = await getEffectiveThresholds(projectId);
 
       const cycleCrossing = detectThresholdCrossing(
-        "cycleTime", current.avgCycleTime, previous.avgCycleTime, thresholds["cycleTime"]
+        "cycleTime", current.cycleTimeP50, previous.cycleTimeP50, thresholds["cycleTime"]
       );
       if (cycleCrossing) insights.push(cycleCrossing);
 
       const leadCrossing = detectThresholdCrossing(
-        "leadTime", current.avgLeadTime, previous.avgLeadTime, thresholds["leadTime"]
+        "leadTime", current.leadTimeP50, previous.leadTimeP50, thresholds["leadTime"]
       );
       if (leadCrossing) insights.push(leadCrossing);
     }

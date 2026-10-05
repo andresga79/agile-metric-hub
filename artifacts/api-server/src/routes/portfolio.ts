@@ -26,6 +26,7 @@ router.get("/portfolio", requireAuth, async (_req, res): Promise<void> => {
       throughput: item.throughput,
       cycleTimeP50: item.cycleTimeP50 ? Number(item.cycleTimeP50) : null,
       leadTimeAvg: item.leadTimeAvg ? Number(item.leadTimeAvg) : null,
+      leadTimeP50: item.leadTimeP50 ? Number(item.leadTimeP50) : null,
       healthScore: item.healthScore ?? null,
       qaRejectionRate: item.qaRejectionRate ? Number(item.qaRejectionRate) : null,
       throughputPrevious: item.throughputPrevious ?? null,

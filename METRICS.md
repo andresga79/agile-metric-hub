@@ -261,6 +261,7 @@ Objetivos configurables en Admin, mapeados por prioridad:
 ### Flow Health Score (antes mal llamado "DORA Score")
 `round( ( normalize(throughput) + normalize(cycleTime) + normalize(cfr) ) / 3 )` — promedio de
 tres dimensiones normalizadas 0–100 contra los umbrales de Admin. (`routes/project-health.ts`)
+`cycleTime` es la **mediana (P50)** de los resueltos en la ventana, igual que en el Resumen.
 ⚠️ **No son las métricas DORA reales** (usa throughput de issues, no frecuencia de despliegue; y
 CFR = bugs/resueltos). Es un índice de salud de **flujo** derivado solo de Jira. Alimenta la
 tarjeta "Health Score (Flujo)" del Reporte y "Health Score Prom." del Resumen.
@@ -269,6 +270,15 @@ tarjeta "Health Score (Flujo)" del Reporte y "Health Score Prom." del Resumen.
 - **Proyectos en Riesgo** — conteo de proyectos en semáforo Rojo / Amarillo de la tabla. El
   semáforo por proyecto es el peor estado entre sus dimensiones (Flujo, Cycle Time, Lead Time,
   Entrega). (`dashboard.tsx`)
+
+### Criterio de salud para Cycle / Lead Time: mediana (P50)
+Toda vez que se deriva un estado de salud de Cycle Time o Lead Time se usa la **mediana** de los
+resueltos en la ventana (`median` en `lib/stats.ts`): semáforo del Resumen Ejecutivo, dimensiones
+y sugerencias de Health, Flow Health Score (Health y Resumen), e insight de "cruzó a estado
+crítico" del Reporte. Con el promedio, cerrar backlog viejo (tickets de cientos de días) dejaba al
+proyecto en rojo durante 90 días aunque el ritmo actual estuviera bien (caso Olimpo, 2026-10-05:
+Lead Time promedio 41.6d vs mediana 23.4d). Los promedios se siguen mostrando como dato
+informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no definen colores.
 - **Health Score Prom.** — promedio del Flow Health Score entre proyectos visibles.
 - **Tasa Rechazo QA Prom.** — promedio de la QA Rejection Rate entre proyectos visibles.
 - **Tendencia "vs. período anterior"** — compara la ventana actual de 90 días contra la anterior

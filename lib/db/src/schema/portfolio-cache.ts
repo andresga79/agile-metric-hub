@@ -13,6 +13,7 @@ export const portfolioCacheTable = pgTable("portfolio_cache", {
   throughput: integer("throughput").notNull().default(0),
   cycleTimeP50: numeric("cycle_time_p50"),
   leadTimeAvg: numeric("lead_time_avg"),
+  leadTimeP50: numeric("lead_time_p50"),
   healthScore: integer("health_score"),
   qaRejectionRate: numeric("qa_rejection_rate"),
   throughputPrevious: integer("throughput_previous"),

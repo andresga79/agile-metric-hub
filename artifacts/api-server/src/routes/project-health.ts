@@ -16,6 +16,7 @@ import {
   type JiraIssue,
 } from "../lib/jira";
 import { getEffectiveThresholds, normalize } from "../lib/health-thresholds";
+import { median } from "../lib/stats";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 
 const router: IRouter = Router();
@@ -112,18 +113,15 @@ router.get(
     const cycleTimes = (
       await Promise.all(resolved.map((i) => getCycleTimeDays(i)))
     ).filter((v): v is number => v !== null);
-    const avgCycleTime =
-      cycleTimes.length > 0
-        ? cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length
-        : 0;
+    // Median, not mean — same statistic the Resumen semaphore uses (see lib/stats.ts). null when
+    // nothing resolved in the window: scored at the warning anchor (0 points), like the portfolio
+    // does — a project that shipped nothing must not earn a perfect cycle/lead time score.
+    const cycleTimeP50 = median(cycleTimes);
 
     const leadTimes = (
       await Promise.all(resolved.map((i) => getLeadTimeDays(i)))
     ).filter((v): v is number => v !== null);
-    const avgLeadTime =
-      leadTimes.length > 0
-        ? leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length
-        : 0;
+    const leadTimeP50 = median(leadTimes);
 
     const bugCount = resolved.filter((i) => mapIssueType(i.fields.issuetype.name) === "Bug").length;
     const cfr = resolved.length > 0 ? (bugCount / resolved.length) * 100 : 0;
@@ -154,7 +152,7 @@ router.get(
     // or true change failure rate); named accordingly to stay honest.
     const flowHealthScore = (() => {
       const freqScore = normalize(throughput, throughputThreshold.warningValue, throughputThreshold.goodValue);
-      const ltScore = normalize(avgCycleTime, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue);
+      const ltScore = normalize(cycleTimeP50 ?? cycleTimeThreshold.warningValue, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue);
       const cfrScore = normalize(cfr, cfrThreshold.warningValue, cfrThreshold.goodValue);
       return Math.round((freqScore + ltScore + cfrScore) / 3);
     })();
@@ -167,8 +165,12 @@ router.get(
       },
       {
         name: "Cycle Time",
-        value: normalize(avgCycleTime, cycleTimeThreshold.warningValue, cycleTimeThreshold.goodValue),
-        description: `${avgCycleTime.toFixed(1)}d avg`,
+        value: normalize(
+          cycleTimeP50 ?? cycleTimeThreshold.warningValue,
+          cycleTimeThreshold.warningValue,
+          cycleTimeThreshold.goodValue
+        ),
+        description: cycleTimeP50 !== null ? `${cycleTimeP50.toFixed(1)}d P50` : "no resolved issues",
       },
       {
         name: "Flow Health Score",
@@ -192,8 +194,12 @@ router.get(
       },
       {
         name: "Lead Time",
-        value: normalize(avgLeadTime, leadTimeThreshold.warningValue, leadTimeThreshold.goodValue),
-        description: `${avgLeadTime.toFixed(1)}d avg`,
+        value: normalize(
+          leadTimeP50 ?? leadTimeThreshold.warningValue,
+          leadTimeThreshold.warningValue,
+          leadTimeThreshold.goodValue
+        ),
+        description: leadTimeP50 !== null ? `${leadTimeP50.toFixed(1)}d P50` : "no resolved issues",
       },
     ];
 
@@ -203,8 +209,8 @@ router.get(
       dimensions,
       raw: {
         throughput,
-        avgCycleTime,
-        avgLeadTime,
+        cycleTimeP50,
+        leadTimeP50,
         cfr: Math.round(cfr * 10) / 10,
         wipRatio: Math.round(wipRatio * 10) / 10,
         predictability,

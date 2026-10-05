@@ -19,6 +19,7 @@ import {
 } from "./jira";
 import { filterVisibleProjects } from "./project-visibility";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
+import { median } from "./stats";
 import { getEffectiveThresholds, normalize } from "./health-thresholds";
 import { logger } from "./logger";
 import { desc, sql } from "drizzle-orm";
@@ -41,16 +42,6 @@ export interface PortfolioRecalculationStatus {
   lastCalculatedAt: string | null;
   cachedProjects: number;
   lastError: string | null;
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = (sorted.length - 1) * 0.5;
-  const lo = Math.floor(idx);
-  const hi = Math.ceil(idx);
-  const value = lo === hi ? sorted[lo] : sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
-  return Math.round(value * 10) / 10;
 }
 
 /** Resolved-issue metrics for a single bounded [windowStart, windowEnd) slice. Called twice per
@@ -79,6 +70,7 @@ async function computeWindowMetrics(filteredIssues: JiraIssue[], windowStart: Da
     leadTimes.length > 0
       ? Math.round((leadTimes.reduce((sum, value) => sum + value, 0) / leadTimes.length) * 10) / 10
       : null;
+  const leadTimeP50 = median(leadTimes);
   const cycleTimeP50 = median(cycleTimes);
 
   const bugCount = resolved.filter((i) => mapIssueType(i.fields.issuetype.name) === "Bug").length;
@@ -88,7 +80,7 @@ async function computeWindowMetrics(filteredIssues: JiraIssue[], windowStart: Da
   const weeks = Math.max(1, Math.ceil(windowDays / 7));
   const throughputPerWeek = resolved.length > 0 ? Math.round((resolved.length / weeks) * 10) / 10 : 0;
 
-  return { resolvedCount: resolved.length, cycleTimeP50, leadTimeAvg, cfr, throughputPerWeek };
+  return { resolvedCount: resolved.length, cycleTimeP50, leadTimeAvg, leadTimeP50, cfr, throughputPerWeek };
 }
 
 /** Same DORA-style formula as project-health.ts's per-project score (throughput + cycle time +
@@ -192,6 +184,7 @@ async function processProject(
       throughput: current.resolvedCount,
       cycleTimeP50: current.cycleTimeP50,
       leadTimeAvg: current.leadTimeAvg,
+      leadTimeP50: current.leadTimeP50,
       healthScore,
       qaRejectionRate: currentQa.overallRejectionRate,
       throughputPrevious: previous.resolvedCount,
@@ -213,6 +206,7 @@ async function processProject(
       throughput: 0,
       cycleTimeP50: null,
       leadTimeAvg: null,
+      leadTimeP50: null,
       healthScore: null,
       qaRejectionRate: null,
       throughputPrevious: null,
@@ -277,6 +271,7 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
                 throughput: 0,
                 cycleTimeP50: null,
                 leadTimeAvg: null,
+                leadTimeP50: null,
                 healthScore: null,
                 qaRejectionRate: null,
                 throughputPrevious: null,
@@ -329,6 +324,7 @@ export async function calculateAndCachePortfolio(options?: { forceRefresh?: bool
             throughput: item.throughput as number,
             cycleTimeP50: item.cycleTimeP50 as string,
             leadTimeAvg: item.leadTimeAvg as string,
+            leadTimeP50: item.leadTimeP50 as string,
             healthScore: item.healthScore as number,
             qaRejectionRate: item.qaRejectionRate as string,
             throughputPrevious: item.throughputPrevious as number,
