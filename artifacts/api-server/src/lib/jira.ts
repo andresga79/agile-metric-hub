@@ -4,6 +4,7 @@ import {
   projectsCacheKey,
   issuesCacheKey,
   sprintsCacheKey,
+  futureSprintsCacheKey,
 } from "./jira-cache";
 
 const ISSUE_TYPE_MAP: Record<string, string> = {
@@ -1370,6 +1371,31 @@ export async function getJiraSprints(
     }
   }, options).catch((err): JiraSprint[] => {
     logger.warn({ err, projectId }, "Failed to fetch sprints");
+    return [];
+  });
+}
+
+/** Upcoming sprints of the project's board, earliest first. Separate from getJiraSprints on
+ *  purpose: Sprints, Evolution and the 2s/6s windows assume closed + active only. */
+export async function getFutureJiraSprints(
+  projectId: string,
+  options?: { forceRefresh?: boolean }
+): Promise<JiraSprint[]> {
+  if (!isJiraConfigured()) return [];
+
+  return withCache(futureSprintsCacheKey(projectId), async () => {
+    const boardId = await findBoardId(projectId);
+    if (!boardId) return [];
+    const data = await jiraAgileFetch<{ values: JiraSprint[] }>(
+      `${JIRA_URL}/rest/agile/1.0/board/${boardId}/sprint?maxResults=50&state=future`
+    );
+    return (data.values ?? []).sort((a, b) => {
+      const aStart = a.startDate ? Date.parse(a.startDate) : Number.POSITIVE_INFINITY;
+      const bStart = b.startDate ? Date.parse(b.startDate) : Number.POSITIVE_INFINITY;
+      return aStart - bStart || a.id - b.id;
+    });
+  }, options).catch((err): JiraSprint[] => {
+    logger.warn({ err, projectId }, "Failed to fetch future sprints");
     return [];
   });
 }

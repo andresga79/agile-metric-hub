@@ -7,6 +7,7 @@ import { logger } from "./lib/logger";
 import { ensureCacheTable, purgeStaleCacheEntries } from "./lib/jira-cache";
 import { assertJwtConfig } from "./lib/jwt";
 import { BCRYPT_ROUNDS } from "./lib/security";
+import { DEFAULT_PERMISSIONS } from "./routes/admin/constants";
 
 // Fail fast at boot if the auth signing key is missing/weak (production), before
 // the server ever accepts a request.
@@ -88,6 +89,17 @@ async function initDb() {
         UNIQUE(role, section)
       );
     `);
+
+    // DEFAULT_PERMISSIONS used to be inserted only into an empty role_permissions table, so a
+    // section added later (e.g. "capacity") had no row on existing databases and 403'd members.
+    // Insert just the missing (role, section) pairs; never touch rows an admin already edited.
+    for (const p of DEFAULT_PERMISSIONS) {
+      await db.execute(sql`
+        INSERT INTO role_permissions (role, section, can_view, can_edit)
+        VALUES (${p.role}, ${p.section}, ${p.canView}, ${p.canEdit})
+        ON CONFLICT (role, section) DO NOTHING;
+      `);
+    }
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS default_metric_thresholds (
@@ -205,6 +217,22 @@ async function initDb() {
         reason TEXT NOT NULL,
         updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS sprint_capacity (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        absence_days NUMERIC NOT NULL DEFAULT 0,
+        dedication_pct INTEGER NOT NULL DEFAULT 100,
+        included BOOLEAN NOT NULL DEFAULT true,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(project_id, sprint_id, account_id)
       );
     `);
 

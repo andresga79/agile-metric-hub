@@ -11,3 +11,4 @@ export * from "./jira-cache";
 export * from "./blocked-reasons";
 export * from "./release-epics";
 export * from "./project-release-keywords";
+export * from "./sprint-capacity";
