@@ -178,3 +178,32 @@ Contra datos reales (metodología del proyecto):
 - Integración con calendarios / RR.HH. (Tempo, Google Calendar): la disponibilidad se carga en la app.
 - Feriados: el sprint son siempre 10 días hábiles; un feriado se carga como ausencia de cada persona.
 - Umbrales de carga configurables desde Admin.
+
+## Addendum 2026-10-08 — solo cuentan los devs (lista persistente por proyecto)
+
+Decisión del usuario tras ver el equipo de Olimpo (11 personas, de las cuales QA/PO y una cuenta
+desactivada casi no estiman): **para capacity cuentan solo los devs**, y eso se marca **una vez por
+proyecto**, no por sprint. Reemplaza "Equipo por defecto" y la columna "incluido" por sprint.
+
+- **Lista por proyecto** (`capacity_roster`: proyecto, persona, nombre, `counts`, `manual`). Solo
+  admin la edita. Una persona sin fila en la lista cuenta (default sí).
+- **Aplica a todo, incluido el histórico**: en cada sprint cerrado, los días-persona suman solo a
+  quienes cuentan. Lo completado incluye todo lo hecho en el sprint (también por quienes no cuentan,
+  igual que hoy los issues sin asignar).
+- **Días-persona de un sprint cerrado** = disponibilidad guardada de quienes cuentan **+** los
+  asignados de ese sprint que cuentan y no estaban guardados, a tiempo completo (antes se ignoraban
+  y la tasa salía inflada).
+- **Equipo del próximo sprint** = quienes cuentan en la lista **+** asignados nuevos (sin fila en la
+  lista) del último sprint cerrado, del activo y del próximo. Ya no la unión de los 6 sprints, que
+  inflaba la disponibilidad respecto del histórico.
+- **Disponibilidad por sprint** (ausencia, dedicación) sigue siendo por sprint. Dedicación 0 % cubre
+  "no participa este sprint"; se elimina el "incluido" por sprint.
+- **Personas manuales** (sin issues en Jira) viven en la lista con `manual = true`, se pueden quitar,
+  y si aparece un asignado de Jira con el mismo nombre (sin distinguir mayúsculas ni espacios) se
+  usa ese y la fila manual se ignora (no se cuenta dos veces).
+- **Pantalla**: columna "Cuenta para capacity" (persistente). Quienes no cuentan se listan aparte con
+  su trabajo asignado, sin capacidad.
+
+Correcciones de la revisión final incluidas: sprints futuros sin caché y sin repetir un sprint ya
+activo/cerrado, en el orden de Jira; la tabla no vuelve a valores viejos al guardar; el borrador se
+reinicia al cambiar de proyecto.
