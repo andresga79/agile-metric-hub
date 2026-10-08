@@ -1415,13 +1415,23 @@ components:
 
     CapacityMemberInput:
       type: object
-      required: [accountId, displayName, absenceDays, dedicationPct, included]
+      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent]
       properties:
         accountId: { type: string }
         displayName: { type: string }
         absenceDays: { type: number, minimum: 0, maximum: 10 }
         dedicationPct: { type: integer, minimum: 0, maximum: 100 }
-        included: { type: boolean }
+        counts:
+          type: boolean
+          description: Counts for capacity in this project (persistent, all sprints). Only devs do.
+        manual:
+          type: boolean
+          description: Added by hand (no Jira issues yet); omitted manual people are removed.
+        recent:
+          type: boolean
+          description: >
+            Part of the next sprint's team. false = only seen in older sprints: listed so an admin
+            can mark whether they count for the historical rate, but adds no availability.
 
     CapacityTeamRow:
       allOf:

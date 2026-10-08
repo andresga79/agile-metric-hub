@@ -298,10 +298,17 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   planificó ahí. Completado = done al cierre (`wasIssueDoneAt`). Solo issues del proyecto (prefijo
   de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
 - **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
+- **Quién cuenta**: solo los devs. Admin marca una vez por proyecto quién cuenta (`capacity_roster`);
+  aplica a todos los sprints, también al histórico: quien no cuenta no suma días-persona (lo que
+  completó sí suma a lo hecho por el equipo). En un sprint cerrado, los días-persona son la
+  disponibilidad guardada + cada otro asignado que cuenta, a tiempo completo.
+- **Equipo del próximo sprint**: quienes cuentan y aparecen en el último sprint cerrado, el activo o
+  el próximo (más los agregados a mano). Los que solo están en sprints anteriores se listan para
+  decidir si cuentan, pero no suman disponibilidad.
 - **Carga por persona**: capacidad = sus días disponibles × P50 del equipo; carga = asignado /
   capacidad (la peor entre SP e issues). ≤ 85 % ok, ≤ 110 % atención, > 110 % sobrecarga. Mide
   carga, no rendimiento: no hay velocity individual.
-(`lib/capacity.ts`, `routes/capacity.ts`; disponibilidad en la tabla `sprint_capacity`)
+(`lib/capacity.ts`, `routes/capacity.ts`; disponibilidad por sprint en `sprint_capacity`, quién cuenta en `capacity_roster`)
 
 ---
 

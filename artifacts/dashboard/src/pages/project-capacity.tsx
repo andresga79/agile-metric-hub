@@ -78,16 +78,27 @@ export default function ProjectCapacity() {
   const [unit, setUnit] = useState<Unit>("sp");
   const [message, setMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [showNotCounting, setShowNotCounting] = useState(false);
+
+  // The route reuses this component across projects: drop the previous project's unsaved draft,
+  // or Save would PUT one project's people into another project's sprint.
+  useEffect(() => {
+    setDirty(false);
+    setDraft([]);
+    setMessage(null);
+  }, [projectId]);
 
   useEffect(() => {
     if (!data || dirty) return;
     setDraft(
-      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, included }) => ({
+      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent }) => ({
         accountId,
         displayName,
         absenceDays,
         dedicationPct,
-        included,
+        counts,
+        manual,
+        recent,
       }))
     );
   }, [data, dirty]);
@@ -106,8 +117,14 @@ export default function ProjectCapacity() {
     if (draft.some((r) => r.accountId === accountId)) return;
     setDirty(true);
     setMessage(null);
-    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, included: true }]);
+    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true }]);
     setNewName("");
+  };
+
+  const removePerson = (accountId: string) => {
+    setDirty(true);
+    setMessage(null);
+    setDraft((rows) => rows.filter((r) => r.accountId !== accountId));
   };
 
   const onSave = () => {
@@ -116,15 +133,90 @@ export default function ProjectCapacity() {
       { projectId: projectId!, sprintId: data.sprint.id, data: draft },
       {
         onSuccess: async () => {
+          // Refetch first, then release the draft: clearing `dirty` before the new data arrives
+          // let the effect copy the OLD server data back over the table for a few seconds.
+          await queryClient.invalidateQueries({ queryKey: getGetProjectCapacityQueryKey(projectId!) });
           setDirty(false);
           setMessage(t("page.capacity.saved"));
-          await queryClient.invalidateQueries({ queryKey: getGetProjectCapacityQueryKey(projectId!) });
         },
         onError: (err: unknown) => {
           const body = (err as { data?: { error?: string } })?.data;
           setMessage(body?.error ?? String(err));
         },
       }
+    );
+  };
+
+  const rowsById = new Map<string, CapacityTeamRow>((data?.team ?? []).map((r) => [r.accountId, r]));
+
+  const renderMember = (m: CapacityMemberInput) => {
+    const row = rowsById.get(m.accountId);
+    return (
+      <TableRow key={m.accountId} className={m.counts && m.recent ? "" : "opacity-60"}>
+        <TableCell className="font-medium">
+          {m.displayName}
+          {m.manual && (
+            <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.manual")}</span>
+          )}
+          {!m.recent && (
+            <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.historyOnly")}</span>
+          )}
+          {m.manual && isAdmin && (
+            <button
+              type="button"
+              className="ml-2 text-xs text-red-400 hover:underline"
+              onClick={() => removePerson(m.accountId)}
+            >
+              {t("page.capacity.remove")}
+            </button>
+          )}
+        </TableCell>
+        <TableCell className="text-center">
+          <input
+            type="checkbox"
+            aria-label={`${t("page.capacity.counts")}: ${m.displayName}`}
+            checked={m.counts}
+            disabled={!isAdmin}
+            onChange={(e) => updateDraft(m.accountId, { counts: e.target.checked })}
+          />
+        </TableCell>
+        <TableCell className="text-right">
+          <input
+            type="number"
+            min={0}
+            max={10}
+            step={0.5}
+            aria-label={`${t("page.capacity.absence")}: ${m.displayName}`}
+            className="w-16 bg-background border border-border rounded px-1 text-right disabled:border-transparent"
+            value={m.absenceDays}
+            disabled={!isAdmin || !m.counts || !m.recent}
+            onChange={(e) => updateDraft(m.accountId, { absenceDays: Number(e.target.value) })}
+          />
+        </TableCell>
+        <TableCell className="text-right">
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={10}
+            aria-label={`${t("page.capacity.dedication")}: ${m.displayName}`}
+            className="w-16 bg-background border border-border rounded px-1 text-right disabled:border-transparent"
+            value={m.dedicationPct}
+            disabled={!isAdmin || !m.counts || !m.recent}
+            onChange={(e) => updateDraft(m.accountId, { dedicationPct: Math.round(Number(e.target.value)) })}
+          />
+          %
+        </TableCell>
+        <TableCell className="text-right font-mono text-xs">
+          {row && m.counts && m.recent ? `${fmt(row.capacity.sp)} SP · ${fmt(row.capacity.issues)}` : "—"}
+        </TableCell>
+        <TableCell className="text-right font-mono text-xs">
+          {row ? `${fmt(row.assigned.sp)} SP · ${row.assigned.issues}` : "—"}
+        </TableCell>
+        <TableCell className={`text-right font-mono text-xs ${row && m.counts && m.recent ? BAND_TEXT[row.band as Band] : ""}`}>
+          {!m.counts || !m.recent || !row ? "—" : row.loadPct == null ? (row.band === "over" ? "∞" : "—") : `${row.loadPct}%`}
+        </TableCell>
+      </TableRow>
     );
   };
 
@@ -163,7 +255,6 @@ export default function ProjectCapacity() {
   }
 
   const rec = data.recommendation;
-  const rowsById = new Map<string, CapacityTeamRow>(data.team.map((r) => [r.accountId, r]));
 
   return (
     <div className="space-y-6">
@@ -225,7 +316,10 @@ export default function ProjectCapacity() {
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>{t("page.capacity.person")}</TableHead>
-                    <TableHead className="text-center">{t("page.capacity.included")}</TableHead>
+                    <TableHead className="text-center">
+                      {t("page.capacity.counts")}
+                      <MetricTooltip description={t("page.capacity.countsTooltip")} />
+                    </TableHead>
                     <TableHead className="text-right">{t("page.capacity.absence")}</TableHead>
                     <TableHead className="text-right">{t("page.capacity.dedication")}</TableHead>
                     <TableHead className="text-right">{t("page.capacity.capacity")}</TableHead>
@@ -234,59 +328,7 @@ export default function ProjectCapacity() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {draft.map((m) => {
-                    const row = rowsById.get(m.accountId);
-                    return (
-                      <TableRow key={m.accountId} className={m.included ? "" : "opacity-60"}>
-                        <TableCell className="font-medium">{m.displayName}</TableCell>
-                        <TableCell className="text-center">
-                          <input
-                            type="checkbox"
-                            aria-label={`${t("page.capacity.included")}: ${m.displayName}`}
-                            checked={m.included}
-                            disabled={!isAdmin}
-                            onChange={(e) => updateDraft(m.accountId, { included: e.target.checked })}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            max={10}
-                            step={0.5}
-                            aria-label={`${t("page.capacity.absence")}: ${m.displayName}`}
-                            className="w-16 bg-background border border-border rounded px-1 text-right disabled:border-transparent"
-                            value={m.absenceDays}
-                            disabled={!isAdmin}
-                            onChange={(e) => updateDraft(m.accountId, { absenceDays: Number(e.target.value) })}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={10}
-                            aria-label={`${t("page.capacity.dedication")}: ${m.displayName}`}
-                            className="w-16 bg-background border border-border rounded px-1 text-right disabled:border-transparent"
-                            value={m.dedicationPct}
-                            disabled={!isAdmin}
-                            onChange={(e) => updateDraft(m.accountId, { dedicationPct: Math.round(Number(e.target.value)) })}
-                          />
-                          %
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {row ? `${fmt(row.capacity.sp)} SP · ${fmt(row.capacity.issues)}` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {row ? `${fmt(row.assigned.sp)} SP · ${row.assigned.issues}` : "—"}
-                        </TableCell>
-                        <TableCell className={`text-right font-mono text-xs ${row ? BAND_TEXT[row.band as Band] : ""}`}>
-                          {row?.loadPct == null ? (row && row.band === "over" ? "∞" : "—") : `${row.loadPct}%`}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {draft.filter((m) => m.counts && m.recent).map(renderMember)}
                   {(data.unassigned.sp > 0 || data.unassigned.issues > 0) && (
                     <TableRow>
                       <TableCell className="italic text-muted-foreground" colSpan={5}>
@@ -298,6 +340,21 @@ export default function ProjectCapacity() {
                       <TableCell />
                     </TableRow>
                   )}
+                  {draft.some((m) => !(m.counts && m.recent)) && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={7}>
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                          aria-expanded={showNotCounting}
+                          onClick={() => setShowNotCounting((v) => !v)}
+                        >
+                          {showNotCounting ? "▾" : "▸"} {t("page.capacity.notCounting", { count: draft.filter((m) => !(m.counts && m.recent)).length })}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {showNotCounting && draft.filter((m) => !(m.counts && m.recent)).map(renderMember)}
                 </TableBody>
               </Table>
             </div>

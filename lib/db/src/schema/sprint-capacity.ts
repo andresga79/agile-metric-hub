@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, numeric, boolean, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, timestamp, unique } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 // Availability of each person for one sprint, as entered by an admin in the Capacity section.
@@ -14,7 +14,6 @@ export const sprintCapacityTable = pgTable(
     displayName: text("display_name").notNull(),
     absenceDays: numeric("absence_days").notNull().default("0"),
     dedicationPct: integer("dedication_pct").notNull().default(100),
-    included: boolean("included").notNull().default(true),
     updatedBy: integer("updated_by").references(() => usersTable.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },

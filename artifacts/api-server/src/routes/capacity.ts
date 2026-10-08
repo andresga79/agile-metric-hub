@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
-import { and, eq, inArray } from "drizzle-orm";
-import { db, sprintCapacityTable, type SprintCapacityRow } from "@workspace/db";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { db, sprintCapacityTable, capacityRosterTable, type SprintCapacityRow } from "@workspace/db";
 import { UpdateProjectCapacityBody, type CapacityResponse } from "@workspace/api-zod";
 import { requireAuth, requireAdmin, requireSectionView, type AuthRequest } from "../middleware/auth";
 import {
@@ -34,6 +34,8 @@ import {
   validateCapacityRows,
   type CapacityIssue,
   type MemberAvailability,
+  type RosterEntry,
+  type TeamMember,
 } from "../lib/capacity";
 
 const router: IRouter = Router();
@@ -46,7 +48,9 @@ function toMember(row: SprintCapacityRow): MemberAvailability {
     displayName: row.displayName,
     absenceDays: Number(row.absenceDays),
     dedicationPct: row.dedicationPct,
-    included: row.included,
+    // Who counts is decided by the project roster, not per sprint.
+    counts: true,
+    manual: false,
   };
 }
 
@@ -104,7 +108,19 @@ router.get(
       ]);
       // getJiraSprints sorts by end date descending.
       const closed = sprints.filter((s) => s.state === "closed").slice(0, HISTORY_SPRINTS);
-      const next = future[0] ?? sprints.find((s) => s.state === "active") ?? null;
+      const active = sprints.find((s) => s.state === "active") ?? null;
+      // A sprint started (or closed) since getJiraSprints was cached must not still read as "future".
+      const knownIds = new Set(sprints.map((s) => s.id));
+      const next = future.find((s) => !knownIds.has(s.id)) ?? active;
+
+      const rosterRows = await db.select().from(capacityRosterTable).where(eq(capacityRosterTable.projectId, projectId));
+      const roster: RosterEntry[] = rosterRows.map((r) => ({
+        accountId: r.accountId,
+        displayName: r.displayName,
+        counts: r.counts,
+        manual: r.manual,
+      }));
+      const notCounting = new Set(roster.filter((r) => !r.counts).map((r) => r.accountId));
 
       const sprintIds = [...closed.map((s) => String(s.id)), ...(next ? [String(next.id)] : [])];
       const savedRows = sprintIds.length
@@ -116,14 +132,22 @@ router.get(
       const savedFor = (sprintId: number) =>
         savedRows.filter((r) => r.sprintId === String(sprintId)).map(toMember);
 
-      const [closedIssues, nextIssues] = await Promise.all([
+      const activeIsSeparate = active !== null && next !== null && active.id !== next.id;
+      const [closedIssues, nextIssues, activeIssues] = await Promise.all([
         Promise.all(closed.map((s) => loadSprintIssues(s, project.key, allowedIssueTypes, categoryMap))),
         next ? loadSprintIssues(next, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
+        activeIsSeparate ? loadSprintIssues(active!, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
       ]);
 
       const samples = closed
         .map((s, idx) =>
-          sprintSample({ startDate: s.startDate, endDate: s.completeDate ?? s.endDate, issues: closedIssues[idx]!, saved: savedFor(s.id) })
+          sprintSample({
+            startDate: s.startDate,
+            endDate: s.completeDate ?? s.endDate,
+            issues: closedIssues[idx]!,
+            saved: savedFor(s.id),
+            notCounting,
+          })
         )
         .filter((s): s is NonNullable<typeof s> => s !== null);
       const rate = teamRate(samples);
@@ -135,9 +159,17 @@ router.get(
       const assigned = summarizeAssigned(nextIssues);
       if (assigned.unestimated > 0) warnings.push(`${assigned.unestimated} issues sin estimar en el próximo sprint.`);
 
-      const team = buildTeam({ recentIssues: closedIssues.flat(), nextIssues, saved: next ? savedFor(next.id) : [] });
-      const included = team.filter((m) => m.included);
-      const availablePersonDays = included.reduce((sum, m) => sum + availableDays(m, NEXT_SPRINT_WORKING_DAYS), 0);
+      // Default team: the roster plus whoever is new in the last closed, the active and the next
+      // sprint — not everyone who passed through the 6-sprint window, which inflated availability
+      // against a history that only counts each sprint's own assignees.
+      const team = buildTeam({
+        roster,
+        recentIssues: [...(closedIssues[0] ?? []), ...activeIssues, ...nextIssues],
+        historyIssues: closedIssues.flat(),
+        saved: next ? savedFor(next.id) : [],
+      });
+      const counting = team.filter((m) => m.counts && m.recent);
+      const availablePersonDays = counting.reduce((sum, m) => sum + availableDays(m, NEXT_SPRINT_WORKING_DAYS), 0);
       const range = rate ? recommend(availablePersonDays, rate) : null;
 
       const history = closed
@@ -175,7 +207,7 @@ router.get(
         recommendation: range
           ? {
               range,
-              availabilityPct: availabilityPct(availablePersonDays, included.length),
+              availabilityPct: availabilityPct(availablePersonDays, counting.length),
               availablePersonDays: Math.round(availablePersonDays * 10) / 10,
               band: {
                 sp: commitmentBand(assigned.total.sp, range.sp),
@@ -214,7 +246,7 @@ router.put(
         res.status(400).json({ error: "Datos de disponibilidad inválidos" });
         return;
       }
-      const rows: MemberAvailability[] = parsed.data;
+      const rows: TeamMember[] = parsed.data;
       const problem = validateCapacityRows(rows);
       if (problem) {
         res.status(400).json({ error: problem });
@@ -226,19 +258,49 @@ router.put(
           .delete(sprintCapacityTable)
           .where(and(eq(sprintCapacityTable.projectId, projectId), eq(sprintCapacityTable.sprintId, sprintId)));
         if (rows.length > 0) {
-          await tx.insert(sprintCapacityTable).values(
-            rows.map((r) => ({
+          // Availability is per sprint and only for the next sprint's team; people only seen in older
+          // sprints are sent just to record whether they count.
+          const sprintRows = rows.filter((r) => r.recent);
+          if (sprintRows.length > 0) await tx.insert(sprintCapacityTable).values(
+            sprintRows.map((r) => ({
               projectId,
               sprintId,
               accountId: r.accountId,
               displayName: r.displayName,
               absenceDays: String(r.absenceDays),
               dedicationPct: r.dedicationPct,
-              included: r.included,
               updatedBy: authReq.user?.userId ?? null,
             }))
           );
+          // Who counts is per project and persists across sprints.
+          for (const r of rows) {
+            await tx
+              .insert(capacityRosterTable)
+              .values({
+                projectId,
+                accountId: r.accountId,
+                displayName: r.displayName,
+                counts: r.counts,
+                manual: r.manual,
+                updatedBy: authReq.user?.userId ?? null,
+              })
+              .onConflictDoUpdate({
+                target: [capacityRosterTable.projectId, capacityRosterTable.accountId],
+                set: { displayName: r.displayName, counts: r.counts, manual: r.manual, updatedBy: authReq.user?.userId ?? null },
+              });
+          }
         }
+        // A manual person left out of the list was removed by the admin. Jira people never are.
+        const keptManual = rows.filter((r) => r.manual).map((r) => r.accountId);
+        await tx
+          .delete(capacityRosterTable)
+          .where(
+            and(
+              eq(capacityRosterTable.projectId, projectId),
+              eq(capacityRosterTable.manual, true),
+              ...(keptManual.length > 0 ? [notInArray(capacityRosterTable.accountId, keptManual)] : [])
+            )
+          );
       });
       res.json({ success: true });
     } catch (err) {

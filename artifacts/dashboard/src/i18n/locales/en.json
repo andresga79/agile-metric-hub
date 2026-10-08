@@ -606,7 +606,6 @@
   "page.capacity.person": "Person",
   "page.capacity.absence": "Absence (days)",
   "page.capacity.dedication": "Dedication",
-  "page.capacity.included": "In team",
   "page.capacity.capacity": "Capacity",
   "page.capacity.assigned": "Assigned",
   "page.capacity.load": "Load",
@@ -622,5 +621,11 @@
   "page.capacity.unitIssues": "Issues",
   "page.capacity.completed": "Completed",
   "page.capacity.noSprint": "No active or future sprint in Jira.",
-  "page.capacity.loadTooltip": "Work assigned in the sprint divided by the person's capacity (their available days × what the team completes per person-day). Measures load, not performance."
+  "page.capacity.loadTooltip": "Work assigned in the sprint divided by the person's capacity (their available days × what the team completes per person-day). Measures load, not performance.",
+  "page.capacity.counts": "Counts for capacity",
+  "page.capacity.countsTooltip": "Only developers count. Saved per project and applied to every sprint, history included: people who don't count (QA, PO, leads, departed accounts) add no days to the team rate.",
+  "page.capacity.notCounting": "Others: not counting or only in older sprints ({{count}})",
+  "page.capacity.historyOnly": "older sprints only",
+  "page.capacity.manual": "added by hand",
+  "page.capacity.remove": "Remove"
 }

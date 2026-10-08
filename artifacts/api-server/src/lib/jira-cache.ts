@@ -176,10 +176,6 @@ export function sprintsCacheKey(projectId: string): string {
   return `sprints:${projectId}`;
 }
 
-export function futureSprintsCacheKey(projectId: string): string {
-  return `futureSprints:${projectId}`;
-}
-
 async function warmVisibleProjectsCache(forceRefresh: boolean = false): Promise<void> {
   try {
     const { isJiraConfigured, listJiraProjects, getProjectBoardType, getJiraSprints, getJiraIssuesForProject } = await import("./jira");

@@ -528,7 +528,9 @@ export const GetProjectCapacityResponse = zod.object({
   "displayName": zod.string(),
   "absenceDays": zod.number().min(getProjectCapacityResponseTeamItemOneAbsenceDaysMin).max(getProjectCapacityResponseTeamItemOneAbsenceDaysMax),
   "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
-  "included": zod.boolean()
+  "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
+  "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "recent": zod.boolean().describe('Part of the next sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 }).and(zod.object({
   "availableDays": zod.number(),
   "capacity": zod.object({
@@ -584,7 +586,9 @@ export const UpdateProjectCapacityBodyItem = zod.object({
   "displayName": zod.string(),
   "absenceDays": zod.number().min(updateProjectCapacityBodyAbsenceDaysMin).max(updateProjectCapacityBodyAbsenceDaysMax),
   "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
-  "included": zod.boolean()
+  "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
+  "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "recent": zod.boolean().describe('Part of the next sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 })
 export const UpdateProjectCapacityBody = zod.array(UpdateProjectCapacityBodyItem)
 

@@ -19,5 +19,11 @@ export interface CapacityMemberInput {
      * @maximum 100
      */
   dedicationPct: number;
-  included: boolean;
+  /** Counts for capacity in this project (persistent, all sprints). Only devs do. */
+  counts: boolean;
+  /** Added by hand (no Jira issues yet); omitted manual people are removed. */
+  manual: boolean;
+  /** Part of the next sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
+   *  */
+  recent: boolean;
 }

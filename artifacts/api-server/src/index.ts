@@ -229,10 +229,23 @@ async function initDb() {
         display_name TEXT NOT NULL,
         absence_days NUMERIC NOT NULL DEFAULT 0,
         dedication_pct INTEGER NOT NULL DEFAULT 100,
-        included BOOLEAN NOT NULL DEFAULT true,
         updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(project_id, sprint_id, account_id)
+      );
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS capacity_roster (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        counts BOOLEAN NOT NULL DEFAULT true,
+        manual BOOLEAN NOT NULL DEFAULT false,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(project_id, account_id)
       );
     `);
 

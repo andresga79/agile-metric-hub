@@ -133,29 +133,49 @@ export interface MemberAvailability {
   displayName: string;
   absenceDays: number;
   dedicationPct: number;
-  included: boolean;
+  /** Counts for capacity (per project, persistent): only devs do. */
+  counts: boolean;
+  /** Added by hand in Capacity — no Jira issues yet, synthetic `manual:` accountId. */
+  manual: boolean;
+}
+
+/** One row of the per-project list of who counts for capacity. */
+export interface RosterEntry {
+  accountId: string;
+  displayName: string;
+  counts: boolean;
+  manual: boolean;
 }
 
 export function availableDays(m: MemberAvailability, sprintWorkingDays: number): number {
-  if (!m.included) return 0;
+  if (!m.counts) return 0;
   return Math.max(0, (sprintWorkingDays * m.dedicationPct) / 100 - m.absenceDays);
 }
 
-/** One closed sprint as a rate sample. Person-days come from the availability saved when the
- *  sprint was planned in Capacity; before Capacity existed, from each distinct assignee counted
- *  full-time. null when it can't be a sample (no dates, or nobody to divide by). */
+/** One closed sprint as a rate sample. Person-days = availability saved when the sprint was
+ *  planned in Capacity, plus every other assignee of the sprint full-time (someone assigned
+ *  mid-sprint delivers, so their days must count too) — minus people who don't count (QA, PO,
+ *  leads), who add no days. Completed work is everything done in the sprint, by anyone.
+ *  null when it can't be a sample (no dates, or nobody to divide by). */
 export function sprintSample(input: {
   startDate?: string;
   endDate?: string;
   issues: CapacityIssue[];
   saved: MemberAvailability[];
+  notCounting: Set<string>;
 }): SprintSample | null {
   if (!input.startDate || !input.endDate) return null;
   const days = workingDays(input.startDate, input.endDate);
-  const personDays =
-    input.saved.length > 0
-      ? input.saved.reduce((sum, m) => sum + availableDays(m, days), 0)
-      : days * new Set(input.issues.map((i) => i.accountId).filter((a): a is string => a !== null)).size;
+  const savedIds = new Set(input.saved.map((m) => m.accountId));
+  const savedDays = input.saved
+    .filter((m) => !input.notCounting.has(m.accountId))
+    .reduce((sum, m) => sum + availableDays(m, days), 0);
+  const unsavedAssignees = new Set(
+    input.issues
+      .map((i) => i.accountId)
+      .filter((a): a is string => a !== null && !savedIds.has(a) && !input.notCounting.has(a))
+  );
+  const personDays = savedDays + unsavedAssignees.size * days;
   if (personDays <= 0) return null;
   const done = input.issues.filter((i) => i.done);
   return {
@@ -188,25 +208,56 @@ export function summarizeAssigned(issues: CapacityIssue[]): {
   };
 }
 
-/** Team for the next sprint: what admin saved for it, plus anyone assigned in the recent closed
- *  sprints or in the next sprint itself, with defaults (no absence, 100 %, included). */
+const normalizeName = (name: string) => name.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+
+/** A person in the Capacity list. `recent` = part of the next sprint's team (assigned in the last
+ *  closed, active or next sprint, or added by hand). People only seen in older sprints are listed
+ *  too — they add days to the historical rate, so an admin must be able to say they don't count —
+ *  but they add no availability to the next sprint. */
+export type TeamMember = MemberAvailability & { recent: boolean };
+
+/** Team for the Capacity list: everyone on the project's roster plus every assignee of the recent
+ *  sprints and of the history window. A manual entry whose name matches a Jira assignee is
+ *  replaced by that assignee (keeping its counts flag), so one person is never counted twice.
+ *  Availability for this sprint comes from `saved`. Next-sprint devs first, then the rest. */
 export function buildTeam(input: {
+  roster: RosterEntry[];
   recentIssues: CapacityIssue[];
-  nextIssues: CapacityIssue[];
+  historyIssues?: CapacityIssue[];
   saved: MemberAvailability[];
-}): MemberAvailability[] {
-  const team = new Map<string, MemberAvailability>(input.saved.map((m) => [m.accountId, { ...m }]));
-  for (const i of [...input.nextIssues, ...input.recentIssues]) {
-    if (!i.accountId || team.has(i.accountId)) continue;
-    team.set(i.accountId, {
-      accountId: i.accountId,
-      displayName: i.displayName ?? i.accountId,
-      absenceDays: 0,
-      dedicationPct: 100,
-      included: true,
-    });
+}): TeamMember[] {
+  const names = new Map<string, string>();
+  for (const i of [...input.recentIssues, ...(input.historyIssues ?? [])]) {
+    if (i.accountId && !names.has(i.accountId)) names.set(i.accountId, i.displayName ?? i.accountId);
   }
-  return [...team.values()].sort((a, b) => a.displayName.localeCompare(b.displayName, "es"));
+  const recentIds = new Set(input.recentIssues.map((i) => i.accountId).filter((a): a is string => a !== null));
+  const idByName = new Map([...names].map(([id, name]) => [normalizeName(name), id]));
+
+  const people = new Map<string, RosterEntry>();
+  for (const r of input.roster) {
+    const jiraId = r.manual ? idByName.get(normalizeName(r.displayName)) : undefined;
+    if (jiraId) {
+      if (!input.roster.some((o) => o.accountId === jiraId)) {
+        people.set(jiraId, { accountId: jiraId, displayName: names.get(jiraId)!, counts: r.counts, manual: false });
+      }
+      continue;
+    }
+    people.set(r.accountId, { ...r });
+  }
+  for (const [id, name] of names) {
+    if (!people.has(id)) people.set(id, { accountId: id, displayName: name, counts: true, manual: false });
+  }
+
+  const saved = new Map(input.saved.map((m) => [m.accountId, m]));
+  const rank = (m: TeamMember) => (m.recent && m.counts ? 0 : 1);
+  return [...people.values()]
+    .map((p) => ({
+      ...p,
+      recent: p.manual || recentIds.has(p.accountId),
+      absenceDays: saved.get(p.accountId)?.absenceDays ?? 0,
+      dedicationPct: saved.get(p.accountId)?.dedicationPct ?? 100,
+    }))
+    .sort((a, b) => rank(a) - rank(b) || Number(b.counts) - Number(a.counts) || a.displayName.localeCompare(b.displayName, "es"));
 }
 
 export interface TeamRow extends MemberAvailability {
@@ -218,17 +269,19 @@ export interface TeamRow extends MemberAvailability {
 }
 
 export function buildTeamRows(
-  team: MemberAvailability[],
+  team: Array<MemberAvailability & { recent?: boolean }>,
   byAccount: Map<string, Units>,
   rate: TeamRate | null
-): TeamRow[] {
+): Array<TeamRow & { recent: boolean }> {
   return team.map((m) => {
-    const days = availableDays(m, NEXT_SPRINT_WORKING_DAYS);
+    const recent = m.recent ?? true;
+    const days = recent ? availableDays(m, NEXT_SPRINT_WORKING_DAYS) : 0;
     const assigned = byAccount.get(m.accountId) ?? { sp: 0, issues: 0 };
-    if (!rate) {
-      return { ...m, availableDays: days, capacity: { sp: 0, issues: 0 }, assigned, loadPct: null, band: "ok" as Band };
+    // No capacity to measure load against: not counting, not in the next sprint, or no rate yet.
+    if (!rate || !m.counts || !recent) {
+      return { ...m, recent, availableDays: days, capacity: { sp: 0, issues: 0 }, assigned, loadPct: null, band: "ok" as Band };
     }
-    return { ...m, availableDays: days, assigned, ...personLoad(days, rate, assigned) };
+    return { ...m, recent, availableDays: days, assigned, ...personLoad(days, rate, assigned) };
   });
 }
 

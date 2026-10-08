@@ -12,3 +12,4 @@ export * from "./blocked-reasons";
 export * from "./release-epics";
 export * from "./project-release-keywords";
 export * from "./sprint-capacity";
+export * from "./capacity-roster";
