@@ -288,6 +288,23 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 
 ---
 
+## Capacity (planificación del próximo sprint, solo Scrum)
+
+- **Próximo sprint**: primer sprint futuro del tablero; si no hay, el activo. Siempre 10 días
+  hábiles (regla del equipo: arranca lunes, dura 10 días).
+- **Tasa del equipo**: últimos 6 sprints cerrados. Por sprint, `SP completados / días-persona` e
+  `issues completados / días-persona`; `días-persona = Σ (días hábiles reales × dedicación − ausencia)`
+  con la disponibilidad guardada en Capacity, o cada asignado a tiempo completo si el sprint no se
+  planificó ahí. Completado = done al cierre (`wasIssueDoneAt`). Solo issues del proyecto (prefijo
+  de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
+- **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
+- **Carga por persona**: capacidad = sus días disponibles × P50 del equipo; carga = asignado /
+  capacidad (la peor entre SP e issues). ≤ 85 % ok, ≤ 110 % atención, > 110 % sobrecarga. Mide
+  carga, no rendimiento: no hay velocity individual.
+(`lib/capacity.ts`, `routes/capacity.ts`; disponibilidad en la tabla `sprint_capacity`)
+
+---
+
 ## Dónde vive cada cosa (referencia rápida)
 
 | Área | Endpoint / archivo |
@@ -301,4 +318,5 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 | Forecast (Monte Carlo) | `routes/forecast.ts` |
 | CFD | `routes/cfd.ts` |
 | Resumen Ejecutivo / portfolio (health/QA/tendencias) | `lib/portfolio-cache.ts` + `routes/portfolio.ts` |
+| Capacity (próximo sprint, carga por persona) | `routes/capacity.ts` + `lib/capacity.ts` |
 | Helpers compartidos (cycle/lead time, tipos, estados, thresholds) | `lib/jira.ts`, `lib/health-thresholds.ts` |
