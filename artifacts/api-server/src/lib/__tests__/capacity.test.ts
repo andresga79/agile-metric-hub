@@ -6,8 +6,16 @@ import {
   availabilityPct,
   personLoad,
   commitmentBand,
+  availableDays,
+  sprintSample,
+  summarizeAssigned,
+  buildTeam,
+  buildTeamRows,
+  validateCapacityRows,
   type SprintSample,
   type TeamRate,
+  type CapacityIssue,
+  type MemberAvailability,
 } from "../capacity";
 
 describe("workingDays", () => {
@@ -127,5 +135,133 @@ describe("commitmentBand", () => {
     expect(commitmentBand(60, [45, 60])).toBe("ok");
     expect(commitmentBand(69, [45, 60])).toBe("warn");
     expect(commitmentBand(70, [45, 60])).toBe("over");
+  });
+});
+
+const issue = (key: string, accountId: string | null, storyPoints: number, done = false): CapacityIssue => ({
+  key,
+  accountId,
+  displayName: accountId ? `Name ${accountId}` : null,
+  storyPoints,
+  done,
+});
+const member = (accountId: string, over: Partial<MemberAvailability> = {}): MemberAvailability => ({
+  accountId,
+  displayName: `Name ${accountId}`,
+  absenceDays: 0,
+  dedicationPct: 100,
+  included: true,
+  ...over,
+});
+
+describe("availableDays", () => {
+  it("is working days x dedication minus absence, never negative, 0 when excluded", () => {
+    expect(availableDays(member("a", { absenceDays: 2 }), 10)).toBe(8);
+    expect(availableDays(member("a", { dedicationPct: 50 }), 10)).toBe(5);
+    expect(availableDays(member("a", { dedicationPct: 50, absenceDays: 7 }), 10)).toBe(0);
+    expect(availableDays(member("a", { included: false }), 10)).toBe(0);
+  });
+});
+
+describe("sprintSample", () => {
+  const start = "2026-07-06T09:00:00.000-0300";
+  const end = "2026-07-17T18:00:00.000-0300"; // 10 working days
+
+  it("without saved availability, counts each distinct assignee full-time", () => {
+    const s = sprintSample({
+      startDate: start,
+      endDate: end,
+      issues: [issue("A-1", "a", 3, true), issue("A-2", "b", 5, false), issue("A-3", "a", 2, true)],
+      saved: [],
+    })!;
+    expect(s).toEqual({ personDays: 20, completedSp: 5, completedIssues: 2 });
+  });
+
+  it("uses saved availability when the sprint was planned in Capacity", () => {
+    const s = sprintSample({
+      startDate: start,
+      endDate: end,
+      issues: [issue("A-1", "a", 3, true)],
+      saved: [member("a", { absenceDays: 2 }), member("b", { dedicationPct: 50 })],
+    })!;
+    expect(s.personDays).toBe(13);
+  });
+
+  it("returns null without dates", () => {
+    expect(sprintSample({ startDate: undefined, endDate: end, issues: [], saved: [] })).toBeNull();
+  });
+
+  it("returns null when nobody was assigned (0 person-days)", () => {
+    expect(
+      sprintSample({ startDate: start, endDate: end, issues: [issue("A-1", null, 3, true)], saved: [] })
+    ).toBeNull();
+  });
+});
+
+describe("summarizeAssigned", () => {
+  it("groups by assignee, separates unassigned and counts unestimated", () => {
+    const r = summarizeAssigned([issue("A-1", "a", 3), issue("A-2", "a", 0), issue("A-3", null, 5)]);
+    expect(r.byAccount.get("a")).toEqual({ sp: 3, issues: 2 });
+    expect(r.unassigned).toEqual({ sp: 5, issues: 1 });
+    expect(r.total).toEqual({ sp: 8, issues: 3 });
+    expect(r.unestimated).toBe(1);
+  });
+});
+
+describe("buildTeam", () => {
+  it("saved rows win; recent and next assignees are added with defaults; sorted by name", () => {
+    const team = buildTeam({
+      recentIssues: [issue("A-1", "b", 1), issue("A-2", "c", 1)],
+      nextIssues: [issue("A-3", "d", 1)],
+      saved: [member("c", { absenceDays: 3 })],
+    });
+    expect(team.map((m) => m.accountId)).toEqual(["b", "c", "d"]);
+    expect(team.find((m) => m.accountId === "c")!.absenceDays).toBe(3);
+    expect(team.find((m) => m.accountId === "d")!).toMatchObject({ absenceDays: 0, dedicationPct: 100, included: true });
+  });
+
+  it("a future sprint with no issues yet still gets the recent team", () => {
+    expect(buildTeam({ recentIssues: [issue("A-1", "b", 1)], nextIssues: [], saved: [] })).toHaveLength(1);
+  });
+});
+
+describe("buildTeamRows", () => {
+  const rate = {
+    sp: { p25: 0.4, p50: 0.5, p75: 0.6 },
+    issues: { p25: 0.2, p50: 0.25, p75: 0.3 },
+    sprintsUsed: 6,
+  };
+
+  it("an excluded member who still has assigned work shows with 0 capacity and over", () => {
+    const rows = buildTeamRows(
+      [member("a", { included: false })],
+      new Map([["a", { sp: 3, issues: 1 }]]),
+      rate
+    );
+    expect(rows[0]).toMatchObject({ availableDays: 0, assigned: { sp: 3, issues: 1 }, band: "over", loadPct: null });
+  });
+
+  it("without a rate, capacity is 0 and band ok (no recommendation yet)", () => {
+    const rows = buildTeamRows([member("a")], new Map(), null);
+    expect(rows[0]).toMatchObject({ availableDays: 10, capacity: { sp: 0, issues: 0 }, loadPct: null, band: "ok" });
+  });
+});
+
+describe("validateCapacityRows", () => {
+  it("accepts valid rows", () => {
+    expect(validateCapacityRows([member("a", { absenceDays: 10, dedicationPct: 0 })])).toBeNull();
+  });
+
+  it("rejects absence above the sprint's 10 working days", () => {
+    expect(validateCapacityRows([member("a", { absenceDays: 10.5 })])).toMatch(/ausencia/i);
+  });
+
+  it("rejects dedication outside 0-100 or not an integer", () => {
+    expect(validateCapacityRows([member("a", { dedicationPct: 101 })])).toMatch(/dedicaci/i);
+    expect(validateCapacityRows([member("a", { dedicationPct: 50.5 })])).toMatch(/dedicaci/i);
+  });
+
+  it("rejects duplicated accountIds", () => {
+    expect(validateCapacityRows([member("a"), member("a")])).toMatch(/duplicad/i);
   });
 });
