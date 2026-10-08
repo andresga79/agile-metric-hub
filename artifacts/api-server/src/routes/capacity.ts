@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import { db, sprintCapacityTable, capacityRosterTable, type SprintCapacityRow } from "@workspace/db";
+import { db, sprintCapacityTable, capacityRosterTable, capacityAbsenceTable, type SprintCapacityRow } from "@workspace/db";
 import { UpdateProjectCapacityBody, type CapacityResponse } from "@workspace/api-zod";
 import { requireAuth, requireAdmin, requireSectionView, type AuthRequest } from "../middleware/auth";
 import {
@@ -21,6 +21,11 @@ import {
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import {
   HISTORY_SPRINTS,
+  absenceTotal,
+  sprintDates,
+  validateAbsences,
+  type Absence,
+  type AbsenceType,
   NEXT_SPRINT_WORKING_DAYS,
   availabilityPct,
   availableDays,
@@ -78,6 +83,13 @@ async function loadSprintIssues(
       storyPoints: getStoryPoints(i),
       done: closeTime ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i),
     }));
+}
+
+/** Working dates of `sprint` for placing absences. A future sprint without dates in Jira starts the
+ *  Monday after the active sprint ends (or after today). */
+function datesOf(sprint: JiraSprint, active: JiraSprint | null): string[] {
+  const after = sprint.state === "future" && active?.endDate ? active.endDate : new Date().toISOString();
+  return sprintDates(sprint.startDate, sprint.endDate, after);
 }
 
 async function ensureScrumProject(projectId: string, res: Response) {
@@ -143,6 +155,18 @@ router.get(
         : [];
       const savedFor = (sprintId: number) =>
         savedRows.filter((r) => r.sprintId === String(sprintId)).map(toMember);
+      const absenceRows = next
+        ? await db
+            .select()
+            .from(capacityAbsenceTable)
+            .where(and(eq(capacityAbsenceTable.projectId, projectId), eq(capacityAbsenceTable.sprintId, String(next.id))))
+            .orderBy(capacityAbsenceTable.date, capacityAbsenceTable.portion)
+        : [];
+      const absencesOf = new Map<string, Absence[]>();
+      for (const a of absenceRows) {
+        const list = absencesOf.get(a.accountId) ?? absencesOf.set(a.accountId, []).get(a.accountId)!;
+        list.push({ date: a.date, portion: a.portion as Absence["portion"], type: a.type as AbsenceType, note: a.note });
+      }
 
       const [closedIssues, nextIssues, activeIssues] = await Promise.all([
         Promise.all(closed.map((s) => loadSprintIssues(s, project.key, allowedIssueTypes, categoryMap))),
@@ -190,7 +214,7 @@ router.get(
         roster,
         recentIssues: [...(closedIssues[0] ?? []), ...activeIssues, ...nextIssues],
         historyIssues: closedIssues.flat(),
-        saved: next ? savedFor(next.id) : [],
+        saved: next ? savedFor(next.id).map((m) => ({ ...m, absences: absencesOf.get(m.accountId) ?? [] })) : [],
       });
       const counting = team.filter((m) => m.counts && m.recent);
       const availablePersonDays = counting.reduce((sum, m) => sum + availableDays(m, sprintDays), 0);
@@ -227,6 +251,7 @@ router.get(
               startDate: next.startDate ?? null,
               endDate: next.endDate ?? null,
               workingDays: sprintDays,
+              days: datesOf(next, active),
             }
           : null,
         recommendation: range
@@ -258,7 +283,14 @@ router.get(
           team,
           assigned.byAccount,
           rate,
-          clock ? { workingDays: clock.workingDays, remainingDays: clock.remainingDays, done: assigned.doneByAccount } : undefined
+          clock
+            ? {
+                workingDays: clock.workingDays,
+                remainingDays: clock.remainingDays,
+                today: new Date().toISOString().slice(0, 10),
+                done: assigned.doneByAccount,
+              }
+            : undefined
         ),
         unassigned: assigned.unassigned,
         history,
@@ -288,8 +320,22 @@ router.put(
         res.status(400).json({ error: "Datos de disponibilidad inválidos" });
         return;
       }
-      const rows: TeamMember[] = parsed.data;
-      const problem = validateCapacityRows(rows);
+      const [sprints, future] = await Promise.all([getJiraSprints(projectId, 50), getFutureJiraSprints(projectId)]);
+      const sprint = [...sprints, ...future].find((s) => String(s.id) === sprintId);
+      if (!sprint) {
+        res.status(404).json({ error: "Sprint not found" });
+        return;
+      }
+      const days = datesOf(sprint, sprints.find((s) => s.state === "active") ?? null);
+      // Dated absences decide the total; without them the number typed by hand stays.
+      const rows: TeamMember[] = parsed.data.map((r) => ({
+        ...r,
+        absences: r.absences ?? [],
+        absenceDays: r.absences?.length ? absenceTotal(r.absences) : r.absenceDays,
+      }));
+      const problem =
+        rows.map((r) => validateAbsences(r.displayName, r.absences ?? [], days)).find((p) => p !== null) ??
+        validateCapacityRows(rows);
       if (problem) {
         res.status(400).json({ error: problem });
         return;
@@ -299,6 +345,9 @@ router.put(
         await tx
           .delete(sprintCapacityTable)
           .where(and(eq(sprintCapacityTable.projectId, projectId), eq(sprintCapacityTable.sprintId, sprintId)));
+        await tx
+          .delete(capacityAbsenceTable)
+          .where(and(eq(capacityAbsenceTable.projectId, projectId), eq(capacityAbsenceTable.sprintId, sprintId)));
         if (rows.length > 0) {
           // Availability is per sprint and only for the next sprint's team; people only seen in older
           // sprints are sent just to record whether they count.
@@ -314,6 +363,19 @@ router.put(
               updatedBy: authReq.user?.userId ?? null,
             }))
           );
+          const absenceRows = sprintRows.flatMap((r) =>
+            (r.absences ?? []).map((a) => ({
+              projectId,
+              sprintId,
+              accountId: r.accountId,
+              date: a.date,
+              portion: a.portion,
+              type: a.type,
+              note: a.note?.trim() || null,
+              updatedBy: authReq.user?.userId ?? null,
+            }))
+          );
+          if (absenceRows.length > 0) await tx.insert(capacityAbsenceTable).values(absenceRows);
           // Who counts is per project and persists across sprints.
           for (const r of rows) {
             await tx

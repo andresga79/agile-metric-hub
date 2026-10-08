@@ -540,14 +540,46 @@ export interface CapacityRateBand {
   p75: number;
 }
 
+export type CapacityAbsencePortion = typeof CapacityAbsencePortion[keyof typeof CapacityAbsencePortion];
+
+
+export const CapacityAbsencePortion = {
+  full: 'full',
+  am: 'am',
+  pm: 'pm',
+} as const;
+
+export type CapacityAbsenceType = typeof CapacityAbsenceType[keyof typeof CapacityAbsenceType];
+
+
+export const CapacityAbsenceType = {
+  vacation: 'vacation',
+  sick: 'sick',
+  personal: 'personal',
+  training: 'training',
+  holiday: 'holiday',
+  other: 'other',
+} as const;
+
+export interface CapacityAbsence {
+  /** YYYY-MM-DD, a working day of the sprint */
+  date: string;
+  portion: CapacityAbsencePortion;
+  type: CapacityAbsenceType;
+  /** @maxLength 200 */
+  note: string | null;
+}
+
 export interface CapacityMemberInput {
   accountId: string;
   displayName: string;
   /**
+     * With dated absences the server sets it to their total (full day 1, morning/afternoon 0.5).
      * @minimum 0
      * @maximum 10
      */
   absenceDays: number;
+  absences: CapacityAbsence[];
   /**
      * @minimum 0
      * @maximum 100
@@ -604,6 +636,9 @@ export type CapacityResponseSprint = {
   startDate: string | null;
   endDate: string | null;
   workingDays: number;
+  /** Working dates (YYYY-MM-DD) for placing absences. Without dates in Jira, 10 working days from the Monday after the active sprint ends.
+   *  */
+  days: string[];
 } | null;
 
 export type CapacityResponseRecommendationBandSp = typeof CapacityResponseRecommendationBandSp[keyof typeof CapacityResponseRecommendationBandSp];

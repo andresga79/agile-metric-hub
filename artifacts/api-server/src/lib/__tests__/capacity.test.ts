@@ -15,6 +15,10 @@ import {
   sprintClock,
   expectedByToday,
   paceBand,
+  sprintDates,
+  absenceTotal,
+  validateAbsences,
+  type Absence,
   type SprintSample,
   type TeamRate,
   type CapacityIssue,
@@ -436,5 +440,94 @@ describe("validateCapacityRows", () => {
 
   it("rejects duplicated accountIds", () => {
     expect(validateCapacityRows([member("a"), member("a")])).toMatch(/duplicad/i);
+  });
+});
+
+const absence = (date: string, portion: Absence["portion"] = "full", over: Partial<Absence> = {}): Absence => ({
+  date,
+  portion,
+  type: "personal",
+  note: null,
+  ...over,
+});
+
+describe("sprintDates", () => {
+  it("lists the weekdays between the sprint's dates", () => {
+    const days = sprintDates("2026-10-05T15:13:25.886Z", "2026-10-16T03:00:00.000Z", "2026-10-01");
+    expect(days).toHaveLength(10);
+    expect(days[0]).toBe("2026-10-05");
+    expect(days[4]).toBe("2026-10-09");
+    expect(days[5]).toBe("2026-10-12");
+    expect(days[9]).toBe("2026-10-16");
+  });
+
+  it("without dates assumes the team rule: 10 working days from the first Monday after `after`", () => {
+    // Olimpo's next sprint has no dates in Jira; the active one ends Friday 2026-10-16.
+    const days = sprintDates(undefined, undefined, "2026-10-16");
+    expect(days).toHaveLength(10);
+    expect(days[0]).toBe("2026-10-19");
+    expect(days[9]).toBe("2026-10-30");
+  });
+});
+
+describe("absenceTotal", () => {
+  it("a full day is 1, a morning or an afternoon is 0.5", () => {
+    // "Cristóbal estará 2 mañanas fuera"
+    expect(absenceTotal([absence("2026-10-06", "am"), absence("2026-10-08", "am")])).toBe(1);
+    expect(absenceTotal([absence("2026-10-06"), absence("2026-10-07", "pm")])).toBe(1.5);
+    expect(absenceTotal([])).toBe(0);
+  });
+});
+
+describe("validateAbsences", () => {
+  const days = ["2026-10-05", "2026-10-06", "2026-10-07"];
+
+  it("accepts a morning and an afternoon of the same day", () => {
+    expect(validateAbsences("Ana", [absence("2026-10-05", "am"), absence("2026-10-05", "pm")], days)).toBeNull();
+  });
+
+  it("rejects overlapping entries on the same day", () => {
+    expect(validateAbsences("Ana", [absence("2026-10-05"), absence("2026-10-05", "am")], days)).toMatch(/repetid|superpuest/i);
+    expect(validateAbsences("Ana", [absence("2026-10-05", "am"), absence("2026-10-05", "am")], days)).toMatch(/repetid|superpuest/i);
+  });
+
+  it("rejects a day outside the sprint or a malformed date", () => {
+    expect(validateAbsences("Ana", [absence("2026-10-12")], days)).toMatch(/sprint/i);
+    expect(validateAbsences("Ana", [absence("5/10/2026")], days)).toMatch(/fecha/i);
+  });
+
+  it("rejects a note longer than 200 characters", () => {
+    expect(validateAbsences("Ana", [absence("2026-10-05", "full", { note: "x".repeat(201) })], days)).toMatch(/motivo/i);
+  });
+});
+
+describe("buildTeamRows (active sprint, dated absences)", () => {
+  const rate = {
+    sp: { p25: 0.4, p50: 0.5, p75: 0.6 },
+    issues: { p25: 0.2, p50: 0.25, p75: 0.3 },
+    sprintsUsed: 6,
+  };
+  const sprint = { workingDays: 10, remainingDays: 5, today: "2026-10-12", done: new Map() };
+
+  it("an absence already past doesn't reduce what is left", () => {
+    const rows = buildTeamRows(
+      [member("a", { absenceDays: 1, absences: [absence("2026-10-06")] })],
+      new Map([["a", { sp: 2, issues: 1 }]]),
+      rate,
+      sprint
+    );
+    // 5 days left, none of them absent -> 2.5 SP
+    expect(rows[0]).toMatchObject({ availableDays: 9, capacity: { sp: 2.5, issues: 1.3 } });
+  });
+
+  it("an absence still ahead (today included) does", () => {
+    const rows = buildTeamRows(
+      [member("a", { absenceDays: 1, absences: [absence("2026-10-12", "am"), absence("2026-10-14", "am")] })],
+      new Map([["a", { sp: 2, issues: 1 }]]),
+      rate,
+      sprint
+    );
+    // 5 - 1 = 4 days left -> 2 SP
+    expect(rows[0]!.capacity.sp).toBe(2);
   });
 });

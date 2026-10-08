@@ -14,4 +14,7 @@ export type CapacityResponseSprint = {
   startDate: string | null;
   endDate: string | null;
   workingDays: number;
+  /** Working dates (YYYY-MM-DD) for placing absences. Without dates in Jira, 10 working days from the Monday after the active sprint ends.
+   *  */
+  days: string[];
 } | null;

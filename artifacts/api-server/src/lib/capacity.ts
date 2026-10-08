@@ -51,6 +51,28 @@ export function workingDays(start: string, end: string): number {
   return days;
 }
 
+/** The sprint's working dates (YYYY-MM-DD), for placing absences on a day. A sprint Jira has no
+ *  dates for yet follows the team rule: 10 working days from the first Monday after `after`
+ *  (the end of the active sprint, or today). */
+export function sprintDates(start: string | undefined, end: string | undefined, after: string): string[] {
+  const dates: string[] = [];
+  if (start && end) {
+    const to = Date.parse(`${end.slice(0, 10)}T00:00:00Z`);
+    for (let t = Date.parse(`${start.slice(0, 10)}T00:00:00Z`); t <= to; t += DAY_MS) {
+      const weekday = new Date(t).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) dates.push(new Date(t).toISOString().slice(0, 10));
+    }
+    return dates;
+  }
+  let t = Date.parse(`${after.slice(0, 10)}T00:00:00Z`) + DAY_MS;
+  while (new Date(t).getUTCDay() !== 1) t += DAY_MS;
+  for (; dates.length < NEXT_SPRINT_WORKING_DAYS; t += DAY_MS) {
+    const weekday = new Date(t).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) dates.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
 function band(values: number[]): RateBand {
   return {
     p25: percentile(values, 0.25) ?? 0,
@@ -175,6 +197,40 @@ export interface MemberAvailability {
   counts: boolean;
   /** Added by hand in Capacity — no Jira issues yet, synthetic `manual:` accountId. */
   manual: boolean;
+  /** Dated absences in this sprint. When present, absenceDays is their total. */
+  absences?: Absence[];
+}
+
+export const ABSENCE_TYPES = ["vacation", "sick", "personal", "training", "holiday", "other"] as const;
+export type AbsenceType = (typeof ABSENCE_TYPES)[number];
+
+/** One dated absence: a full day, a morning or an afternoon, with why. */
+export interface Absence {
+  date: string;
+  portion: "full" | "am" | "pm";
+  type: AbsenceType;
+  note: string | null;
+}
+
+export function absenceTotal(absences: Absence[]): number {
+  return absences.reduce((sum, a) => sum + (a.portion === "full" ? 1 : 0.5), 0);
+}
+
+const MAX_NOTE = 200;
+
+/** Server-side guard for one person's absences. `days` = the sprint's working dates. */
+export function validateAbsences(name: string, absences: Absence[], days: string[]): string | null {
+  const taken = new Map<string, Set<string>>();
+  for (const a of absences) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(a.date)) return `Fecha inválida en la ausencia de ${name}: ${a.date}`;
+    if (days.length > 0 && !days.includes(a.date)) return `La ausencia de ${name} del ${a.date} no cae en un día hábil del sprint`;
+    if ((a.note?.length ?? 0) > MAX_NOTE) return `El motivo de la ausencia de ${name} supera ${MAX_NOTE} caracteres`;
+    const day = taken.get(a.date) ?? taken.set(a.date, new Set()).get(a.date)!;
+    const clash = a.portion === "full" ? day.size > 0 : day.has(a.portion) || day.has("full");
+    if (clash) return `Ausencias superpuestas de ${name} el ${a.date}`;
+    day.add(a.portion);
+  }
+  return null;
 }
 
 /** One row of the per-project list of who counts for capacity. */
@@ -307,6 +363,7 @@ export function buildTeam(input: {
       recent: p.manual || recentIds.has(p.accountId),
       absenceDays: saved.get(p.accountId)?.absenceDays ?? 0,
       dedicationPct: saved.get(p.accountId)?.dedicationPct ?? 100,
+      absences: saved.get(p.accountId)?.absences ?? [],
     }))
     .sort((a, b) => rank(a) - rank(b) || Number(b.counts) - Number(a.counts) || a.displayName.localeCompare(b.displayName, "es"));
 }
@@ -316,18 +373,31 @@ export interface TeamRow extends MemberAvailability {
   capacity: Units;
   assigned: Units;
   done: Units;
+  absences: Absence[];
   loadPct: number | null;
   band: Band;
 }
 
 /** The sprint the rows are for. Next sprint: the team's 10 days, nothing done. Active sprint:
  *  its real working days, how many are left, and what each person already finished — load is then
- *  what is still open against the remaining share of their availability (absences are spread
- *  evenly: we don't know which days they fall on). */
+ *  what is still open against their availability in the days left: with dated absences, the days
+ *  left minus the absences from `today` on; otherwise the remaining share of their availability
+ *  (an absence without dates is spread evenly). */
 export interface RowsSprint {
   workingDays: number;
   remainingDays?: number;
+  /** YYYY-MM-DD; absences on or after it are still ahead. */
+  today?: string;
   done?: Map<string, Units>;
+}
+
+function daysLeft(m: MemberAvailability, sprint: RowsSprint, fullSprintDays: number): number {
+  if (sprint.remainingDays === undefined || sprint.workingDays <= 0) return fullSprintDays;
+  if (m.absences?.length && sprint.today) {
+    const ahead = absenceTotal(m.absences.filter((a) => a.date >= sprint.today!));
+    return Math.max(0, (sprint.remainingDays * m.dedicationPct) / 100 - ahead);
+  }
+  return fullSprintDays * (sprint.remainingDays / sprint.workingDays);
 }
 
 export function buildTeamRows(
@@ -336,8 +406,8 @@ export function buildTeamRows(
   rate: TeamRate | null,
   sprint: RowsSprint = { workingDays: NEXT_SPRINT_WORKING_DAYS }
 ): Array<TeamRow & { recent: boolean }> {
-  const share = sprint.remainingDays === undefined || sprint.workingDays <= 0 ? 1 : sprint.remainingDays / sprint.workingDays;
-  return team.map((m) => {
+  return team.map((member) => {
+    const m = { ...member, absences: member.absences ?? [] };
     const recent = m.recent ?? true;
     const days = recent ? availableDays(m, sprint.workingDays) : 0;
     const assigned = byAccount.get(m.accountId) ?? { sp: 0, issues: 0 };
@@ -347,7 +417,7 @@ export function buildTeamRows(
       return { ...m, recent, availableDays: days, capacity: { sp: 0, issues: 0 }, assigned, done, loadPct: null, band: "ok" as Band };
     }
     const open = { sp: assigned.sp - done.sp, issues: assigned.issues - done.issues };
-    return { ...m, recent, availableDays: days, assigned, done, ...personLoad(days * share, rate, open) };
+    return { ...m, recent, availableDays: days, assigned, done, ...personLoad(daysLeft(m, sprint, days), rate, open) };
   });
 }
 

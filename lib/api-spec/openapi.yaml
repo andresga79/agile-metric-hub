@@ -1421,13 +1421,29 @@ components:
         p50: { type: number }
         p75: { type: number }
 
+    CapacityAbsence:
+      type: object
+      required: [date, portion, type, note]
+      properties:
+        date: { type: string, description: "YYYY-MM-DD, a working day of the sprint" }
+        portion: { type: string, enum: [full, am, pm] }
+        type: { type: string, enum: [vacation, sick, personal, training, holiday, other] }
+        note: { type: string, nullable: true, maxLength: 200 }
+
     CapacityMemberInput:
       type: object
-      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent]
+      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences]
       properties:
         accountId: { type: string }
         displayName: { type: string }
-        absenceDays: { type: number, minimum: 0, maximum: 10 }
+        absenceDays:
+          type: number
+          minimum: 0
+          maximum: 10
+          description: With dated absences the server sets it to their total (full day 1, morning/afternoon 0.5).
+        absences:
+          type: array
+          items: { $ref: "#/components/schemas/CapacityAbsence" }
         dedicationPct: { type: integer, minimum: 0, maximum: 100 }
         counts:
           type: boolean
@@ -1474,7 +1490,7 @@ components:
         sprint:
           type: object
           nullable: true
-          required: [id, name, state, startDate, endDate, workingDays]
+          required: [id, name, state, startDate, endDate, workingDays, days]
           properties:
             id: { type: string }
             name: { type: string }
@@ -1482,6 +1498,12 @@ components:
             startDate: { type: string, nullable: true }
             endDate: { type: string, nullable: true }
             workingDays: { type: integer }
+            days:
+              type: array
+              description: >
+                Working dates (YYYY-MM-DD) for placing absences. Without dates in Jira, 10 working
+                days from the Monday after the active sprint ends.
+              items: { type: string }
         recommendation:
           type: object
           nullable: true

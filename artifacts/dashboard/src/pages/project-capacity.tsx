@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,9 +12,10 @@ import {
   useUpdateProjectCapacity,
   type CapacityTeamRow,
   type CapacityMemberInput,
+  type CapacityAbsence,
 } from "@workspace/api-client-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { ArrowLeft, Gauge, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Gauge, AlertTriangle, CalendarDays } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,17 @@ import { EmptyState } from "@/components/empty-state";
 type Band = "ok" | "warn" | "over";
 type Unit = "sp" | "issues";
 type View = "active" | "next";
+type Portion = CapacityAbsence["portion"];
+type AbsenceType = CapacityAbsence["type"];
+
+const PORTIONS: Portion[] = ["full", "am", "pm"];
+const ABSENCE_TYPES: AbsenceType[] = ["vacation", "sick", "personal", "training", "holiday", "other"];
+const SELECT = "h-7 bg-background border border-border rounded px-1 text-xs";
+
+/** Full day 1, morning or afternoon 0.5 — same rule as the server. */
+function absenceTotal(absences: CapacityAbsence[]): number {
+  return absences.reduce((sum, a) => sum + (a.portion === "full" ? 1 : 0.5), 0);
+}
 
 const BAND_TEXT: Record<Band, string> = {
   ok: "text-green-500",
@@ -56,7 +68,7 @@ function RangeBar({ range, committed, band }: { range: number[]; committed: numb
 }
 
 export default function ProjectCapacity() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
   const token = localStorage.getItem("auth_token");
   const queryClient = useQueryClient();
@@ -84,6 +96,7 @@ export default function ProjectCapacity() {
   const [message, setMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [showNotCounting, setShowNotCounting] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // The route reuses this component across projects: drop the previous project's unsaved draft,
   // or Save would PUT one project's people into another project's sprint.
@@ -92,13 +105,14 @@ export default function ProjectCapacity() {
     setDirty(false);
     setDraft([]);
     setMessage(null);
+    setExpanded(new Set());
   }, [projectId, view]);
   useEffect(() => setView(undefined), [projectId]);
 
   useEffect(() => {
     if (!data || dirty) return;
     setDraft(
-      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent }) => ({
+      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences }) => ({
         accountId,
         displayName,
         absenceDays,
@@ -106,6 +120,7 @@ export default function ProjectCapacity() {
         counts,
         manual,
         recent,
+        absences,
       }))
     );
   }, [data, dirty]);
@@ -124,8 +139,43 @@ export default function ProjectCapacity() {
     if (draft.some((r) => r.accountId === accountId)) return;
     setDirty(true);
     setMessage(null);
-    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true }]);
+    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true, absences: [] }]);
     setNewName("");
+  };
+
+  /** Dated absences set the total; with none left, the number goes back to 0 (editable by hand). */
+  const setAbsences = (accountId: string, absences: CapacityAbsence[]) =>
+    updateDraft(accountId, { absences, absenceDays: absenceTotal(absences) });
+
+  const toggleExpanded = (accountId: string) =>
+    setExpanded((open) => {
+      const next = new Set(open);
+      if (next.has(accountId)) next.delete(accountId);
+      else next.add(accountId);
+      return next;
+    });
+
+  const sprintDays = data?.sprint?.days ?? [];
+  const dayLabel = (date: string) =>
+    new Date(`${date}T12:00:00Z`).toLocaleDateString(i18n.language, {
+      weekday: "short",
+      day: "numeric",
+      month: "numeric",
+      timeZone: "UTC",
+    });
+
+  /** New absence on the first day that still has room, full day. */
+  const addAbsence = (m: CapacityMemberInput) => {
+    const taken = (d: string) => m.absences.filter((a) => a.date === d).reduce((s, a) => s + (a.portion === "full" ? 1 : 0.5), 0);
+    const date = sprintDays.find((d) => taken(d) === 0) ?? sprintDays[0];
+    if (!date) return;
+    setAbsences(m.accountId, [...m.absences, { date, portion: "full", type: "personal", note: null }]);
+  };
+
+  const absenceSummary = (absences: CapacityAbsence[]) => {
+    const byType = new Map<AbsenceType, number>();
+    for (const a of absences) byType.set(a.type, (byType.get(a.type) ?? 0) + (a.portion === "full" ? 1 : 0.5));
+    return [...byType].map(([type, days]) => `${t(`page.capacity.absenceType.${type}`)} ${fmt(days)} d`).join(" · ");
   };
 
   const removePerson = (accountId: string) => {
@@ -161,10 +211,16 @@ export default function ProjectCapacity() {
 
   const renderMember = (m: CapacityMemberInput) => {
     const row = rowsById.get(m.accountId);
+    const editable = isAdmin && m.counts && m.recent;
+    const open = expanded.has(m.accountId);
     return (
-      <TableRow key={m.accountId} className={m.counts && m.recent ? "" : "opacity-60"}>
+      <Fragment key={m.accountId}>
+      <TableRow className={m.counts && m.recent ? "" : "opacity-60"}>
         <TableCell className="font-medium">
           {m.displayName}
+          {m.absences.length > 0 && (
+            <div className="text-[11px] font-normal text-muted-foreground">{absenceSummary(m.absences)}</div>
+          )}
           {m.manual && (
             <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.manual")}</span>
           )}
@@ -190,18 +246,32 @@ export default function ProjectCapacity() {
             onChange={(e) => updateDraft(m.accountId, { counts: e.target.checked })}
           />
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="text-right whitespace-nowrap">
           <input
             type="number"
             min={0}
             max={10}
             step={0.5}
             aria-label={`${t("page.capacity.absence")}: ${m.displayName}`}
+            title={m.absences.length > 0 ? t("page.capacity.absenceFromDates") : undefined}
             className="w-16 bg-background border border-border rounded px-1 text-right disabled:border-transparent"
             value={m.absenceDays}
-            disabled={!isAdmin || !m.counts || !m.recent}
+            disabled={!editable || m.absences.length > 0}
             onChange={(e) => updateDraft(m.accountId, { absenceDays: Number(e.target.value) })}
           />
+          {m.recent && m.counts && (editable || m.absences.length > 0) && (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={`${t("page.capacity.absences")}: ${m.displayName}`}
+              title={t("page.capacity.absences")}
+              onClick={() => toggleExpanded(m.accountId)}
+              className={`ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-xs align-middle ${open || m.absences.length > 0 ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <CalendarDays size={14} />
+              {m.absences.length > 0 && m.absences.length}
+            </button>
+          )}
         </TableCell>
         <TableCell className="text-right">
           <input
@@ -237,6 +307,90 @@ export default function ProjectCapacity() {
           {!m.counts || !m.recent || !row ? "—" : row.loadPct == null ? (row.band === "over" ? "∞" : "—") : `${row.loadPct}%`}
         </TableCell>
       </TableRow>
+      {open && (
+        <TableRow className="hover:bg-transparent bg-muted/30">
+          <TableCell colSpan={columns} className="py-3">
+            <div className="space-y-2">
+              {m.absences.length === 0 && <p className="text-xs text-muted-foreground">{t("page.capacity.noAbsences")}</p>}
+              {m.absences.map((a, idx) => {
+                const patch = (p: Partial<CapacityAbsence>) =>
+                  setAbsences(m.accountId, m.absences.map((x, i) => (i === idx ? { ...x, ...p } : x)));
+                if (!editable) {
+                  return (
+                    <p key={idx} className="text-xs">
+                      <span className="font-medium">{dayLabel(a.date)}</span> · {t(`page.capacity.portion.${a.portion}`)} ·{" "}
+                      {t(`page.capacity.absenceType.${a.type}`)}
+                      {a.note && <span className="text-muted-foreground"> — {a.note}</span>}
+                    </p>
+                  );
+                }
+                return (
+                  <div key={idx} className="flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label={t("page.capacity.absenceDate")}
+                      className={SELECT}
+                      value={a.date}
+                      onChange={(e) => patch({ date: e.target.value })}
+                    >
+                      {(sprintDays.includes(a.date) ? sprintDays : [a.date, ...sprintDays]).map((d) => (
+                        <option key={d} value={d}>
+                          {dayLabel(d)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label={t("page.capacity.absencePortion")}
+                      className={SELECT}
+                      value={a.portion}
+                      onChange={(e) => patch({ portion: e.target.value as Portion })}
+                    >
+                      {PORTIONS.map((p) => (
+                        <option key={p} value={p}>
+                          {t(`page.capacity.portion.${p}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label={t("page.capacity.absenceTypeLabel")}
+                      className={SELECT}
+                      value={a.type}
+                      onChange={(e) => patch({ type: e.target.value as AbsenceType })}
+                    >
+                      {ABSENCE_TYPES.map((ty) => (
+                        <option key={ty} value={ty}>
+                          {t(`page.capacity.absenceType.${ty}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      maxLength={200}
+                      aria-label={t("page.capacity.absenceNote")}
+                      placeholder={t("page.capacity.absenceNotePlaceholder")}
+                      className="h-7 flex-1 min-w-[12rem] bg-background border border-border rounded px-2 text-xs"
+                      value={a.note ?? ""}
+                      onChange={(e) => patch({ note: e.target.value || null })}
+                    />
+                    <button
+                      type="button"
+                      className="text-xs text-red-400 hover:underline"
+                      onClick={() => setAbsences(m.accountId, m.absences.filter((_, i) => i !== idx))}
+                    >
+                      {t("page.capacity.remove")}
+                    </button>
+                  </div>
+                );
+              })}
+              {editable && (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => addAbsence(m)} disabled={sprintDays.length === 0}>
+                  {t("page.capacity.addAbsence")}
+                </Button>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+      </Fragment>
     );
   };
 

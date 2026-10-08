@@ -5,15 +5,18 @@
  * Agile Metrics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
+import type { CapacityAbsence } from './capacityAbsence';
 
 export interface CapacityMemberInput {
   accountId: string;
   displayName: string;
   /**
+     * With dated absences the server sets it to their total (full day 1, morning/afternoon 0.5).
      * @minimum 0
      * @maximum 10
      */
   absenceDays: number;
+  absences: CapacityAbsence[];
   /**
      * @minimum 0
      * @maximum 100

@@ -489,6 +489,8 @@ export const getProjectCapacityResponseProgressExpectedOneIssuesMax = 2;
 export const getProjectCapacityResponseTeamItemOneAbsenceDaysMin = 0;
 export const getProjectCapacityResponseTeamItemOneAbsenceDaysMax = 10;
 
+export const getProjectCapacityResponseTeamItemOneAbsencesItemNoteMax = 200;
+
 export const getProjectCapacityResponseTeamItemOneDedicationPctMin = 0;
 export const getProjectCapacityResponseTeamItemOneDedicationPctMax = 100;
 
@@ -501,7 +503,8 @@ export const GetProjectCapacityResponse = zod.object({
   "state": zod.enum(['active', 'future']),
   "startDate": zod.string().nullable(),
   "endDate": zod.string().nullable(),
-  "workingDays": zod.number()
+  "workingDays": zod.number(),
+  "days": zod.array(zod.string()).describe('Working dates (YYYY-MM-DD) for placing absences. Without dates in Jira, 10 working days from the Monday after the active sprint ends.\n')
 }).nullable(),
   "recommendation": zod.object({
   "range": zod.object({
@@ -556,7 +559,13 @@ export const GetProjectCapacityResponse = zod.object({
   "team": zod.array(zod.object({
   "accountId": zod.string(),
   "displayName": zod.string(),
-  "absenceDays": zod.number().min(getProjectCapacityResponseTeamItemOneAbsenceDaysMin).max(getProjectCapacityResponseTeamItemOneAbsenceDaysMax),
+  "absenceDays": zod.number().min(getProjectCapacityResponseTeamItemOneAbsenceDaysMin).max(getProjectCapacityResponseTeamItemOneAbsenceDaysMax).describe('With dated absences the server sets it to their total (full day 1, morning\/afternoon 0.5).'),
+  "absences": zod.array(zod.object({
+  "date": zod.string().describe('YYYY-MM-DD, a working day of the sprint'),
+  "portion": zod.enum(['full', 'am', 'pm']),
+  "type": zod.enum(['vacation', 'sick', 'personal', 'training', 'holiday', 'other']),
+  "note": zod.string().max(getProjectCapacityResponseTeamItemOneAbsencesItemNoteMax).nullable()
+})),
   "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
@@ -610,6 +619,8 @@ export const UpdateProjectCapacityParams = zod.object({
 export const updateProjectCapacityBodyAbsenceDaysMin = 0;
 export const updateProjectCapacityBodyAbsenceDaysMax = 10;
 
+export const updateProjectCapacityBodyAbsencesItemNoteMax = 200;
+
 export const updateProjectCapacityBodyDedicationPctMin = 0;
 export const updateProjectCapacityBodyDedicationPctMax = 100;
 
@@ -618,7 +629,13 @@ export const updateProjectCapacityBodyDedicationPctMax = 100;
 export const UpdateProjectCapacityBodyItem = zod.object({
   "accountId": zod.string(),
   "displayName": zod.string(),
-  "absenceDays": zod.number().min(updateProjectCapacityBodyAbsenceDaysMin).max(updateProjectCapacityBodyAbsenceDaysMax),
+  "absenceDays": zod.number().min(updateProjectCapacityBodyAbsenceDaysMin).max(updateProjectCapacityBodyAbsenceDaysMax).describe('With dated absences the server sets it to their total (full day 1, morning\/afternoon 0.5).'),
+  "absences": zod.array(zod.object({
+  "date": zod.string().describe('YYYY-MM-DD, a working day of the sprint'),
+  "portion": zod.enum(['full', 'am', 'pm']),
+  "type": zod.enum(['vacation', 'sick', 'personal', 'training', 'holiday', 'other']),
+  "note": zod.string().max(updateProjectCapacityBodyAbsencesItemNoteMax).nullable()
+})),
   "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),

@@ -250,6 +250,22 @@ async function initDb() {
     `);
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS capacity_absence (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        date DATE NOT NULL,
+        portion TEXT NOT NULL,
+        type TEXT NOT NULL,
+        note TEXT,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(project_id, sprint_id, account_id, date, portion)
+      );
+    `);
+
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS release_epics (
         id SERIAL PRIMARY KEY,
         issue_key TEXT NOT NULL UNIQUE,

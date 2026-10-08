@@ -298,8 +298,15 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   - *Esperado a hoy* = recomendación × días transcurridos ÷ días del sprint (lineal: al principio
     del sprint es exigente si el equipo cierra todo al final). Ritmo: hecho ≥ piso esperado ok,
     hasta 15 % por debajo atención, más atrás rojo.
-  - *Carga por persona*: lo que le queda abierto (asignado − hecho) ÷ (sus días disponibles ×
-    días restantes ÷ días del sprint × P50). La ausencia se reparte pareja: no se sabe qué días cae.
+  - *Carga por persona*: lo que le queda abierto (asignado − hecho) ÷ (días disponibles que le
+    quedan × P50). Con ausencias por fecha: `días restantes × dedicación − ausencias de hoy en
+    adelante` (las que ya pasaron no restan). Sin fechas (solo el número): la ausencia se reparte
+    pareja, `días disponibles × días restantes ÷ días del sprint`.
+- **Ausencias por fecha** (`capacity_absence`): día del sprint + día completo / mañana / tarde + tipo
+  (vacaciones, licencia médica, trámite personal, capacitación, feriado, otro) + motivo libre. Día
+  completo = 1, mañana o tarde = 0,5; el total reemplaza al número cargado a mano y se guarda también
+  en `sprint_capacity.absence_days`, que es lo que usa el histórico. Un sprint futuro sin fechas en
+  Jira se asume desde el lunes siguiente al cierre del activo, 10 días hábiles.
 - **Tasa del equipo**: últimos 6 sprints cerrados. Por sprint, `SP completados / días-persona` e
   `issues completados / días-persona`; `días-persona = Σ (días hábiles reales × dedicación − ausencia)`
   con la disponibilidad guardada en Capacity, o cada asignado a tiempo completo si el sprint no se
@@ -316,7 +323,7 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 - **Carga por persona**: capacidad = sus días disponibles × P50 del equipo; carga = asignado /
   capacidad (la peor entre SP e issues). ≤ 85 % ok, ≤ 110 % atención, > 110 % sobrecarga. Mide
   carga, no rendimiento: no hay velocity individual.
-(`lib/capacity.ts`, `routes/capacity.ts`; disponibilidad por sprint en `sprint_capacity`, quién cuenta en `capacity_roster`)
+(`lib/capacity.ts`, `routes/capacity.ts`; disponibilidad por sprint en `sprint_capacity`, ausencias por fecha en `capacity_absence`, quién cuenta en `capacity_roster`)
 
 ---
 
