@@ -7,6 +7,7 @@ export const SECTION_NAMES = [
   "forecast",
   "sprints",
   "kanban",
+  "capacity",
   "evolution",
   "team",
   "qa-rejected",
@@ -92,6 +93,9 @@ export function getSectionLinks(
       label: boardType === "scrum" ? "Sprints" : "Kanban Weekly",
       section: boardType === "scrum" ? "sprints" as ProjectSection : "kanban" as ProjectSection,
     },
+    ...(boardType === "scrum"
+      ? [{ href: `/projects/${projectId}/capacity`, label: "Capacity", section: "capacity" as ProjectSection }]
+      : []),
     { href: `/projects/${projectId}/evolution`, label: "Evolucion", section: "evolution" as ProjectSection },
     { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/qa-rejected`, label: "QA Rejected", section: "qa-rejected" as ProjectSection },

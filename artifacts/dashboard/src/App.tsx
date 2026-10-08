@@ -20,6 +20,7 @@ import ProjectReport from "@/pages/project-report";
 import ProjectQaRejected from "@/pages/project-qa-rejected";
 import ProjectQaWork from "@/pages/project-qa-work";
 import ProjectSprints from "@/pages/project-sprints";
+import ProjectCapacity from "@/pages/project-capacity";
 import ProjectKanban from "@/pages/project-kanban";
 import Admin from "@/pages/admin";
 import AdminReleaseKeywords from "@/pages/admin-release-keywords";
@@ -148,6 +149,9 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/sprints">
         {() => <SectionRoute section="sprints" component={ProjectSprints} />}
+      </Route>
+      <Route path="/projects/:projectId/capacity">
+        {() => <SectionRoute section="capacity" component={ProjectCapacity} />}
       </Route>
       <Route path="/projects/:projectId/kanban">
         {() => <SectionRoute section="kanban" component={ProjectKanban} />}
