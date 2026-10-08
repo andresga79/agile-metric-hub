@@ -516,6 +516,141 @@ export interface SprintMetricsResponse {
   summary: SprintMetricsSummary;
 }
 
+export interface CapacityUnits {
+  sp: number;
+  issues: number;
+}
+
+export interface CapacityRange {
+  /**
+     * @minItems 2
+     * @maxItems 2
+     */
+  sp: number[];
+  /**
+     * @minItems 2
+     * @maxItems 2
+     */
+  issues: number[];
+}
+
+export interface CapacityRateBand {
+  p25: number;
+  p50: number;
+  p75: number;
+}
+
+export interface CapacityMemberInput {
+  accountId: string;
+  displayName: string;
+  /**
+     * @minimum 0
+     * @maximum 10
+     */
+  absenceDays: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  dedicationPct: number;
+  included: boolean;
+}
+
+export type CapacityTeamRowBand = typeof CapacityTeamRowBand[keyof typeof CapacityTeamRowBand];
+
+
+export const CapacityTeamRowBand = {
+  ok: 'ok',
+  warn: 'warn',
+  over: 'over',
+} as const;
+
+export type CapacityTeamRow = CapacityMemberInput & ({
+  availableDays: number;
+  capacity: CapacityUnits;
+  assigned: CapacityUnits;
+  loadPct: number | null;
+  band: CapacityTeamRowBand;
+});
+
+export interface CapacityHistoryRow {
+  sprintId: string;
+  sprintName: string;
+  committed: CapacityUnits;
+  completed: CapacityUnits;
+  completionPct: number;
+}
+
+export type CapacityResponseSprintState = typeof CapacityResponseSprintState[keyof typeof CapacityResponseSprintState];
+
+
+export const CapacityResponseSprintState = {
+  active: 'active',
+  future: 'future',
+} as const;
+
+export type CapacityResponseSprint = {
+  id: string;
+  name: string;
+  state: CapacityResponseSprintState;
+  startDate: string | null;
+  endDate: string | null;
+  workingDays: number;
+} | null;
+
+export type CapacityResponseRecommendationBandSp = typeof CapacityResponseRecommendationBandSp[keyof typeof CapacityResponseRecommendationBandSp];
+
+
+export const CapacityResponseRecommendationBandSp = {
+  ok: 'ok',
+  warn: 'warn',
+  over: 'over',
+} as const;
+
+export type CapacityResponseRecommendationBandIssues = typeof CapacityResponseRecommendationBandIssues[keyof typeof CapacityResponseRecommendationBandIssues];
+
+
+export const CapacityResponseRecommendationBandIssues = {
+  ok: 'ok',
+  warn: 'warn',
+  over: 'over',
+} as const;
+
+export type CapacityResponseRecommendationBand = {
+  sp: CapacityResponseRecommendationBandSp;
+  issues: CapacityResponseRecommendationBandIssues;
+};
+
+export type CapacityResponseRecommendation = {
+  range: CapacityRange;
+  availabilityPct: number;
+  availablePersonDays: number;
+  band: CapacityResponseRecommendationBand;
+} | null;
+
+export type CapacityResponseCommitted = {
+  sp: number;
+  issues: number;
+  unestimated: number;
+};
+
+export type CapacityResponseRate = {
+  sp: CapacityRateBand;
+  issues: CapacityRateBand;
+  sprintsUsed: number;
+} | null;
+
+export interface CapacityResponse {
+  sprint: CapacityResponseSprint;
+  recommendation: CapacityResponseRecommendation;
+  committed: CapacityResponseCommitted;
+  rate: CapacityResponseRate;
+  team: CapacityTeamRow[];
+  unassigned: CapacityUnits;
+  history: CapacityHistoryRow[];
+  warnings: string[];
+}
+
 export interface WeekMetric {
   /** ISO date of the Monday of this week */
   weekStart: string;

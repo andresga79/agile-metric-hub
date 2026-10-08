@@ -470,6 +470,81 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/capacity:
+    get:
+      operationId: getProjectCapacity
+      tags: [metrics]
+      summary: Capacity planning for the next sprint of a Scrum project
+      description: >
+        Recommended commitment for the next sprint (future sprint, else the active one) in story
+        points and issues, from the team's delivery rate per available person-day over the last
+        closed sprints, plus each person's capacity vs. assigned work. Scrum projects only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Capacity for the next sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityResponse"
+        "400":
+          description: Project is not a Scrum project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/capacity/{sprintId}:
+    put:
+      operationId: updateProjectCapacity
+      tags: [metrics]
+      summary: Save team availability for a sprint (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: sprintId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CapacityMemberInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/evolution:
     get:
       operationId: getProjectEvolution
@@ -1307,6 +1382,123 @@ components:
             $ref: "#/components/schemas/SprintMetric"
         summary:
           $ref: "#/components/schemas/SprintMetricsSummary"
+
+    CapacityUnits:
+      type: object
+      required: [sp, issues]
+      properties:
+        sp: { type: number }
+        issues: { type: number }
+
+    CapacityRange:
+      type: object
+      required: [sp, issues]
+      properties:
+        sp:
+          type: array
+          items: { type: number }
+          minItems: 2
+          maxItems: 2
+        issues:
+          type: array
+          items: { type: number }
+          minItems: 2
+          maxItems: 2
+
+    CapacityRateBand:
+      type: object
+      required: [p25, p50, p75]
+      properties:
+        p25: { type: number }
+        p50: { type: number }
+        p75: { type: number }
+
+    CapacityMemberInput:
+      type: object
+      required: [accountId, displayName, absenceDays, dedicationPct, included]
+      properties:
+        accountId: { type: string }
+        displayName: { type: string }
+        absenceDays: { type: number, minimum: 0, maximum: 10 }
+        dedicationPct: { type: integer, minimum: 0, maximum: 100 }
+        included: { type: boolean }
+
+    CapacityTeamRow:
+      allOf:
+        - $ref: "#/components/schemas/CapacityMemberInput"
+        - type: object
+          required: [availableDays, capacity, assigned, loadPct, band]
+          properties:
+            availableDays: { type: number }
+            capacity: { $ref: "#/components/schemas/CapacityUnits" }
+            assigned: { $ref: "#/components/schemas/CapacityUnits" }
+            loadPct: { type: number, nullable: true }
+            band: { type: string, enum: [ok, warn, over] }
+
+    CapacityHistoryRow:
+      type: object
+      required: [sprintId, sprintName, committed, completed, completionPct]
+      properties:
+        sprintId: { type: string }
+        sprintName: { type: string }
+        committed: { $ref: "#/components/schemas/CapacityUnits" }
+        completed: { $ref: "#/components/schemas/CapacityUnits" }
+        completionPct: { type: number }
+
+    CapacityResponse:
+      type: object
+      required: [sprint, recommendation, committed, rate, team, unassigned, history, warnings]
+      properties:
+        sprint:
+          type: object
+          nullable: true
+          required: [id, name, state, startDate, endDate, workingDays]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            state: { type: string, enum: [active, future] }
+            startDate: { type: string, nullable: true }
+            endDate: { type: string, nullable: true }
+            workingDays: { type: integer }
+        recommendation:
+          type: object
+          nullable: true
+          required: [range, availabilityPct, availablePersonDays, band]
+          properties:
+            range: { $ref: "#/components/schemas/CapacityRange" }
+            availabilityPct: { type: number }
+            availablePersonDays: { type: number }
+            band:
+              type: object
+              required: [sp, issues]
+              properties:
+                sp: { type: string, enum: [ok, warn, over] }
+                issues: { type: string, enum: [ok, warn, over] }
+        committed:
+          type: object
+          required: [sp, issues, unestimated]
+          properties:
+            sp: { type: number }
+            issues: { type: number }
+            unestimated: { type: integer }
+        rate:
+          type: object
+          nullable: true
+          required: [sp, issues, sprintsUsed]
+          properties:
+            sp: { $ref: "#/components/schemas/CapacityRateBand" }
+            issues: { $ref: "#/components/schemas/CapacityRateBand" }
+            sprintsUsed: { type: integer }
+        team:
+          type: array
+          items: { $ref: "#/components/schemas/CapacityTeamRow" }
+        unassigned: { $ref: "#/components/schemas/CapacityUnits" }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/CapacityHistoryRow" }
+        warnings:
+          type: array
+          items: { type: string }
 
     SprintMetric:
       type: object

@@ -462,6 +462,138 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
+ * Recommended commitment for the next sprint (future sprint, else the active one) in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. Scrum projects only.
+ *
+ * @summary Capacity planning for the next sprint of a Scrum project
+ */
+export const GetProjectCapacityParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const getProjectCapacityResponseRecommendationRangeSpMin = 2;
+export const getProjectCapacityResponseRecommendationRangeSpMax = 2;
+
+export const getProjectCapacityResponseRecommendationRangeIssuesMin = 2;
+export const getProjectCapacityResponseRecommendationRangeIssuesMax = 2;
+
+export const getProjectCapacityResponseTeamItemOneAbsenceDaysMin = 0;
+export const getProjectCapacityResponseTeamItemOneAbsenceDaysMax = 10;
+
+export const getProjectCapacityResponseTeamItemOneDedicationPctMin = 0;
+export const getProjectCapacityResponseTeamItemOneDedicationPctMax = 100;
+
+
+
+export const GetProjectCapacityResponse = zod.object({
+  "sprint": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "state": zod.enum(['active', 'future']),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "workingDays": zod.number()
+}).nullable(),
+  "recommendation": zod.object({
+  "range": zod.object({
+  "sp": zod.array(zod.number()).min(getProjectCapacityResponseRecommendationRangeSpMin).max(getProjectCapacityResponseRecommendationRangeSpMax),
+  "issues": zod.array(zod.number()).min(getProjectCapacityResponseRecommendationRangeIssuesMin).max(getProjectCapacityResponseRecommendationRangeIssuesMax)
+}),
+  "availabilityPct": zod.number(),
+  "availablePersonDays": zod.number(),
+  "band": zod.object({
+  "sp": zod.enum(['ok', 'warn', 'over']),
+  "issues": zod.enum(['ok', 'warn', 'over'])
+})
+}).nullable(),
+  "committed": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number(),
+  "unestimated": zod.number()
+}),
+  "rate": zod.object({
+  "sp": zod.object({
+  "p25": zod.number(),
+  "p50": zod.number(),
+  "p75": zod.number()
+}),
+  "issues": zod.object({
+  "p25": zod.number(),
+  "p50": zod.number(),
+  "p75": zod.number()
+}),
+  "sprintsUsed": zod.number()
+}).nullable(),
+  "team": zod.array(zod.object({
+  "accountId": zod.string(),
+  "displayName": zod.string(),
+  "absenceDays": zod.number().min(getProjectCapacityResponseTeamItemOneAbsenceDaysMin).max(getProjectCapacityResponseTeamItemOneAbsenceDaysMax),
+  "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
+  "included": zod.boolean()
+}).and(zod.object({
+  "availableDays": zod.number(),
+  "capacity": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "assigned": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "loadPct": zod.number().nullable(),
+  "band": zod.enum(['ok', 'warn', 'over'])
+}))),
+  "unassigned": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "history": zod.array(zod.object({
+  "sprintId": zod.string(),
+  "sprintName": zod.string(),
+  "committed": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "completed": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "completionPct": zod.number()
+})),
+  "warnings": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Save team availability for a sprint (admin only)
+ */
+export const UpdateProjectCapacityParams = zod.object({
+  "projectId": zod.coerce.string(),
+  "sprintId": zod.coerce.string()
+})
+
+export const updateProjectCapacityBodyAbsenceDaysMin = 0;
+export const updateProjectCapacityBodyAbsenceDaysMax = 10;
+
+export const updateProjectCapacityBodyDedicationPctMin = 0;
+export const updateProjectCapacityBodyDedicationPctMax = 100;
+
+
+
+export const UpdateProjectCapacityBodyItem = zod.object({
+  "accountId": zod.string(),
+  "displayName": zod.string(),
+  "absenceDays": zod.number().min(updateProjectCapacityBodyAbsenceDaysMin).max(updateProjectCapacityBodyAbsenceDaysMax),
+  "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
+  "included": zod.boolean()
+})
+export const UpdateProjectCapacityBody = zod.array(UpdateProjectCapacityBodyItem)
+
+export const UpdateProjectCapacityResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * For Scrum projects, returns one row per sprint (computed live from Jira, mirroring the Sprints tab) so the evolution lines up with actual sprint boundaries instead of arbitrary calendar weeks. For Kanban projects, returns one row per ISO week from the project's accumulated metric_snapshots table, written by the daily background sync - this can cover more history than a single live Jira query (capped at 90 days) would allow.
  *
  * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
