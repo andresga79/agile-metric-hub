@@ -187,6 +187,7 @@
   "page.health.notFound": "Proyecto no encontrado",
   "page.health.title": "Health",
   "page.health.subtitle": "Diagnóstico y sugerencias accionables basadas en métricas del proyecto",
+  "page.health.windowNote": "Los números corresponden al período elegido a la derecha. El Resumen Ejecutivo usa siempre los últimos 90 días, por eso pueden diferir.",
   "page.health.flowHealthScore": "Flow Health Score",
   "page.health.flowHealthScoreTooltip": "Nota de 0 a 100 sobre qué tan bien fluye el trabajo. Promedia tres cosas: issues cerrados por semana, cycle time (mediana) y % de bugs entre lo cerrado, cada una medida contra los umbrales de Admin → Health. Sale solo de Jira; no es DORA.",
   "page.health.expandActions": "Ver acciones sugeridas",

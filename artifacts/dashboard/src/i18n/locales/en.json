@@ -187,6 +187,7 @@
   "page.health.notFound": "Project not found",
   "page.health.title": "Health",
   "page.health.subtitle": "Diagnosis and actionable suggestions based on project metrics",
+  "page.health.windowNote": "Numbers reflect the period selected on the right. The Executive Summary always uses the last 90 days, so they may differ.",
   "page.health.flowHealthScore": "Flow Health Score",
   "page.health.flowHealthScoreTooltip": "A 0–100 score of how well work flows. Averages three things: issues closed per week, cycle time (median) and % of closed work that is bugs, each measured against the Admin → Health thresholds. Jira data only; not DORA.",
   "page.health.expandActions": "Show suggested actions",
