@@ -23,7 +23,7 @@ export interface CapacityMemberInput {
   counts: boolean;
   /** Added by hand (no Jira issues yet); omitted manual people are removed. */
   manual: boolean;
-  /** Part of the next sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
+  /** Part of the sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
    *  */
   recent: boolean;
 }

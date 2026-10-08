@@ -11,8 +11,10 @@ import type { CapacityUnits } from './capacityUnits';
 
 export type CapacityTeamRow = CapacityMemberInput & ({
   availableDays: number;
+  /** Active sprint = capacity over the days still left. */
   capacity: CapacityUnits;
   assigned: CapacityUnits;
+  done: CapacityUnits;
   loadPct: number | null;
   band: CapacityTeamRowBand;
 });

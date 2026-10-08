@@ -474,18 +474,26 @@ paths:
     get:
       operationId: getProjectCapacity
       tags: [metrics]
-      summary: Capacity planning for the next sprint of a Scrum project
+      summary: Capacity planning for the next or the active sprint of a Scrum project
       description: >
-        Recommended commitment for the next sprint (future sprint, else the active one) in story
-        points and issues, from the team's delivery rate per available person-day over the last
-        closed sprints, plus each person's capacity vs. assigned work. Scrum projects only.
+        Recommended commitment for a sprint in story points and issues, from the team's delivery
+        rate per available person-day over the last closed sprints, plus each person's capacity vs.
+        assigned work. `sprint=next` is the next future sprint, `sprint=active` the one in progress
+        (real working days, progress so far and load on what is still open); absent = next future
+        sprint, else the active one. Scrum projects only.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ProjectId"
+        - name: sprint
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, next]
       responses:
         "200":
-          description: Capacity for the next sprint
+          description: Capacity for the requested sprint
           content:
             application/json:
               schema:
@@ -1430,18 +1438,22 @@ components:
         recent:
           type: boolean
           description: >
-            Part of the next sprint's team. false = only seen in older sprints: listed so an admin
+            Part of the sprint's team. false = only seen in older sprints: listed so an admin
             can mark whether they count for the historical rate, but adds no availability.
 
     CapacityTeamRow:
       allOf:
         - $ref: "#/components/schemas/CapacityMemberInput"
         - type: object
-          required: [availableDays, capacity, assigned, loadPct, band]
+          required: [availableDays, capacity, assigned, done, loadPct, band]
           properties:
             availableDays: { type: number }
-            capacity: { $ref: "#/components/schemas/CapacityUnits" }
+            capacity:
+              allOf:
+                - $ref: "#/components/schemas/CapacityUnits"
+              description: Active sprint = capacity over the days still left.
             assigned: { $ref: "#/components/schemas/CapacityUnits" }
+            done: { $ref: "#/components/schemas/CapacityUnits" }
             loadPct: { type: number, nullable: true }
             band: { type: string, enum: [ok, warn, over] }
 
@@ -1457,7 +1469,7 @@ components:
 
     CapacityResponse:
       type: object
-      required: [sprint, recommendation, committed, rate, team, unassigned, history, warnings]
+      required: [sprint, recommendation, committed, progress, rate, team, unassigned, history, warnings]
       properties:
         sprint:
           type: object
@@ -1491,6 +1503,28 @@ components:
             sp: { type: number }
             issues: { type: number }
             unestimated: { type: integer }
+        progress:
+          type: object
+          nullable: true
+          description: Only for the active sprint.
+          required: [elapsedDays, remainingDays, done, remaining, expected, pace]
+          properties:
+            elapsedDays: { type: integer }
+            remainingDays: { type: integer }
+            done: { $ref: "#/components/schemas/CapacityUnits" }
+            remaining: { $ref: "#/components/schemas/CapacityUnits" }
+            expected:
+              allOf:
+                - $ref: "#/components/schemas/CapacityRange"
+              nullable: true
+              description: Recommended range prorated to the elapsed share of the sprint.
+            pace:
+              type: object
+              nullable: true
+              required: [sp, issues]
+              properties:
+                sp: { type: string, enum: [ok, warn, over] }
+                issues: { type: string, enum: [ok, warn, over] }
         rate:
           type: object
           nullable: true

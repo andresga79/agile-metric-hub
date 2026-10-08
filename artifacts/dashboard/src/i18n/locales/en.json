@@ -595,9 +595,9 @@
   "common.loadTimeout": "Jira took too long to respond. Try again in a moment.",
 
   "page.capacity.title": "Capacity",
-  "page.capacity.subtitle": "How much the team can commit to next sprint and how it is spread",
+  "page.capacity.subtitle": "How much the team can commit, how the current sprint is going and how work is spread",
   "page.capacity.nextSprint": "Next sprint",
-  "page.capacity.activeSprint": "Active sprint (no future sprint in Jira)",
+  "page.capacity.activeSprint": "Active sprint",
   "page.capacity.recommended": "Recommended",
   "page.capacity.committed": "Planned",
   "page.capacity.availability": "Team availability",
@@ -627,5 +627,16 @@
   "page.capacity.notCounting": "Others: not counting or only in older sprints ({{count}})",
   "page.capacity.historyOnly": "older sprints only",
   "page.capacity.manual": "added by hand",
-  "page.capacity.remove": "Remove"
+  "page.capacity.remove": "Remove",
+  "page.capacity.viewActive": "Current",
+  "page.capacity.viewNext": "Next",
+  "page.capacity.dayOf": "Day {{elapsed}} of {{total}} · {{remaining}} working days left",
+  "page.capacity.done": "Done",
+  "page.capacity.remaining": "Remaining",
+  "page.capacity.expectedToday": "Expected by today",
+  "page.capacity.capacityLeft": "Remaining capacity",
+  "page.capacity.noActiveSprint": "No active sprint in Jira.",
+  "page.capacity.noNextSprint": "No future sprint in Jira.",
+  "page.capacity.loadTooltipActive": "What the person still has open divided by their capacity over the days left (their available days × days left ÷ sprint days × what the team completes per person-day). Measures load, not performance.",
+  "page.capacity.paceTooltip": "Done so far against the recommended range prorated to the elapsed days. Green: at or above the expected floor; amber: up to 15 % below; red: further behind."
 }

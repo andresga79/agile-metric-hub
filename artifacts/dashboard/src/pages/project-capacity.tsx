@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/empty-state";
 
 type Band = "ok" | "warn" | "over";
 type Unit = "sp" | "issues";
+type View = "active" | "next";
 
 const BAND_TEXT: Record<Band, string> = {
   ok: "text-green-500",
@@ -68,10 +69,14 @@ export default function ProjectCapacity() {
   });
   const isAdmin = currentUser?.role === "admin";
 
-  const { data, isLoading, isError } = useGetProjectCapacity(projectId!, {
-    query: { enabled: !!projectId && !!token, queryKey: getGetProjectCapacityQueryKey(projectId!) },
+  // undefined = let the server pick (next future sprint, else the active one) on first load.
+  const [view, setView] = useState<View | undefined>(undefined);
+  const params = view ? { sprint: view } : undefined;
+  const { data, isLoading, isError } = useGetProjectCapacity(projectId!, params, {
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectCapacityQueryKey(projectId!, params) },
   });
   const save = useUpdateProjectCapacity();
+  const shownView: View | undefined = view ?? (data?.sprint ? (data.sprint.state === "active" ? "active" : "next") : undefined);
 
   const [draft, setDraft] = useState<CapacityMemberInput[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -82,11 +87,13 @@ export default function ProjectCapacity() {
 
   // The route reuses this component across projects: drop the previous project's unsaved draft,
   // or Save would PUT one project's people into another project's sprint.
+  // Same for switching between the active and the next sprint.
   useEffect(() => {
     setDirty(false);
     setDraft([]);
     setMessage(null);
-  }, [projectId]);
+  }, [projectId, view]);
+  useEffect(() => setView(undefined), [projectId]);
 
   useEffect(() => {
     if (!data || dirty) return;
@@ -148,6 +155,9 @@ export default function ProjectCapacity() {
   };
 
   const rowsById = new Map<string, CapacityTeamRow>((data?.team ?? []).map((r) => [r.accountId, r]));
+  /** Showing the sprint in progress: progress so far, and load on what is still open. */
+  const inProgress = !!data?.progress;
+  const columns = inProgress ? 9 : 7;
 
   const renderMember = (m: CapacityMemberInput) => {
     const row = rowsById.get(m.accountId);
@@ -213,6 +223,16 @@ export default function ProjectCapacity() {
         <TableCell className="text-right font-mono text-xs">
           {row ? `${fmt(row.assigned.sp)} SP · ${row.assigned.issues}` : "—"}
         </TableCell>
+        {inProgress && (
+          <>
+            <TableCell className="text-right font-mono text-xs">
+              {row ? `${fmt(row.done.sp)} SP · ${row.done.issues}` : "—"}
+            </TableCell>
+            <TableCell className="text-right font-mono text-xs">
+              {row ? `${fmt(row.assigned.sp - row.done.sp)} SP · ${row.assigned.issues - row.done.issues}` : "—"}
+            </TableCell>
+          </>
+        )}
         <TableCell className={`text-right font-mono text-xs ${row && m.counts && m.recent ? BAND_TEXT[row.band as Band] : ""}`}>
           {!m.counts || !m.recent || !row ? "—" : row.loadPct == null ? (row.band === "over" ? "∞" : "—") : `${row.loadPct}%`}
         </TableCell>
@@ -233,6 +253,19 @@ export default function ProjectCapacity() {
         <p className="text-sm text-muted-foreground">{t("page.capacity.subtitle")}</p>
       </div>
       <ProjectTabs projectId={projectId!} active="capacity" />
+      <div className="inline-flex bg-background border border-border rounded-md p-1" role="group" aria-label={t("page.capacity.title")}>
+        {(["active", "next"] as View[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={shownView === v}
+            onClick={() => setView(v)}
+            className={`px-3 py-1 text-xs font-medium rounded-sm ${shownView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {v === "active" ? t("page.capacity.viewActive") : t("page.capacity.viewNext")}
+          </button>
+        ))}
+      </div>
     </>
   );
 
@@ -255,6 +288,7 @@ export default function ProjectCapacity() {
   }
 
   const rec = data.recommendation;
+  const progress = data.progress;
 
   return (
     <div className="space-y-6">
@@ -271,7 +305,11 @@ export default function ProjectCapacity() {
       )}
 
       {!data.sprint ? (
-        <EmptyState icon={Gauge} title={t("page.capacity.noSprint")} description="" />
+        <EmptyState
+          icon={Gauge}
+          title={t(view === "active" ? "page.capacity.noActiveSprint" : view === "next" ? "page.capacity.noNextSprint" : "page.capacity.noSprint")}
+          description=""
+        />
       ) : (
         <Card className="bg-card/50">
           <CardHeader>
@@ -279,6 +317,9 @@ export default function ProjectCapacity() {
               {data.sprint.state === "future" ? t("page.capacity.nextSprint") : t("page.capacity.activeSprint")}: {data.sprint.name}
             </CardTitle>
             <CardDescription>
+              {progress
+                ? `${t("page.capacity.dayOf", { elapsed: progress.elapsedDays, total: data.sprint.workingDays, remaining: progress.remainingDays })} · `
+                : ""}
               {rec ? `${t("page.capacity.availability")}: ${rec.availabilityPct}% · ` : ""}
               {data.rate ? t("page.capacity.rateNote", { count: data.rate.sprintsUsed }) : ""}
             </CardDescription>
@@ -295,6 +336,21 @@ export default function ProjectCapacity() {
                   {t("page.capacity.committed")}: {fmt(data.committed[u])}
                 </div>
                 {rec && <RangeBar range={rec.range[u]} committed={data.committed[u]} band={rec.band[u] as Band} />}
+                {progress && (
+                  <div className="mt-4">
+                    <div className={`text-sm ${progress.pace ? BAND_TEXT[progress.pace[u] as Band] : ""}`}>
+                      {t("page.capacity.done")}: {fmt(progress.done[u])}
+                      <span className="text-muted-foreground">
+                        {" "}· {t("page.capacity.remaining")}: {fmt(progress.remaining[u])}
+                        {progress.expected && ` · ${t("page.capacity.expectedToday")}: ${progress.expected[u][0]}–${progress.expected[u][1]}`}
+                      </span>
+                      {progress.expected && <MetricTooltip description={t("page.capacity.paceTooltip")} />}
+                    </div>
+                    {progress.expected && progress.pace && (
+                      <RangeBar range={progress.expected[u]} committed={progress.done[u]} band={progress.pace[u] as Band} />
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </CardContent>
@@ -306,7 +362,7 @@ export default function ProjectCapacity() {
           <CardHeader>
             <CardTitle className="flex items-center gap-1">
               {t("page.capacity.team")}
-              <MetricTooltip description={t("page.capacity.loadTooltip")} />
+              <MetricTooltip description={t(inProgress ? "page.capacity.loadTooltipActive" : "page.capacity.loadTooltip")} />
             </CardTitle>
             {!isAdmin && <CardDescription>{t("page.capacity.readOnly")}</CardDescription>}
           </CardHeader>
@@ -322,8 +378,16 @@ export default function ProjectCapacity() {
                     </TableHead>
                     <TableHead className="text-right">{t("page.capacity.absence")}</TableHead>
                     <TableHead className="text-right">{t("page.capacity.dedication")}</TableHead>
-                    <TableHead className="text-right">{t("page.capacity.capacity")}</TableHead>
+                    <TableHead className="text-right">
+                      {inProgress ? t("page.capacity.capacityLeft") : t("page.capacity.capacity")}
+                    </TableHead>
                     <TableHead className="text-right">{t("page.capacity.assigned")}</TableHead>
+                    {inProgress && (
+                      <>
+                        <TableHead className="text-right">{t("page.capacity.done")}</TableHead>
+                        <TableHead className="text-right">{t("page.capacity.remaining")}</TableHead>
+                      </>
+                    )}
                     <TableHead className="text-right">{t("page.capacity.load")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -337,12 +401,12 @@ export default function ProjectCapacity() {
                       <TableCell className="text-right font-mono text-xs text-amber-600 dark:text-yellow-300">
                         {fmt(data.unassigned.sp)} SP · {data.unassigned.issues}
                       </TableCell>
-                      <TableCell />
+                      <TableCell colSpan={columns - 6} />
                     </TableRow>
                   )}
                   {draft.some((m) => !(m.counts && m.recent)) && (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={7}>
+                      <TableCell colSpan={columns}>
                         <button
                           type="button"
                           className="text-xs text-muted-foreground hover:text-foreground"

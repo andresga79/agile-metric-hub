@@ -462,12 +462,16 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
- * Recommended commitment for the next sprint (future sprint, else the active one) in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. Scrum projects only.
+ * Recommended commitment for a sprint in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. `sprint=next` is the next future sprint, `sprint=active` the one in progress (real working days, progress so far and load on what is still open); absent = next future sprint, else the active one. Scrum projects only.
  *
- * @summary Capacity planning for the next sprint of a Scrum project
+ * @summary Capacity planning for the next or the active sprint of a Scrum project
  */
 export const GetProjectCapacityParams = zod.object({
   "projectId": zod.coerce.string()
+})
+
+export const GetProjectCapacityQueryParams = zod.object({
+  "sprint": zod.enum(['active', 'next']).optional()
 })
 
 export const getProjectCapacityResponseRecommendationRangeSpMin = 2;
@@ -475,6 +479,12 @@ export const getProjectCapacityResponseRecommendationRangeSpMax = 2;
 
 export const getProjectCapacityResponseRecommendationRangeIssuesMin = 2;
 export const getProjectCapacityResponseRecommendationRangeIssuesMax = 2;
+
+export const getProjectCapacityResponseProgressExpectedOneSpMin = 2;
+export const getProjectCapacityResponseProgressExpectedOneSpMax = 2;
+
+export const getProjectCapacityResponseProgressExpectedOneIssuesMin = 2;
+export const getProjectCapacityResponseProgressExpectedOneIssuesMax = 2;
 
 export const getProjectCapacityResponseTeamItemOneAbsenceDaysMin = 0;
 export const getProjectCapacityResponseTeamItemOneAbsenceDaysMax = 10;
@@ -510,6 +520,26 @@ export const GetProjectCapacityResponse = zod.object({
   "issues": zod.number(),
   "unestimated": zod.number()
 }),
+  "progress": zod.object({
+  "elapsedDays": zod.number(),
+  "remainingDays": zod.number(),
+  "done": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "remaining": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "expected": zod.object({
+  "sp": zod.array(zod.number()).min(getProjectCapacityResponseProgressExpectedOneSpMin).max(getProjectCapacityResponseProgressExpectedOneSpMax),
+  "issues": zod.array(zod.number()).min(getProjectCapacityResponseProgressExpectedOneIssuesMin).max(getProjectCapacityResponseProgressExpectedOneIssuesMax)
+}).nullable().describe('Recommended range prorated to the elapsed share of the sprint.'),
+  "pace": zod.object({
+  "sp": zod.enum(['ok', 'warn', 'over']),
+  "issues": zod.enum(['ok', 'warn', 'over'])
+}).nullable()
+}).nullable().describe('Only for the active sprint.'),
   "rate": zod.object({
   "sp": zod.object({
   "p25": zod.number(),
@@ -530,14 +560,18 @@ export const GetProjectCapacityResponse = zod.object({
   "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
-  "recent": zod.boolean().describe('Part of the next sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
+  "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 }).and(zod.object({
   "availableDays": zod.number(),
   "capacity": zod.object({
   "sp": zod.number(),
   "issues": zod.number()
-}),
+}).describe('Active sprint = capacity over the days still left.'),
   "assigned": zod.object({
+  "sp": zod.number(),
+  "issues": zod.number()
+}),
+  "done": zod.object({
   "sp": zod.number(),
   "issues": zod.number()
 }),
@@ -588,7 +622,7 @@ export const UpdateProjectCapacityBodyItem = zod.object({
   "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
-  "recent": zod.boolean().describe('Part of the next sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
+  "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 })
 export const UpdateProjectCapacityBody = zod.array(UpdateProjectCapacityBodyItem)
 

@@ -655,9 +655,9 @@
   "common.loadTimeout": "Jira tardó demasiado en responder. Intente nuevamente en un momento.",
 
   "page.capacity.title": "Capacity",
-  "page.capacity.subtitle": "Cuánto puede comprometer el equipo en el próximo sprint y cómo está repartido",
+  "page.capacity.subtitle": "Cuánto puede comprometer el equipo, cómo va el sprint actual y cómo está repartido",
   "page.capacity.nextSprint": "Próximo sprint",
-  "page.capacity.activeSprint": "Sprint activo (no hay uno futuro en Jira)",
+  "page.capacity.activeSprint": "Sprint activo",
   "page.capacity.recommended": "Recomendado",
   "page.capacity.committed": "Cargado",
   "page.capacity.availability": "Disponibilidad del equipo",
@@ -687,5 +687,16 @@
   "page.capacity.notCounting": "Otros: no cuentan o solo están en sprints anteriores ({{count}})",
   "page.capacity.historyOnly": "solo sprints anteriores",
   "page.capacity.manual": "agregada a mano",
-  "page.capacity.remove": "Quitar"
+  "page.capacity.remove": "Quitar",
+  "page.capacity.viewActive": "Actual",
+  "page.capacity.viewNext": "Próximo",
+  "page.capacity.dayOf": "Día {{elapsed}} de {{total}} · quedan {{remaining}} días hábiles",
+  "page.capacity.done": "Hecho",
+  "page.capacity.remaining": "Restante",
+  "page.capacity.expectedToday": "Esperado a hoy",
+  "page.capacity.capacityLeft": "Capacidad restante",
+  "page.capacity.noActiveSprint": "No hay sprint activo en Jira.",
+  "page.capacity.noNextSprint": "No hay sprint futuro en Jira.",
+  "page.capacity.loadTooltipActive": "Lo que la persona tiene todavía abierto dividido por su capacidad en los días que quedan (sus días disponibles × días restantes ÷ días del sprint × lo que completa el equipo por día-persona). Mide carga, no rendimiento.",
+  "page.capacity.paceTooltip": "Hecho hasta hoy contra el rango recomendado prorrateado a los días transcurridos. Verde: en o sobre el piso esperado; ámbar: hasta 15 % por debajo; rojo: más atrás."
 }

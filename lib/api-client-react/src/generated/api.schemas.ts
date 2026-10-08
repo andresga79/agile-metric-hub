@@ -557,7 +557,7 @@ export interface CapacityMemberInput {
   counts: boolean;
   /** Added by hand (no Jira issues yet); omitted manual people are removed. */
   manual: boolean;
-  /** Part of the next sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
+  /** Part of the sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
    *  */
   recent: boolean;
 }
@@ -573,8 +573,10 @@ export const CapacityTeamRowBand = {
 
 export type CapacityTeamRow = CapacityMemberInput & ({
   availableDays: number;
+  /** Active sprint = capacity over the days still left. */
   capacity: CapacityUnits;
   assigned: CapacityUnits;
+  done: CapacityUnits;
   loadPct: number | null;
   band: CapacityTeamRowBand;
 });
@@ -640,6 +642,42 @@ export type CapacityResponseCommitted = {
   unestimated: number;
 };
 
+export type CapacityResponseProgressPaceSp = typeof CapacityResponseProgressPaceSp[keyof typeof CapacityResponseProgressPaceSp];
+
+
+export const CapacityResponseProgressPaceSp = {
+  ok: 'ok',
+  warn: 'warn',
+  over: 'over',
+} as const;
+
+export type CapacityResponseProgressPaceIssues = typeof CapacityResponseProgressPaceIssues[keyof typeof CapacityResponseProgressPaceIssues];
+
+
+export const CapacityResponseProgressPaceIssues = {
+  ok: 'ok',
+  warn: 'warn',
+  over: 'over',
+} as const;
+
+export type CapacityResponseProgressPace = {
+  sp: CapacityResponseProgressPaceSp;
+  issues: CapacityResponseProgressPaceIssues;
+} | null;
+
+/**
+ * Only for the active sprint.
+ */
+export type CapacityResponseProgress = {
+  elapsedDays: number;
+  remainingDays: number;
+  done: CapacityUnits;
+  remaining: CapacityUnits;
+  /** Recommended range prorated to the elapsed share of the sprint. */
+  expected: CapacityRange | null;
+  pace: CapacityResponseProgressPace;
+} | null;
+
 export type CapacityResponseRate = {
   sp: CapacityRateBand;
   issues: CapacityRateBand;
@@ -650,6 +688,8 @@ export interface CapacityResponse {
   sprint: CapacityResponseSprint;
   recommendation: CapacityResponseRecommendation;
   committed: CapacityResponseCommitted;
+  /** Only for the active sprint. */
+  progress: CapacityResponseProgress;
   rate: CapacityResponseRate;
   team: CapacityTeamRow[];
   unassigned: CapacityUnits;
@@ -738,4 +778,16 @@ export interface EvolutionResponse {
   periods: EvolutionPeriod[];
   targets: EvolutionTargets;
 }
+
+export type GetProjectCapacityParams = {
+sprint?: GetProjectCapacitySprint;
+};
+
+export type GetProjectCapacitySprint = typeof GetProjectCapacitySprint[keyof typeof GetProjectCapacitySprint];
+
+
+export const GetProjectCapacitySprint = {
+  active: 'active',
+  next: 'next',
+} as const;
 

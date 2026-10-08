@@ -27,7 +27,10 @@ import {
   buildTeam,
   buildTeamRows,
   commitmentBand,
+  expectedByToday,
+  paceBand,
   recommend,
+  sprintClock,
   sprintSample,
   summarizeAssigned,
   teamRate,
@@ -97,6 +100,13 @@ router.get(
   async (req, res): Promise<void> => {
     try {
       const projectId = String(req.params.projectId);
+      // ?sprint=active → the sprint in progress; ?sprint=next → the next future one; absent → the
+      // next future sprint, else the active one (the page's first load).
+      const view = req.query.sprint;
+      if (view !== undefined && view !== "active" && view !== "next") {
+        res.status(400).json({ error: "sprint debe ser 'active' o 'next'" });
+        return;
+      }
       const project = await ensureScrumProject(projectId, res);
       if (!project) return;
 
@@ -111,7 +121,9 @@ router.get(
       const active = sprints.find((s) => s.state === "active") ?? null;
       // A sprint started (or closed) since getJiraSprints was cached must not still read as "future".
       const knownIds = new Set(sprints.map((s) => s.id));
-      const next = future.find((s) => !knownIds.has(s.id)) ?? active;
+      const nextFuture = future.find((s) => !knownIds.has(s.id)) ?? null;
+      const next = view === "active" ? active : view === "next" ? nextFuture : (nextFuture ?? active);
+      const isActive = next !== null && next.id === active?.id;
 
       const rosterRows = await db.select().from(capacityRosterTable).where(eq(capacityRosterTable.projectId, projectId));
       const roster: RosterEntry[] = rosterRows.map((r) => ({
@@ -132,11 +144,10 @@ router.get(
       const savedFor = (sprintId: number) =>
         savedRows.filter((r) => r.sprintId === String(sprintId)).map(toMember);
 
-      const activeIsSeparate = active !== null && next !== null && active.id !== next.id;
       const [closedIssues, nextIssues, activeIssues] = await Promise.all([
         Promise.all(closed.map((s) => loadSprintIssues(s, project.key, allowedIssueTypes, categoryMap))),
         next ? loadSprintIssues(next, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
-        activeIsSeparate ? loadSprintIssues(active!, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
+        active && !isActive ? loadSprintIssues(active, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
       ]);
 
       const samples = closed
@@ -154,10 +165,23 @@ router.get(
 
       const warnings: string[] = [];
       if (!rate) warnings.push("Faltan sprints cerrados para recomendar (mínimo 3 con fechas y personas asignadas).");
-      if (!next) warnings.push("No hay sprint activo ni futuro en Jira.");
+      if (!next) {
+        warnings.push(
+          view === "active"
+            ? "No hay sprint activo en Jira."
+            : view === "next"
+              ? "No hay sprint futuro en Jira."
+              : "No hay sprint activo ni futuro en Jira."
+        );
+      }
 
       const assigned = summarizeAssigned(nextIssues);
-      if (assigned.unestimated > 0) warnings.push(`${assigned.unestimated} issues sin estimar en el próximo sprint.`);
+      if (assigned.unestimated > 0) {
+        warnings.push(`${assigned.unestimated} issues sin estimar en el ${isActive ? "sprint activo" : "próximo sprint"}.`);
+      }
+      // A sprint in progress is measured with its real dates; one not started yet with the team's 10 days.
+      const clock = isActive ? sprintClock(next!.startDate, next!.endDate, new Date()) : null;
+      const sprintDays = clock?.workingDays ?? NEXT_SPRINT_WORKING_DAYS;
 
       // Default team: the roster plus whoever is new in the last closed, the active and the next
       // sprint — not everyone who passed through the 6-sprint window, which inflated availability
@@ -169,8 +193,9 @@ router.get(
         saved: next ? savedFor(next.id) : [],
       });
       const counting = team.filter((m) => m.counts && m.recent);
-      const availablePersonDays = counting.reduce((sum, m) => sum + availableDays(m, NEXT_SPRINT_WORKING_DAYS), 0);
+      const availablePersonDays = counting.reduce((sum, m) => sum + availableDays(m, sprintDays), 0);
       const range = rate ? recommend(availablePersonDays, rate) : null;
+      const expected = clock && range ? expectedByToday(range, clock.elapsedDays, clock.workingDays) : null;
 
       const history = closed
         .map((s, idx) => {
@@ -201,13 +226,13 @@ router.get(
               state: next.state === "active" ? "active" : "future",
               startDate: next.startDate ?? null,
               endDate: next.endDate ?? null,
-              workingDays: NEXT_SPRINT_WORKING_DAYS,
+              workingDays: sprintDays,
             }
           : null,
         recommendation: range
           ? {
               range,
-              availabilityPct: availabilityPct(availablePersonDays, counting.length),
+              availabilityPct: availabilityPct(availablePersonDays, counting.length, sprintDays),
               availablePersonDays: Math.round(availablePersonDays * 10) / 10,
               band: {
                 sp: commitmentBand(assigned.total.sp, range.sp),
@@ -216,8 +241,25 @@ router.get(
             }
           : null,
         committed: { ...assigned.total, unestimated: assigned.unestimated },
+        progress: clock
+          ? {
+              elapsedDays: clock.elapsedDays,
+              remainingDays: clock.remainingDays,
+              done: assigned.done,
+              remaining: { sp: assigned.total.sp - assigned.done.sp, issues: assigned.total.issues - assigned.done.issues },
+              expected,
+              pace: expected
+                ? { sp: paceBand(assigned.done.sp, expected.sp), issues: paceBand(assigned.done.issues, expected.issues) }
+                : null,
+            }
+          : null,
         rate,
-        team: buildTeamRows(team, assigned.byAccount, rate),
+        team: buildTeamRows(
+          team,
+          assigned.byAccount,
+          rate,
+          clock ? { workingDays: clock.workingDays, remainingDays: clock.remainingDays, done: assigned.doneByAccount } : undefined
+        ),
         unassigned: assigned.unassigned,
         history,
         warnings,

@@ -288,10 +288,18 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 
 ---
 
-## Capacity (planificación del próximo sprint, solo Scrum)
+## Capacity (sprint actual y próximo, solo Scrum)
 
-- **Próximo sprint**: primer sprint futuro del tablero; si no hay, el activo. Siempre 10 días
-  hábiles (regla del equipo: arranca lunes, dura 10 días).
+- **Vistas**: selector *Actual / Próximo* (`?sprint=active|next`). Sin parámetro (primera carga):
+  primer sprint futuro del tablero; si no hay, el activo.
+- **Próximo sprint**: siempre 10 días hábiles (regla del equipo: arranca lunes, dura 10 días).
+- **Sprint actual**: días hábiles reales entre inicio y fin del sprint. Hoy cuenta como restante;
+  en fin de semana, restan los días desde el lunes. Hecho = estado actual done (`isIssueDone`).
+  - *Esperado a hoy* = recomendación × días transcurridos ÷ días del sprint (lineal: al principio
+    del sprint es exigente si el equipo cierra todo al final). Ritmo: hecho ≥ piso esperado ok,
+    hasta 15 % por debajo atención, más atrás rojo.
+  - *Carga por persona*: lo que le queda abierto (asignado − hecho) ÷ (sus días disponibles ×
+    días restantes ÷ días del sprint × P50). La ausencia se reparte pareja: no se sabe qué días cae.
 - **Tasa del equipo**: últimos 6 sprints cerrados. Por sprint, `SP completados / días-persona` e
   `issues completados / días-persona`; `días-persona = Σ (días hábiles reales × dedicación − ausencia)`
   con la disponibilidad guardada en Capacity, o cada asignado a tiempo completo si el sprint no se
@@ -302,8 +310,8 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   aplica a todos los sprints, también al histórico: quien no cuenta no suma días-persona (lo que
   completó sí suma a lo hecho por el equipo). En un sprint cerrado, los días-persona son la
   disponibilidad guardada + cada otro asignado que cuenta, a tiempo completo.
-- **Equipo del próximo sprint**: quienes cuentan y aparecen en el último sprint cerrado, el activo o
-  el próximo (más los agregados a mano). Los que solo están en sprints anteriores se listan para
+- **Equipo del sprint**: quienes cuentan y aparecen en el último sprint cerrado, el activo o
+  el próximo (en la vista Actual: el último cerrado y el activo), más los agregados a mano. Los que solo están en sprints anteriores se listan para
   decidir si cuentan, pero no suman disponibilidad.
 - **Carga por persona**: capacidad = sus días disponibles × P50 del equipo; carga = asignado /
   capacidad (la peor entre SP e issues). ≤ 85 % ok, ≤ 110 % atención, > 110 % sobrecarga. Mide

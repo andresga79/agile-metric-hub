@@ -32,6 +32,7 @@ import type {
   EvolutionResponse,
   ForecastRequest,
   ForecastResponse,
+  GetProjectCapacityParams,
   HealthResponse,
   HealthStatus,
   Issue,
@@ -1471,22 +1472,31 @@ export function useGetProjectSprintMetrics<TData = Awaited<ReturnType<typeof get
 
 
 
-export const getGetProjectCapacityUrl = (projectId: string,) => {
+export const getGetProjectCapacityUrl = (projectId: string,
+    params?: GetProjectCapacityParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/projects/${projectId}/capacity`
+  return stringifiedParams.length > 0 ? `/api/projects/${projectId}/capacity?${stringifiedParams}` : `/api/projects/${projectId}/capacity`
 }
 
 /**
- * Recommended commitment for the next sprint (future sprint, else the active one) in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. Scrum projects only.
+ * Recommended commitment for a sprint in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. `sprint=next` is the next future sprint, `sprint=active` the one in progress (real working days, progress so far and load on what is still open); absent = next future sprint, else the active one. Scrum projects only.
  *
- * @summary Capacity planning for the next sprint of a Scrum project
+ * @summary Capacity planning for the next or the active sprint of a Scrum project
  */
-export const getProjectCapacity = async (projectId: string, options?: RequestInit): Promise<CapacityResponse> => {
+export const getProjectCapacity = async (projectId: string,
+    params?: GetProjectCapacityParams, options?: RequestInit): Promise<CapacityResponse> => {
 
-  return customFetch<CapacityResponse>(getGetProjectCapacityUrl(projectId),
+  return customFetch<CapacityResponse>(getGetProjectCapacityUrl(projectId,params),
   {
     ...options,
     method: 'GET'
@@ -1499,23 +1509,25 @@ export const getProjectCapacity = async (projectId: string, options?: RequestIni
 
 
 
-export const getGetProjectCapacityQueryKey = (projectId: string,) => {
+export const getGetProjectCapacityQueryKey = (projectId: string,
+    params?: GetProjectCapacityParams,) => {
     return [
-    `/api/projects/${projectId}/capacity`
+    `/api/projects/${projectId}/capacity`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetProjectCapacityQueryOptions = <TData = Awaited<ReturnType<typeof getProjectCapacity>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectCapacity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetProjectCapacityQueryOptions = <TData = Awaited<ReturnType<typeof getProjectCapacity>>, TError = ErrorType<ErrorResponse>>(projectId: string,
+    params?: GetProjectCapacityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectCapacity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetProjectCapacityQueryKey(projectId);
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectCapacityQueryKey(projectId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectCapacity>>> = ({ signal }) => getProjectCapacity(projectId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectCapacity>>> = ({ signal }) => getProjectCapacity(projectId,params, { signal, ...requestOptions });
 
 
 
@@ -1529,15 +1541,16 @@ export type GetProjectCapacityQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Capacity planning for the next sprint of a Scrum project
+ * @summary Capacity planning for the next or the active sprint of a Scrum project
  */
 
 export function useGetProjectCapacity<TData = Awaited<ReturnType<typeof getProjectCapacity>>, TError = ErrorType<ErrorResponse>>(
- projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectCapacity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ projectId: string,
+    params?: GetProjectCapacityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectCapacity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetProjectCapacityQueryOptions(projectId,options)
+  const queryOptions = getGetProjectCapacityQueryOptions(projectId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

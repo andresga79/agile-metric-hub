@@ -7,6 +7,7 @@
  */
 import type { CapacityHistoryRow } from './capacityHistoryRow';
 import type { CapacityResponseCommitted } from './capacityResponseCommitted';
+import type { CapacityResponseProgress } from './capacityResponseProgress';
 import type { CapacityResponseRate } from './capacityResponseRate';
 import type { CapacityResponseRecommendation } from './capacityResponseRecommendation';
 import type { CapacityResponseSprint } from './capacityResponseSprint';
@@ -17,6 +18,8 @@ export interface CapacityResponse {
   sprint: CapacityResponseSprint;
   recommendation: CapacityResponseRecommendation;
   committed: CapacityResponseCommitted;
+  /** Only for the active sprint. */
+  progress: CapacityResponseProgress;
   rate: CapacityResponseRate;
   team: CapacityTeamRow[];
   unassigned: CapacityUnits;

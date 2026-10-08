@@ -12,6 +12,9 @@ import {
   buildTeam,
   buildTeamRows,
   validateCapacityRows,
+  sprintClock,
+  expectedByToday,
+  paceBand,
   type SprintSample,
   type TeamRate,
   type CapacityIssue,
@@ -87,6 +90,8 @@ describe("recommend / availabilityPct", () => {
   it("availability is available / (10 x members), 0 when there are no members", () => {
     expect(availabilityPct(92, 10)).toBe(92);
     expect(availabilityPct(0, 0)).toBe(0);
+    // An active sprint uses its real working days, not the fixed 10.
+    expect(availabilityPct(18, 2, 9)).toBe(100);
   });
 });
 
@@ -336,6 +341,82 @@ describe("buildTeamRows", () => {
   it("without a rate, capacity is 0 and band ok (no recommendation yet)", () => {
     const rows = buildTeamRows([member("a")], new Map(), null);
     expect(rows[0]).toMatchObject({ availableDays: 10, capacity: { sp: 0, issues: 0 }, loadPct: null, band: "ok" });
+  });
+});
+
+describe("buildTeamRows (active sprint)", () => {
+  const rate = {
+    sp: { p25: 0.4, p50: 0.5, p75: 0.6 },
+    issues: { p25: 0.2, p50: 0.25, p75: 0.3 },
+    sprintsUsed: 6,
+  };
+
+  it("measures load as remaining work against the remaining share of availability", () => {
+    // 10 days, half the sprint left -> 5 days -> 2.5 SP / 1.25 issues of capacity.
+    const rows = buildTeamRows([member("a")], new Map([["a", { sp: 8, issues: 3 }]]), rate, {
+      workingDays: 10,
+      remainingDays: 5,
+      done: new Map([["a", { sp: 6, issues: 2 }]]),
+    });
+    expect(rows[0]).toMatchObject({
+      availableDays: 10,
+      capacity: { sp: 2.5, issues: 1.3 },
+      assigned: { sp: 8, issues: 3 },
+      done: { sp: 6, issues: 2 },
+      loadPct: 80, // max(2/2.5, 1/1.25) = 0.8
+      band: "ok",
+    });
+  });
+
+  it("with no days left and work still open, the person is over", () => {
+    const rows = buildTeamRows([member("a")], new Map([["a", { sp: 3, issues: 1 }]]), rate, {
+      workingDays: 10,
+      remainingDays: 0,
+      done: new Map(),
+    });
+    expect(rows[0]).toMatchObject({ band: "over", loadPct: null });
+  });
+
+  it("next-sprint rows report nothing done", () => {
+    const rows = buildTeamRows([member("a")], new Map(), rate);
+    expect(rows[0]!.done).toEqual({ sp: 0, issues: 0 });
+  });
+});
+
+describe("sprintClock", () => {
+  // ORINI Sprint 6: Mon 2026-10-05 to Fri 2026-10-16 (Jira end at 00:00 local = 03:00Z).
+  const start = "2026-10-05T15:13:25.886Z";
+  const end = "2026-10-16T03:00:00.000Z";
+
+  it("counts today as remaining", () => {
+    expect(sprintClock(start, end, new Date("2026-10-08T15:00:00Z"))).toEqual({ workingDays: 10, elapsedDays: 3, remainingDays: 7 });
+  });
+
+  it("before the start nothing has elapsed; after the end nothing remains", () => {
+    expect(sprintClock(start, end, new Date("2026-10-02T12:00:00Z"))).toEqual({ workingDays: 10, elapsedDays: 0, remainingDays: 10 });
+    expect(sprintClock(start, end, new Date("2026-10-20T12:00:00Z"))).toEqual({ workingDays: 10, elapsedDays: 10, remainingDays: 0 });
+  });
+
+  it("a weekend counts the following Monday onward as remaining", () => {
+    expect(sprintClock(start, end, new Date("2026-10-10T12:00:00Z"))).toEqual({ workingDays: 10, elapsedDays: 5, remainingDays: 5 });
+  });
+
+  it("without dates falls back to the team's 10 days, none elapsed", () => {
+    expect(sprintClock(undefined, undefined, new Date())).toEqual({ workingDays: 10, elapsedDays: 0, remainingDays: 10 });
+  });
+});
+
+describe("expectedByToday / paceBand", () => {
+  it("prorates the recommended range by the elapsed share of the sprint", () => {
+    expect(expectedByToday({ sp: [20, 30], issues: [10, 14] }, 3, 10)).toEqual({ sp: [6, 9], issues: [3, 4] });
+    expect(expectedByToday({ sp: [20, 30], issues: [10, 14] }, 0, 0)).toEqual({ sp: [0, 0], issues: [0, 0] });
+  });
+
+  it("is ok at or above the low end, warn within 15 % below, over further behind", () => {
+    expect(paceBand(6, [6, 9])).toBe("ok");
+    expect(paceBand(5.2, [6, 9])).toBe("warn");
+    expect(paceBand(4, [6, 9])).toBe("over");
+    expect(paceBand(0, [0, 0])).toBe("ok");
   });
 });
 

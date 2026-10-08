@@ -80,9 +80,47 @@ export function recommend(
   };
 }
 
-export function availabilityPct(availablePersonDays: number, members: number): number {
-  if (members <= 0) return 0;
-  return Math.round((availablePersonDays / (NEXT_SPRINT_WORKING_DAYS * members)) * 100);
+export function availabilityPct(
+  availablePersonDays: number,
+  members: number,
+  sprintWorkingDays: number = NEXT_SPRINT_WORKING_DAYS
+): number {
+  if (members <= 0 || sprintWorkingDays <= 0) return 0;
+  return Math.round((availablePersonDays / (sprintWorkingDays * members)) * 100);
+}
+
+/** Where an active sprint stands today. Today counts as remaining (the day isn't over), a weekend
+ *  as the days from the next Monday on. Without dates, the team's standard 10 days, none elapsed. */
+export function sprintClock(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  now: Date
+): { workingDays: number; elapsedDays: number; remainingDays: number } {
+  if (!startDate || !endDate) {
+    return { workingDays: NEXT_SPRINT_WORKING_DAYS, elapsedDays: 0, remainingDays: NEXT_SPRINT_WORKING_DAYS };
+  }
+  const total = workingDays(startDate, endDate);
+  const today = now.toISOString().slice(0, 10);
+  const remainingDays = today < startDate.slice(0, 10) ? total : Math.min(total, workingDays(today, endDate));
+  return { workingDays: total, elapsedDays: total - remainingDays, remainingDays };
+}
+
+/** The recommended range prorated to the share of the sprint already elapsed. */
+export function expectedByToday(
+  range: { sp: [number, number]; issues: [number, number] },
+  elapsedDays: number,
+  sprintWorkingDays: number
+): { sp: [number, number]; issues: [number, number] } {
+  const f = sprintWorkingDays > 0 ? elapsedDays / sprintWorkingDays : 0;
+  const scale = ([lo, hi]: [number, number]): [number, number] => [Math.round(lo * f), Math.round(hi * f)];
+  return { sp: scale(range.sp), issues: scale(range.issues) };
+}
+
+/** Pace of an active sprint: done so far against the low end of what was expected by today. */
+export function paceBand(done: number, expected: [number, number]): Band {
+  const lo = expected[0];
+  if (lo <= 0 || done >= lo) return "ok";
+  return done >= lo * 0.85 ? "warn" : "over";
 }
 
 function loadBand(pct: number): Band {
@@ -187,23 +225,36 @@ export function sprintSample(input: {
 
 export function summarizeAssigned(issues: CapacityIssue[]): {
   byAccount: Map<string, Units>;
+  doneByAccount: Map<string, Units>;
   unassigned: Units;
   total: Units;
+  done: Units;
   unestimated: number;
 } {
   const byAccount = new Map<string, Units>();
+  const doneByAccount = new Map<string, Units>();
   const unassigned: Units = { sp: 0, issues: 0 };
-  for (const i of issues) {
-    const bucket = i.accountId
-      ? byAccount.get(i.accountId) ?? byAccount.set(i.accountId, { sp: 0, issues: 0 }).get(i.accountId)!
-      : unassigned;
+  const add = (map: Map<string, Units>, id: string, i: CapacityIssue) => {
+    const bucket = map.get(id) ?? map.set(id, { sp: 0, issues: 0 }).get(id)!;
     bucket.sp += i.storyPoints;
     bucket.issues += 1;
+  };
+  for (const i of issues) {
+    if (i.accountId) {
+      add(byAccount, i.accountId, i);
+      if (i.done) add(doneByAccount, i.accountId, i);
+    } else {
+      unassigned.sp += i.storyPoints;
+      unassigned.issues += 1;
+    }
   }
+  const done = issues.filter((i) => i.done);
   return {
     byAccount,
+    doneByAccount,
     unassigned,
     total: { sp: issues.reduce((s, i) => s + i.storyPoints, 0), issues: issues.length },
+    done: { sp: done.reduce((s, i) => s + i.storyPoints, 0), issues: done.length },
     unestimated: issues.filter((i) => i.storyPoints <= 0).length,
   };
 }
@@ -264,24 +315,39 @@ export interface TeamRow extends MemberAvailability {
   availableDays: number;
   capacity: Units;
   assigned: Units;
+  done: Units;
   loadPct: number | null;
   band: Band;
+}
+
+/** The sprint the rows are for. Next sprint: the team's 10 days, nothing done. Active sprint:
+ *  its real working days, how many are left, and what each person already finished — load is then
+ *  what is still open against the remaining share of their availability (absences are spread
+ *  evenly: we don't know which days they fall on). */
+export interface RowsSprint {
+  workingDays: number;
+  remainingDays?: number;
+  done?: Map<string, Units>;
 }
 
 export function buildTeamRows(
   team: Array<MemberAvailability & { recent?: boolean }>,
   byAccount: Map<string, Units>,
-  rate: TeamRate | null
+  rate: TeamRate | null,
+  sprint: RowsSprint = { workingDays: NEXT_SPRINT_WORKING_DAYS }
 ): Array<TeamRow & { recent: boolean }> {
+  const share = sprint.remainingDays === undefined || sprint.workingDays <= 0 ? 1 : sprint.remainingDays / sprint.workingDays;
   return team.map((m) => {
     const recent = m.recent ?? true;
-    const days = recent ? availableDays(m, NEXT_SPRINT_WORKING_DAYS) : 0;
+    const days = recent ? availableDays(m, sprint.workingDays) : 0;
     const assigned = byAccount.get(m.accountId) ?? { sp: 0, issues: 0 };
-    // No capacity to measure load against: not counting, not in the next sprint, or no rate yet.
+    const done = sprint.done?.get(m.accountId) ?? { sp: 0, issues: 0 };
+    // No capacity to measure load against: not counting, not in the sprint's team, or no rate yet.
     if (!rate || !m.counts || !recent) {
-      return { ...m, recent, availableDays: days, capacity: { sp: 0, issues: 0 }, assigned, loadPct: null, band: "ok" as Band };
+      return { ...m, recent, availableDays: days, capacity: { sp: 0, issues: 0 }, assigned, done, loadPct: null, band: "ok" as Band };
     }
-    return { ...m, recent, availableDays: days, assigned, ...personLoad(days, rate, assigned) };
+    const open = { sp: assigned.sp - done.sp, issues: assigned.issues - done.issues };
+    return { ...m, recent, availableDays: days, assigned, done, ...personLoad(days * share, rate, open) };
   });
 }
 
