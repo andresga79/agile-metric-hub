@@ -106,6 +106,14 @@ proyectos visibles (los últimos 90 días).
 Días desde que **empezó el trabajo activo** hasta la resolución. Inicio = **primera** transición
 del changelog hacia un estado de categoría `"indeterminate"` (in-progress); fin = fecha de
 resolución. (`getCycleTimeDays`, `lib/jira.ts`)
+La categoría de cada transición sale del **id del estado** (`to`/`from` del changelog), no del
+nombre: los proyectos team-managed repiten nombres con otra categoría (en OLP "Ready for DEV" y
+"Ready for QA" son colas, categoría new; en otros proyectos "READY FOR DEV" es indeterminate) y el
+mapa por nombre dejaba ganar al último, así que OLP arrancaba el reloj al encolar (cycle 3m:
+26.8 -> 20.4 d al corregirlo). Las búsquedas solo por nombre prefieren el estado global.
+(`buildStatusCategoryMap`, `statusCategory`) Se respeta la configuración de cada proyecto: en EXP
+"READY" es indeterminate en Jira, así que su cycle time arranca ahí; si eso no refleja el proceso,
+el ajuste va en el workflow de Jira.
 **Sin transición a in-progress** (según el changelog): cycle time **null**, el issue no entra al
 promedio (antes caía al Lead Time y un cierre directo de backlog sumaba como meses de trabajo).
 **Fallback a Lead Time** solo si no se pidió el changelog.

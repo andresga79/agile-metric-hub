@@ -15,6 +15,8 @@ import {
   sprintWindowHalves,
   sprintCloseTime,
   wasIssueDoneAt,
+  buildStatusCategoryMap,
+  statusCategory,
   getResolutionDate,
   getLeadTimeDays,
   getCycleTimeDays,
@@ -710,5 +712,46 @@ describe("isNonDeliveryClosure / getDeliveryDate", () => {
     const issue = makeIssue();
     expect(await isNonDeliveryClosure(issue)).toBe(false);
     expect(await getDeliveryDate(issue)).toBeNull();
+  });
+});
+
+// --- Status categories by id: names aren't unique across team-managed projects -------------------
+// OLP's "Ready for DEV" / "Ready for QA" are queues (category new), but other projects have
+// same-named statuses in category indeterminate; a name-keyed map let the last one win, so OLP's
+// cycle time started when an issue was queued, not when work started.
+describe("buildStatusCategoryMap / statusCategory", () => {
+  const map = buildStatusCategoryMap([
+    { id: "10039", name: "Ready for DEV", statusCategory: { key: "new" }, scope: { project: { id: "10003" } } },
+    { id: "10032", name: "Ready for Dev", statusCategory: { key: "new" } },
+    { id: "10116", name: "READY FOR DEV", statusCategory: { key: "indeterminate" }, scope: { project: { id: "10023" } } },
+    { id: "10040", name: "DEV in Progress", statusCategory: { key: "indeterminate" }, scope: { project: { id: "10003" } } },
+    { id: "10022", name: "DONE", statusCategory: { key: "done" } },
+  ]);
+
+  it("resolves by status id first, whatever other statuses share the name", () => {
+    expect(statusCategory(map, "Ready for DEV", "10039")).toBe("new");
+    expect(statusCategory(map, "READY FOR DEV", "10116")).toBe("indeterminate");
+  });
+
+  it("name-only lookups prefer a global status over project-scoped namesakes", () => {
+    expect(statusCategory(map, "ready for dev")).toBe("new");
+  });
+
+  it("falls back to the name when the id is unknown", () => {
+    expect(statusCategory(map, "DEV in Progress", "99999")).toBe("indeterminate");
+    expect(statusCategory(map, "Nope", "99999")).toBeUndefined();
+  });
+
+  it("wasIssueDoneAt uses the transition's status id", () => {
+    const issue: JiraIssue = {
+      ...makeIssue({ fields: { status: { name: "DONE", statusCategory: { key: "done" } } } }),
+      changelog: {
+        histories: [
+          { created: "2026-09-01T00:00:00.000Z", items: [{ field: "status", from: "10040", fromString: "DEV in Progress", to: "10022", toString: "DONE" }] },
+        ],
+      },
+    };
+    expect(wasIssueDoneAt(issue, new Date("2026-09-02T00:00:00.000Z"), map)).toBe(true);
+    expect(wasIssueDoneAt(issue, new Date("2026-08-31T00:00:00.000Z"), map)).toBe(false);
   });
 });

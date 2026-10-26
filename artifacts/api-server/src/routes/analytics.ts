@@ -20,6 +20,7 @@ import {
   getLeadTimeDays,
   getStoryPoints,
   getStatusCategoryMap,
+  statusCategory,
   isBlockedStatus,
   isIssueCurrentlyFlagged,
   isBlockedEligibleIssueType,
@@ -395,14 +396,14 @@ router.get(
           const categoryMap = await getStatusCategoryMap();
           const transitions = histories
             .filter((h) => h.items.some((it) => it.field === "status"))
-            .map((h) => ({
-              at: new Date(h.created),
-              to: h.items.find((it) => it.field === "status")?.toString ?? "",
-            }))
+            .map((h) => {
+              const item = h.items.find((it) => it.field === "status");
+              return { at: new Date(h.created), to: item?.toString ?? "", toId: item?.to ?? null };
+            })
             .sort((a, b) => b.at.getTime() - a.at.getTime());
 
           for (const t of transitions) {
-            const cat = categoryMap.get(t.to.trim().toLowerCase());
+            const cat = statusCategory(categoryMap, t.to, t.toId);
             if (cat === "indeterminate") {
               enteredInProgress = t.at;
               break;

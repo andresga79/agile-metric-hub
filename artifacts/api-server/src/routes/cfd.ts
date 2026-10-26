@@ -6,6 +6,7 @@ import {
   getCycleTimeDays,
   getResolutionDate,
   getStatusCategoryMap,
+  statusCategory,
   isIssueDone,
   isIssueInProgress,
   type JiraIssue,
@@ -39,10 +40,9 @@ async function buildTimeline(
   for (const h of histories) {
     const statusItem = h.items.find((it) => it.field === "status");
     if (!statusItem) continue;
-    const toStatus = statusItem.toString ?? "";
     if (
       !firstInProgress &&
-      categoryMap.get(toStatus.trim().toLowerCase()) === "indeterminate"
+      statusCategory(categoryMap, statusItem.toString, statusItem.to) === "indeterminate"
     ) {
       firstInProgress = new Date(h.created);
     }

@@ -97,7 +97,8 @@ export interface JiraIssue {
   changelog?: {
     histories: {
       created: string;
-      items: { field: string; fieldId?: string; fromString?: string | null; toString?: string | null }[];
+      // from/to: status ids for field "status" — unique, unlike names (see statusCategory).
+      items: { field: string; fieldId?: string; from?: string | null; fromString?: string | null; to?: string | null; toString?: string | null }[];
     }[];
     // Present on search results: when total > histories.length the changelog was truncated.
     total?: number;
@@ -160,22 +161,25 @@ export function wasIssueDoneAt(issue: JiraIssue, at: Date, categoryMap: Map<stri
     .flatMap((h) =>
       h.items
         .filter((it) => it.field === "status")
-        .map((it) => ({ ms: new Date(h.created).getTime(), from: it.fromString ?? "", to: it.toString ?? "" }))
+        .map((it) => ({
+          ms: new Date(h.created).getTime(),
+          from: it.fromString ?? "", fromId: it.from ?? null,
+          to: it.toString ?? "", toId: it.to ?? null,
+        }))
     )
     .sort((a, b) => a.ms - b.ms);
 
-  const isDoneName = (name: string): boolean => {
-    const key = name.trim().toLowerCase();
-    const cat = categoryMap.get(key);
+  const isDoneName = (name: string, id: string | null): boolean => {
+    const cat = statusCategory(categoryMap, name, id);
     if (cat) return cat === "done";
-    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(key);
+    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(name.trim());
   };
 
   const lastBefore = [...transitions].reverse().find((t) => t.ms <= atMs);
-  if (lastBefore) return isDoneName(lastBefore.to);
+  if (lastBefore) return isDoneName(lastBefore.to, lastBefore.toId);
   // No status change up to `at`: it was still in the status it left on its first later change.
   const firstAfter = transitions[0];
-  if (firstAfter) return isDoneName(firstAfter.from);
+  if (firstAfter) return isDoneName(firstAfter.from, firstAfter.fromId);
   // Never changed status: current status is the one it had all along.
   return isIssueDone(issue);
 }
@@ -198,21 +202,47 @@ export function getStoryPoints(issue: JiraIssue): number {
 
 let statusCategoryCache: Map<string, string> | null = null;
 
-/** Build (and cache) a map of status name -> status category key for the whole
- * Jira instance, so changelog entries (which only carry status names) can be
- * mapped back to their category ("new" | "indeterminate" | "done"). */
+type JiraStatus = { id?: string; name: string; statusCategory?: { key: string }; scope?: { project?: { id?: string } } | null };
+
+/** Status -> category key ("new" | "indeterminate" | "done") for the whole Jira instance, keyed
+ *  both by "#<status id>" and by lowercased name. Names aren't unique: team-managed projects
+ *  reuse them with other categories (OLP's "Ready for DEV" is a queue, category new; other
+ *  projects' "READY FOR DEV" is indeterminate), and a name-keyed map let whichever came last win,
+ *  so OLP's cycle time started when an issue was queued. Changelog items carry the status id, so
+ *  look up with statusCategory(map, name, id); for name-only lookups a global (unscoped) status
+ *  wins over project-scoped namesakes. */
+export function buildStatusCategoryMap(statuses: JiraStatus[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const nameFromGlobal = new Set<string>();
+  for (const s of statuses) {
+    const category = s.statusCategory?.key;
+    if (!category) continue;
+    if (s.id) map.set(`#${s.id}`, category);
+    const name = s.name.trim().toLowerCase();
+    const isGlobal = !s.scope?.project?.id;
+    if (!map.has(name) || (isGlobal && !nameFromGlobal.has(name))) {
+      map.set(name, category);
+      if (isGlobal) nameFromGlobal.add(name);
+    }
+  }
+  return map;
+}
+
+/** Category of a status: by id when known (changelog items' `to`/`from`), else by name. */
+export function statusCategory(
+  map: Map<string, string>,
+  name: string | null | undefined,
+  id?: string | null
+): string | undefined {
+  return (id ? map.get(`#${id}`) : undefined) ?? (name ? map.get(name.trim().toLowerCase()) : undefined);
+}
+
+/** Build (and cache) the instance's status category map (buildStatusCategoryMap). */
 export async function getStatusCategoryMap(): Promise<Map<string, string>> {
   if (statusCategoryCache) return statusCategoryCache;
-  const map = new Map<string, string>();
+  let map = new Map<string, string>();
   try {
-    const statuses = await jiraFetch<
-      { name: string; statusCategory?: { key: string } }[]
-    >("/status");
-    for (const s of statuses) {
-      if (s.statusCategory?.key) {
-        map.set(s.name.trim().toLowerCase(), s.statusCategory.key);
-      }
-    }
+    map = buildStatusCategoryMap(await jiraFetch<JiraStatus[]>("/status"));
     // Only persist the cache on a successful fetch, so a transient Jira error
     // doesn't permanently force cycle-time to fall back to lead time.
     statusCategoryCache = map;
@@ -473,14 +503,14 @@ export async function getResolutionDate(
     const categoryMap = await getStatusCategoryMap();
     const statusTransitions = histories
       .filter((h) => h.items.some((it) => it.field === "status"))
-      .map((h) => ({
-        at: new Date(h.created).getTime(),
-        to: h.items.find((it) => it.field === "status")?.toString ?? "",
-      }));
+      .map((h) => {
+        const item = h.items.find((it) => it.field === "status");
+        return { at: new Date(h.created).getTime(), to: item?.toString ?? "", toId: item?.to ?? null };
+      });
 
     // Try first with category map, then fall back to regex pattern matching
-    let doneTransitions = statusTransitions.filter((t) => 
-      categoryMap.get(t.to.trim().toLowerCase()) === "done"
+    let doneTransitions = statusTransitions.filter(
+      (t) => statusCategory(categoryMap, t.to, t.toId) === "done"
     );
 
     // If no matches using the category map, try regex pattern matching
@@ -505,12 +535,18 @@ export async function getResolutionDate(
 }
 
 /** Status transitions from the changelog, oldest first. */
-function statusTransitions(issue: JiraIssue): { at: number; from: string; to: string }[] {
+function statusTransitions(
+  issue: JiraIssue
+): { at: number; from: string; fromId: string | null; to: string; toId: string | null }[] {
   return (issue.changelog?.histories ?? [])
     .filter((h) => h.items.some((it) => it.field === "status"))
     .map((h) => {
       const item = h.items.find((it) => it.field === "status");
-      return { at: new Date(h.created).getTime(), from: item?.fromString ?? "", to: item?.toString ?? "" };
+      return {
+        at: new Date(h.created).getTime(),
+        from: item?.fromString ?? "", fromId: item?.from ?? null,
+        to: item?.toString ?? "", toId: item?.to ?? null,
+      };
     })
     .sort((a, b) => a.at - b.at);
 }
@@ -527,7 +563,7 @@ function findFirstInProgressTransition(
 
   // Try first with category map for "indeterminate" (in progress)
   const byCategory = transitions.find(
-    (t) => categoryMap.get(t.to.trim().toLowerCase()) === "indeterminate"
+    (t) => statusCategory(categoryMap, t.to, t.toId) === "indeterminate"
   );
   if (byCategory) return byCategory;
 
@@ -551,17 +587,21 @@ export async function isNonDeliveryClosure(issue: JiraIssue): Promise<boolean> {
   if (issue.fields.assignee || !issue.changelog) return false;
 
   const categoryMap = await getStatusCategoryMap();
-  const category = (name: string) => categoryMap.get(name.trim().toLowerCase());
-  const isDoneName = (name: string) => (category(name) ? category(name) === "done" : DONE_NAME.test(name.trim()));
-  const isInProgressName = (name: string) =>
-    category(name) ? category(name) === "indeterminate" : IN_PROGRESS_NAME.test(name.trim());
+  const isDone = (name: string, id: string | null) => {
+    const cat = statusCategory(categoryMap, name, id);
+    return cat ? cat === "done" : DONE_NAME.test(name.trim());
+  };
+  const isInProgress = (name: string, id: string | null) => {
+    const cat = statusCategory(categoryMap, name, id);
+    return cat ? cat === "indeterminate" : IN_PROGRESS_NAME.test(name.trim());
+  };
 
   const closing = statusTransitions(issue)
     .reverse()
-    .find((t) => isDoneName(t.to) && !isDoneName(t.from));
+    .find((t) => isDone(t.to, t.toId) && !isDone(t.from, t.fromId));
   // QA/blocked statuses are to-do category in some of these workflows ("Ready for QA", "Blocked"),
   // but closing from them is the normal end of worked items, not a backlog cleanup.
-  if (closing) return !isInProgressName(closing.from) && !isQaStatus(closing.from) && !isBlockedStatus(closing.from);
+  if (closing) return !isInProgress(closing.from, closing.fromId) && !isQaStatus(closing.from) && !isBlockedStatus(closing.from);
   return !findFirstInProgressTransition(issue, categoryMap);
 }
 
@@ -647,12 +687,11 @@ export function isIssueCurrentlyBlocked(issue: JiraIssue): boolean {
 // named exactly "Done" and silently undercounts everywhere else (listo, terminado, resuelto...).
 export async function countReopenedIssues(issues: JiraIssue[]): Promise<number> {
   const categoryMap = await getStatusCategoryMap();
-  const isDoneStatusName = (name: string | null | undefined): boolean => {
+  const isDoneStatusName = (name: string | null | undefined, id?: string | null): boolean => {
     if (!name) return false;
-    const trimmed = name.trim();
-    const category = categoryMap.get(trimmed.toLowerCase());
+    const category = statusCategory(categoryMap, name, id);
     if (category) return category === "done";
-    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(trimmed);
+    return /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i.test(name.trim());
   };
 
   return issues.filter((issue) => {
@@ -664,10 +703,10 @@ export async function countReopenedIssues(issues: JiraIssue[]): Promise<number> 
     let sawDone = false;
     for (const transition of statusTransitions) {
       for (const item of transition.items) {
-        if (sawDone && isDoneStatusName(item.fromString) && !isDoneStatusName(item.toString)) {
+        if (sawDone && isDoneStatusName(item.fromString, item.from) && !isDoneStatusName(item.toString, item.to)) {
           return true;
         }
-        if (isDoneStatusName(item.toString)) {
+        if (isDoneStatusName(item.toString, item.to)) {
           sawDone = true;
         }
       }
