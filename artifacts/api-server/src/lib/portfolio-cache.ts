@@ -7,7 +7,7 @@ import {
   getResolvedJiraIssuesInRange,
   getLeadTimeDays,
   getCycleTimeDays,
-  getResolutionDate,
+  getDeliveryDate,
   isIssueDone,
   isIssueInProgress,
   mapIssueType,
@@ -51,7 +51,7 @@ async function computeWindowMetrics(filteredIssues: JiraIssue[], windowStart: Da
   const resolvedWithDates = await Promise.all(
     filteredIssues
       .filter((issue) => isIssueDone(issue))
-      .map(async (issue) => ({ issue, resolvedAt: await getResolutionDate(issue) }))
+      .map(async (issue) => ({ issue, resolvedAt: await getDeliveryDate(issue) }))
   );
 
   const inWindow = resolvedWithDates.filter(

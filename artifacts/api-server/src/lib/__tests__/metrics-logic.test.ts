@@ -18,6 +18,8 @@ import {
   getResolutionDate,
   getLeadTimeDays,
   getCycleTimeDays,
+  isNonDeliveryClosure,
+  getDeliveryDate,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -555,6 +557,8 @@ describe("wasIssueDoneAt", () => {
 // --- Resolution / lead / cycle time: the base of every flow metric -----------------------------
 // No Jira in tests -> the status-category map is empty, so these exercise the status-name
 // fallback (the path this site relies on for workflows that don't set a resolution).
+const dev = { displayName: "Dev", accountId: "dev-1" };
+
 describe("getResolutionDate / getLeadTimeDays / getCycleTimeDays", () => {
   const done = { status: { name: "Listo", statusCategory: { key: "done" } } };
 
@@ -595,16 +599,108 @@ describe("getResolutionDate / getLeadTimeDays / getCycleTimeDays", () => {
     expect(await getLeadTimeDays(issue)).toBeCloseTo(9, 5);
   });
 
-  it("cycle time falls back to lead time when no in-progress transition was recorded", async () => {
+  it("cycle time is null when the changelog shows the issue never went through in-progress", async () => {
     const issue = withStatusHistory(
-      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-03T00:00:00.000Z" } }),
+      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-03T00:00:00.000Z", assignee: dev } }),
       [{ from: "To Do", to: "Listo", at: "2026-09-03T00:00:00.000Z" }]
     );
+    expect(await getCycleTimeDays(issue)).toBeNull();
+    expect(await getLeadTimeDays(issue)).toBeCloseTo(2, 5);
+  });
+
+  it("cycle time falls back to lead time only when no changelog was fetched", async () => {
+    const issue = makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-03T00:00:00.000Z" } });
     expect(await getCycleTimeDays(issue)).toBeCloseTo(2, 5);
   });
 
   it("lead time is measured in fractional days", async () => {
     const issue = makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: new Date(Date.parse("2026-09-01T00:00:00.000Z") + 6 * 60 * 60 * 1000).toISOString() } });
     expect(await getLeadTimeDays(issue)).toBeCloseTo(0.25, 5);
+  });
+});
+
+// --- Done-category closures that aren't delivered work -----------------------------------------
+// OLP, 2026-10-14: ~20 stale, unassigned backlog items bulk-closed TO DO -> DONE ("Listo"), some
+// 600 days old, pushed the month's avg lead time from ~18 to 81 days. Cancelled items (OLI/RC
+// "Cancelado", done category) were likewise counted as throughput.
+describe("isNonDeliveryClosure / getDeliveryDate", () => {
+  const done = { status: { name: "DONE", statusCategory: { key: "done" } }, created: "2025-02-09T00:00:00.000Z" };
+  const toDoToDone = [{ from: "TO DO", to: "DONE", at: "2026-10-14T00:00:00.000Z" }];
+
+  it("unassigned + never in progress (backlog cleanup) is not delivery", async () => {
+    const issue = withStatusHistory(makeIssue({ fields: { ...done } }), toDoToDone);
+    expect(await isNonDeliveryClosure(issue)).toBe(true);
+    expect(await getDeliveryDate(issue)).toBeNull();
+    expect(await getLeadTimeDays(issue)).toBeNull();
+    expect(await getCycleTimeDays(issue)).toBeNull();
+  });
+
+  it("an assigned issue closed straight from TO DO (quick bug fix) is still delivery", async () => {
+    const issue = withStatusHistory(makeIssue({ fields: { ...done, assignee: dev } }), toDoToDone);
+    expect(await isNonDeliveryClosure(issue)).toBe(false);
+    expect((await getDeliveryDate(issue))?.toISOString()).toBe("2026-10-14T00:00:00.000Z");
+    expect(await getLeadTimeDays(issue)).not.toBeNull();
+  });
+
+  it("an unassigned issue that did go through in-progress is still delivery", async () => {
+    const issue = withStatusHistory(makeIssue({ fields: { ...done } }), [
+      { from: "TO DO", to: "En progreso", at: "2026-10-10T00:00:00.000Z" },
+      { from: "En progreso", to: "DONE", at: "2026-10-14T00:00:00.000Z" },
+    ]);
+    expect(await isNonDeliveryClosure(issue)).toBe(false);
+  });
+
+  it("unassigned, worked once but parked back in TO DO and closed from there, is not delivery", async () => {
+    // OLP-3719: DEV in Progress -> TO DO in June, closed TO DO -> DONE in the October cleanup.
+    const issue = withStatusHistory(makeIssue({ fields: { ...done } }), [
+      { from: "TO DO", to: "En progreso", at: "2026-05-07T00:00:00.000Z" },
+      { from: "En progreso", to: "TO DO", at: "2026-06-01T00:00:00.000Z" },
+      { from: "TO DO", to: "DONE", at: "2026-10-14T00:00:00.000Z" },
+    ]);
+    expect(await isNonDeliveryClosure(issue)).toBe(true);
+    expect(await getLeadTimeDays(issue)).toBeNull();
+  });
+
+  it("unassigned, closed from a QA or blocked status (to-do category in some workflows), is still delivery", async () => {
+    for (const from of ["Ready for QA", "Blocked"]) {
+      const issue = withStatusHistory(makeIssue({ fields: { ...done } }), [
+        { from: "TO DO", to: "En progreso", at: "2026-10-01T00:00:00.000Z" },
+        { from: "En progreso", to: from, at: "2026-10-10T00:00:00.000Z" },
+        { from, to: "DONE", at: "2026-10-14T00:00:00.000Z" },
+      ]);
+      expect(await isNonDeliveryClosure(issue)).toBe(false);
+    }
+  });
+
+  it("the same path with an assignee is still delivery", async () => {
+    const issue = withStatusHistory(makeIssue({ fields: { ...done, assignee: dev } }), [
+      { from: "TO DO", to: "En progreso", at: "2026-05-07T00:00:00.000Z" },
+      { from: "En progreso", to: "TO DO", at: "2026-06-01T00:00:00.000Z" },
+      { from: "TO DO", to: "DONE", at: "2026-10-14T00:00:00.000Z" },
+    ]);
+    expect(await isNonDeliveryClosure(issue)).toBe(false);
+  });
+
+  it("without a changelog there's no evidence it was never worked: delivery", async () => {
+    const issue = makeIssue({ fields: { ...done, resolutiondate: "2026-10-14T00:00:00.000Z" } });
+    expect(await isNonDeliveryClosure(issue)).toBe(false);
+  });
+
+  it("a cancelled issue is not delivery, even assigned and worked", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, status: { name: "Cancelado", statusCategory: { key: "done" } }, assignee: dev } }),
+      [
+        { from: "TO DO", to: "En progreso", at: "2026-10-10T00:00:00.000Z" },
+        { from: "En progreso", to: "Cancelado", at: "2026-10-14T00:00:00.000Z" },
+      ]
+    );
+    expect(await isNonDeliveryClosure(issue)).toBe(true);
+    expect(await getDeliveryDate(issue)).toBeNull();
+  });
+
+  it("an issue that isn't done is never a non-delivery closure", async () => {
+    const issue = makeIssue();
+    expect(await isNonDeliveryClosure(issue)).toBe(false);
+    expect(await getDeliveryDate(issue)).toBeNull();
   });
 });

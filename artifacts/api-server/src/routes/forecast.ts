@@ -3,7 +3,7 @@ import { requireAuth, requireSectionView } from "../middleware/auth";
 import {
   getJiraIssuesForProject,
   isIssueDone,
-  getResolutionDate,
+  getDeliveryDate,
   periodToDays,
   getStoryPoints,
   getLeadTimeDays,
@@ -104,7 +104,7 @@ router.post(
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({
         issue: i,
-        resolvedAt: await getResolutionDate(i),
+        resolvedAt: await getDeliveryDate(i),
       }))
     );
     const resolved = resolvedWithDates

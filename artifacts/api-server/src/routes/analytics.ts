@@ -14,6 +14,7 @@ import {
   isIssueDone,
   isIssueInProgress,
   getResolutionDate,
+  getDeliveryDate,
   getCycleTimeDays,
   getLeadTimeDays,
   getStoryPoints,
@@ -214,7 +215,7 @@ export async function computePeriodMetrics(
   const resolvedWithDates = await Promise.all(
     issues.filter((i) => isIssueDone(i)).map(async (i) => ({
       issue: i,
-      resolvedAt: await getResolutionDate(i),
+      resolvedAt: await getDeliveryDate(i),
     }))
   );
   const resolved = resolvedWithDates

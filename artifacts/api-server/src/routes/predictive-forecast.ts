@@ -4,7 +4,7 @@ import {
   getJiraIssuesForProject,
   periodToDays,
   isIssueDone,
-  getResolutionDate,
+  getDeliveryDate,
   getEffectiveIssueType,
 } from "../lib/jira";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
@@ -28,7 +28,7 @@ router.post(
 
     const windowDays = windowWeeks * 7;
     const [allIssues, allowedIssueTypes] = await Promise.all([
-      // includeChangelog: required for getResolutionDate()'s changelog fallback — without it, a Done
+      // includeChangelog: required for getDeliveryDate()'s changelog fallback — without it, a Done
       // issue lacking an explicit resolutiondate field would silently drop out of every week's count.
       getJiraIssuesForProject(projectId, windowDays, { includeChangelog: true }),
       getPortfolioAllowedIssueTypes(),
@@ -37,7 +37,7 @@ router.post(
 
     const resolvedDates = (
       await Promise.all(
-        issues.filter((i) => isIssueDone(i)).map((i) => getResolutionDate(i))
+        issues.filter((i) => isIssueDone(i)).map((i) => getDeliveryDate(i))
       )
     ).filter((d): d is Date => d !== null);
 

@@ -7,7 +7,7 @@ import {
   getProjectBoardType,
   isValidPeriodOrSprintWindow,
   resolvePeriodDays,
-  getResolutionDate,
+  getDeliveryDate,
   getCycleTimeDays,
   getLeadTimeDays,
   getStoryPoints,
@@ -97,7 +97,7 @@ router.get(
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({
         issue: i,
-        resolvedAt: await getResolutionDate(i),
+        resolvedAt: await getDeliveryDate(i),
       }))
     );
     const resolved = resolvedWithDates

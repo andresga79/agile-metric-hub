@@ -504,10 +504,80 @@ export async function getResolutionDate(
   return null;
 }
 
+/** Status transitions from the changelog, oldest first. */
+function statusTransitions(issue: JiraIssue): { at: number; from: string; to: string }[] {
+  return (issue.changelog?.histories ?? [])
+    .filter((h) => h.items.some((it) => it.field === "status"))
+    .map((h) => {
+      const item = h.items.find((it) => it.field === "status");
+      return { at: new Date(h.created).getTime(), from: item?.fromString ?? "", to: item?.toString ?? "" };
+    })
+    .sort((a, b) => a.at - b.at);
+}
+
+const IN_PROGRESS_NAME = /^(in progress|en progreso|en proceso|in development|en desarrollo|working|trabajando)$/i;
+const DONE_NAME = /^(done|listo|terminado|finalizada|cerrado|resuelto|closed|resolved)$/i;
+
+/** First status transition into an in-progress ("indeterminate") status, from the changelog. */
+function findFirstInProgressTransition(
+  issue: JiraIssue,
+  categoryMap: Map<string, string>
+): { at: number; to: string } | undefined {
+  const transitions = statusTransitions(issue);
+
+  // Try first with category map for "indeterminate" (in progress)
+  const byCategory = transitions.find(
+    (t) => categoryMap.get(t.to.trim().toLowerCase()) === "indeterminate"
+  );
+  if (byCategory) return byCategory;
+
+  // If not found using category map, try regex pattern for in-progress statuses
+  return transitions.find((t) => IN_PROGRESS_NAME.test(t.to.trim()));
+}
+
+const CANCELLED_STATUS = /cancel|descartad|anulad|won'?t do/i;
+
+/** A done-category closure that isn't delivered work, so it must stay out of flow metrics
+ *  (throughput, lead/cycle time, SLA): a cancelled issue ("Cancelado" is done category here), or
+ *  backlog cleanup — unassigned and closed straight from a to-do status (TO DO -> DONE),
+ *  per its changelog. OLP closed ~20 such items on 2026-10-14, some 600 days old, and the month's
+ *  avg lead time went from ~20 to 81 days. That includes items that touched in-progress long ago
+ *  (or for minutes, by mistake) and were parked back in TO DO, so "ever in progress" isn't enough.
+ *  Assigned issues closed straight from TO DO stay in: teams close quick bug fixes that way.
+ *  Without a changelog there's no evidence it wasn't worked, so it counts. */
+export async function isNonDeliveryClosure(issue: JiraIssue): Promise<boolean> {
+  if (!isIssueDone(issue)) return false;
+  if (CANCELLED_STATUS.test(issue.fields.status.name)) return true;
+  if (issue.fields.assignee || !issue.changelog) return false;
+
+  const categoryMap = await getStatusCategoryMap();
+  const category = (name: string) => categoryMap.get(name.trim().toLowerCase());
+  const isDoneName = (name: string) => (category(name) ? category(name) === "done" : DONE_NAME.test(name.trim()));
+  const isInProgressName = (name: string) =>
+    category(name) ? category(name) === "indeterminate" : IN_PROGRESS_NAME.test(name.trim());
+
+  const closing = statusTransitions(issue)
+    .reverse()
+    .find((t) => isDoneName(t.to) && !isDoneName(t.from));
+  // QA/blocked statuses are to-do category in some of these workflows ("Ready for QA", "Blocked"),
+  // but closing from them is the normal end of worked items, not a backlog cleanup.
+  if (closing) return !isInProgressName(closing.from) && !isQaStatus(closing.from) && !isBlockedStatus(closing.from);
+  return !findFirstInProgressTransition(issue, categoryMap);
+}
+
+/** getResolutionDate for delivered work only: null for isNonDeliveryClosure issues. Use it to
+ *  build "resolved in the window" sets for flow metrics; getResolutionDate stays for status
+ *  timelines (CFD, time in status), where a cleanup closure is still a real transition. */
+export async function getDeliveryDate(issue: JiraIssue): Promise<Date | null> {
+  if (await isNonDeliveryClosure(issue)) return null;
+  return getResolutionDate(issue);
+}
+
 /** Lead time (days) = from issue creation to resolution. Total elapsed time,
- * including time spent waiting in the backlog. */
+ * including time spent waiting in the backlog. Null for non-delivery closures. */
 export async function getLeadTimeDays(issue: JiraIssue): Promise<number | null> {
   if (!isIssueDone(issue)) return null;
+  if (await isNonDeliveryClosure(issue)) return null;
   const resolved = await getResolutionDate(issue);
   if (!resolved) return null;
   const created = new Date(issue.fields.created).getTime();
@@ -515,44 +585,21 @@ export async function getLeadTimeDays(issue: JiraIssue): Promise<number | null> 
 }
 
 /** Cycle time (days) = from when active work started (first transition into an
- * "in progress" status) to resolution. Falls back to lead time when no such
- * transition is recorded in the changelog. */
+ * "in progress" status) to resolution. Null when the changelog shows the issue never went
+ * through in-progress (no active work to measure — falling back to lead time there let a
+ * 600-day backlog closure count as 600 days of work). Falls back to lead time only when no
+ * changelog was fetched at all. */
 export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null> {
   if (!isIssueDone(issue)) return null;
+  if (await isNonDeliveryClosure(issue)) return null;
   const resolved = await getResolutionDate(issue);
   if (!resolved) return null;
-  const resolvedMs = resolved.getTime();
 
-  const histories = issue.changelog?.histories ?? [];
-  if (histories.length > 0) {
-    const categoryMap = await getStatusCategoryMap();
-    const transitions = histories
-      .filter((h) => h.items.some((it) => it.field === "status"))
-      .map((h) => ({
-        at: new Date(h.created).getTime(),
-        to: h.items.find((it) => it.field === "status")?.toString ?? "",
-      }))
-      .sort((a, b) => a.at - b.at);
+  if (!issue.changelog) return getLeadTimeDays(issue);
 
-    // Try first with category map for "indeterminate" (in progress)
-    let firstInProgress = transitions.find(
-      (t) => categoryMap.get(t.to.trim().toLowerCase()) === "indeterminate"
-    );
-
-    // If not found using category map, try regex pattern for in-progress statuses
-    if (!firstInProgress) {
-      firstInProgress = transitions.find((t) =>
-        /^(in progress|en progreso|en proceso|in development|en desarrollo|working|trabajando)$/i.test(t.to.trim())
-      );
-    }
-
-    if (firstInProgress) {
-      return (resolvedMs - firstInProgress.at) / (1000 * 60 * 60 * 24);
-    }
-  }
-
-  // No changelog / no in-progress transition recorded: fall back to lead time.
-  return getLeadTimeDays(issue);
+  const firstInProgress = findFirstInProgressTransition(issue, await getStatusCategoryMap());
+  if (!firstInProgress) return null;
+  return (resolved.getTime() - firstInProgress.at) / (1000 * 60 * 60 * 24);
 }
 
 /** Matches status names like "Blocked", "Bloqueado", "Impediment", "Obstáculo" (case-insensitive). */

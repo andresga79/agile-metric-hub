@@ -4,7 +4,7 @@ import { logger } from "./logger";
 import {
   isIssueDone,
   getEffectiveIssueType,
-  getResolutionDate,
+  getDeliveryDate,
   getLeadTimeDays,
   getCycleTimeDays,
   getQaStatusSet,
@@ -73,7 +73,7 @@ export async function computeWeeklySnapshots(
 
   const resolvedIssues = await Promise.all(
     doneIssues.map(async (issue) => ({
-      resolvedAt: await getResolutionDate(issue),
+      resolvedAt: await getDeliveryDate(issue),
       leadTime: await getLeadTimeDays(issue),
       cycleTime: await getCycleTimeDays(issue),
     }))

@@ -73,6 +73,20 @@ en 2025/2026 (el 1/1/2026 salía "W00").
 
 ## Métricas de flujo
 
+### Qué cuenta como "resuelto" (cierres que no son entrega)
+Throughput, lead/cycle time, SLA, forecast, portfolio y snapshots de Evolution cuentan solo trabajo
+**entregado** (`getDeliveryDate` / `isNonDeliveryClosure`, `lib/jira.ts`). Quedan afuera los issues
+de categoría done que son:
+- **Cancelados**: estado `Cancelado` (o *cancel/descartad/anulad/won't do*), que Jira pone en
+  categoría done.
+- **Limpieza de backlog**: **sin asignado** y cuyo último paso a done vino desde un estado "por
+  hacer" (ej. `TO DO → DONE`; no cuenta como limpieza si viene de un estado de QA o bloqueado),
+  aunque alguna vez haya tocado in-progress. Caso real: OLP, 2026-10-14, ~25 issues de hasta 600
+  días cerrados en bloque llevaron el lead time del mes de ~20 a 81 días.
+Un issue **asignado** que se cierra directo desde TO DO (bugs rápidos) sí cuenta. Sin changelog no
+hay evidencia de limpieza y cuenta. CFD y Time in Status siguen usando `getResolutionDate` (ahí el
+cierre es una transición real).
+
 ### Throughput
 Issues resueltos por semana. `resolved.length / weeks`, con `weeks = ceil(periodDays/7)`.
 (`routes/project-health.ts`; `/metrics` expone en cambio el **conteo total** del período como
@@ -85,7 +99,9 @@ proyectos visibles (los últimos 90 días).
 Días desde que **empezó el trabajo activo** hasta la resolución. Inicio = **primera** transición
 del changelog hacia un estado de categoría `"indeterminate"` (in-progress); fin = fecha de
 resolución. (`getCycleTimeDays`, `lib/jira.ts`)
-**Fallback:** si no hay changelog o no hay transición a in-progress, devuelve el Lead Time.
+**Sin transición a in-progress** (según el changelog): cycle time **null**, el issue no entra al
+promedio (antes caía al Lead Time y un cierre directo de backlog sumaba como meses de trabajo).
+**Fallback a Lead Time** solo si no se pidió el changelog.
 El changelog es el **completo**: la búsqueda de Jira lo recorta a 40 entradas descartando las más
 viejas, y se completa con `/issue/{key}/changelog` (`completeTruncatedChangelogs`). Sin eso el
 inicio caía en una entrada a in-progress posterior y el cycle time salía corto (OLP 3m: 31.9 →

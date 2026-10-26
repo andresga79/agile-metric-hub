@@ -4,7 +4,7 @@ import {
   getJiraIssuesForProject,
   periodToDays,
   isIssueDone,
-  getResolutionDate,
+  getDeliveryDate,
   getLeadTimeDays,
 } from "../lib/jira";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
@@ -55,7 +55,7 @@ router.get(
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({
         issue: i,
-        resolvedAt: await getResolutionDate(i),
+        resolvedAt: await getDeliveryDate(i),
       }))
     );
     const resolved = resolvedWithDates

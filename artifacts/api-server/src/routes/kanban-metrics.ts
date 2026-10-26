@@ -6,7 +6,7 @@ import {
   isIssueDone,
   getStoryPoints,
   getCycleTimeDays,
-  getResolutionDate,
+  getDeliveryDate,
   countReopenedIssues,
   periodToDays,
   mapIssueType,
@@ -134,7 +134,7 @@ router.get(
     const resolvedDates = await Promise.all(
       doneIssues.map(async (issue) => ({
         issue,
-        resolvedAt: await getResolutionDate(issue),
+        resolvedAt: await getDeliveryDate(issue),
       }))
     );
 

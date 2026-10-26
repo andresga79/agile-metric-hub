@@ -15,6 +15,7 @@ import {
   getLeadTimeDays,
   getCycleTimeDays,
   getResolutionDate,
+  getDeliveryDate,
   getJiraSprints,
   resolveSprintWindowDays,
   resolvePeriodDays,
@@ -117,7 +118,7 @@ async function computeMetrics(
       .filter((i) => isIssueDone(i))
       .map(async (i) => ({
         issue: i,
-        resolvedAt: await getResolutionDate(i),
+        resolvedAt: await getDeliveryDate(i),
       }))
   );
   const resolved = resolvedWithDates
@@ -280,7 +281,7 @@ async function computePreviousPeriodSummary(
     .filter((i) => isIssueDone(i))
     .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
     .filter((i) => !assigneeAccountId || i.fields.assignee?.accountId === assigneeAccountId);
-  const resolvedAt = await Promise.all(candidates.map((i) => getResolutionDate(i)));
+  const resolvedAt = await Promise.all(candidates.map((i) => getDeliveryDate(i)));
   const filtered = candidates.filter((_, idx) => {
     const d = resolvedAt[idx];
     return d != null && d >= prevStart && d < prevEnd;
@@ -609,7 +610,7 @@ router.get(
       const assignee = issue.fields.assignee;
       if (!assignee) continue;
 
-      const resolvedAt = await getResolutionDate(issue);
+      const resolvedAt = await getDeliveryDate(issue);
       if (!isIssueDone(issue) || !resolvedAt || !isWithinWindow(resolvedAt)) continue;
 
       const member = getOrCreateMember(assignee);

@@ -6,7 +6,7 @@ import {
   getProjectBoardType,
   getEffectiveIssueType,
   isIssueDone,
-  getResolutionDate,
+  getDeliveryDate,
   isValidPeriodOrSprintWindow,
   resolvePeriodDays,
 } from "../lib/jira";
@@ -59,7 +59,7 @@ router.get(
     const resolvedWithDates = await Promise.all(
       uniqueIssues.filter((i) => isIssueDone(i)).map(async (i) => ({
         issue: i,
-        resolvedAt: await getResolutionDate(i),
+        resolvedAt: await getDeliveryDate(i),
       }))
     );
 
