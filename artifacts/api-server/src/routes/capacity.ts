@@ -11,6 +11,7 @@ import {
   getSprintIssues,
   getStoryPoints,
   isIssueDone,
+  isNonDeliveryClosure,
   wasIssueDoneAt,
   sprintCloseTime,
   getStatusCategoryMap,
@@ -73,15 +74,22 @@ async function loadSprintIssues(
 ): Promise<CapacityIssue[]> {
   const issues = await getSprintIssues(sprint.id);
   const closeTime = sprintCloseTime(sprint);
-  return issues
+  const doneAtClose = (i: JiraIssue): boolean =>
+    closeTime ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i);
+  const typed = issues
     .filter((i: JiraIssue) => i.key.startsWith(`${projectKey}-`))
-    .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)))
+    .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+  // Same rule as the Sprints tab (computeSprintMetrics): a cancellation / backlog cleanup already
+  // closed by the sprint's end is neither scope nor delivered work.
+  const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
+  return typed
+    .filter((i, idx) => !(nonDelivery[idx] && doneAtClose(i)))
     .map((i) => ({
       key: i.key,
       accountId: i.fields.assignee?.accountId ?? null,
       displayName: i.fields.assignee?.displayName ?? null,
       storyPoints: getStoryPoints(i),
-      done: closeTime ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i),
+      done: doneAtClose(i),
     }));
 }
 

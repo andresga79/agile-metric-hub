@@ -6,7 +6,9 @@ import {
   isIssueDone,
   getDeliveryDate,
   getLeadTimeDays,
+  getEffectiveIssueType,
 } from "../lib/jira";
+import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
 
 const router: IRouter = Router();
@@ -47,10 +49,15 @@ router.get(
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
-    const [issues, thresholds] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays),
+    const [allIssues, thresholds, allowedIssueTypes] = await Promise.all([
+      // includeChangelog: getDeliveryDate needs it to spot backlog cleanups (and to date the many
+      // done issues without resolutiondate from the changelog instead of `updated`).
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
       getEffectiveThresholds(projectId),
+      getPortfolioAllowedIssueTypes(),
     ]);
+    // Same issue types as every other flow metric. Unfiltered, OLI's SLA was ~70% QA Tests.
+    const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
 
     const resolvedWithDates = await Promise.all(
       issues.filter((i) => isIssueDone(i)).map(async (i) => ({

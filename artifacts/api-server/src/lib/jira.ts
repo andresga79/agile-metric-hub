@@ -565,6 +565,13 @@ export async function isNonDeliveryClosure(issue: JiraIssue): Promise<boolean> {
   return !findFirstInProgressTransition(issue, categoryMap);
 }
 
+/** `issues` minus isNonDeliveryClosure ones, order kept. For issue sets that aren't built from
+ *  getDeliveryDate (sprint contents, time-in-status) but must agree with the flow metrics. */
+export async function withoutNonDeliveryClosures(issues: JiraIssue[]): Promise<JiraIssue[]> {
+  const flags = await Promise.all(issues.map((i) => isNonDeliveryClosure(i)));
+  return issues.filter((_, idx) => !flags[idx]);
+}
+
 /** getResolutionDate for delivered work only: null for isNonDeliveryClosure issues. Use it to
  *  build "resolved in the window" sets for flow metrics; getResolutionDate stays for status
  *  timelines (CFD, time in status), where a cleanup closure is still a real transition. */

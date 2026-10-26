@@ -5,6 +5,7 @@ import {
   getJiraSprints,
   getSprintIssues,
   isIssueDone,
+  isNonDeliveryClosure,
   getStoryPoints,
   getCycleTimeDays,
   countReopenedIssues,
@@ -81,14 +82,21 @@ export async function computeSprintMetrics(
   allowedIssueTypes: string[],
   allSprints: JiraSprint[]
 ): Promise<SprintMetric> {
-  const filtered = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
   // A closed sprint completed only what was done when it closed - not work carried over and
   // finished in a later sprint (see wasIssueDoneAt). An active sprint uses the current status.
   const closeTime = sprintCloseTime(sprint);
   const categoryMap = closeTime ? await getStatusCategoryMap() : null;
-  const doneIssues = filtered.filter((i) =>
-    closeTime && categoryMap ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i)
-  );
+  const doneAtClose = (i: JiraIssue): boolean =>
+    closeTime && categoryMap ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i);
+
+  // A cancellation / backlog cleanup already closed by the sprint's end is neither scope nor
+  // completed work (isNonDeliveryClosure). OLI's board doesn't treat "Cancelado" as done, so Jira
+  // carries each one into every following sprint and it was "completed" in all of them (OLI-3629:
+  // sprints 46-49). One closed only after this sprint ended was real, unfinished scope here.
+  const typed = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+  const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
+  const filtered = typed.filter((i, idx) => !(nonDelivery[idx] && doneAtClose(i)));
+  const doneIssues = filtered.filter(doneAtClose);
   const totalSp = filtered.reduce((sum, i) => sum + getStoryPoints(i), 0);
   const doneSp = doneIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 

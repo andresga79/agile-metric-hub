@@ -5,6 +5,7 @@ import {
   isIssueDone,
   getEffectiveIssueType,
   getDeliveryDate,
+  withoutNonDeliveryClosures,
   getLeadTimeDays,
   getCycleTimeDays,
   getQaStatusSet,
@@ -270,8 +271,12 @@ export async function computeSprintSnapshot(
   // Same "completed at sprint close" rule as computeSprintMetrics, so Evolution's per-sprint
   // throughput matches the Sprints tab instead of growing as carried-over work gets finished.
   const closeTime = sprintCloseTime(sprint);
-  const doneIssues = filteredIssues.filter((issue) =>
-    closeTime ? wasIssueDoneAt(issue, closeTime, categoryMap) : isIssueDone(issue)
+  // Cancellations / backlog cleanups closed within the sprint aren't delivery: same rule as every
+  // other throughput (isNonDeliveryClosure), and their lead/cycle time is already null.
+  const doneIssues = await withoutNonDeliveryClosures(
+    filteredIssues.filter((issue) =>
+      closeTime ? wasIssueDoneAt(issue, closeTime, categoryMap) : isIssueDone(issue)
+    )
   );
 
   const resolvedIssues = await Promise.all(

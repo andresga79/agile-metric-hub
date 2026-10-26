@@ -15,6 +15,7 @@ import {
   isIssueInProgress,
   getResolutionDate,
   getDeliveryDate,
+  withoutNonDeliveryClosures,
   getCycleTimeDays,
   getLeadTimeDays,
   getStoryPoints,
@@ -629,7 +630,12 @@ router.get(
     // workflows living in the same project (SOLVIX, UX/UI, etc.) don't pollute
     // the flow view. Falls back to all statuses when no board is available.
     const boardStatusNames = await getBoardStatusNames(projectId);
-    const timeInStatus = await computeTimeInStatus(timeInStatusIssues, boardStatusNames);
+    // Backlog cleanups / cancellations sat in TO DO for months without being worked: left in, they
+    // made TO DO the "structural bottleneck" (OLP: 58 days avg after the 2026-10-14 cleanup).
+    const timeInStatus = await computeTimeInStatus(
+      await withoutNonDeliveryClosures(timeInStatusIssues),
+      boardStatusNames
+    );
     const structuralBottleneck = detectStructuralBottleneck(timeInStatus);
 
     // --- Period-over-Period (#3) ---

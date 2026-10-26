@@ -84,8 +84,15 @@ de categoría done que son:
   aunque alguna vez haya tocado in-progress. Caso real: OLP, 2026-10-14, ~25 issues de hasta 600
   días cerrados en bloque llevaron el lead time del mes de ~20 a 81 días.
 Un issue **asignado** que se cierra directo desde TO DO (bugs rápidos) sí cuenta. Sin changelog no
-hay evidencia de limpieza y cuenta. CFD y Time in Status siguen usando `getResolutionDate` (ahí el
-cierre es una transición real).
+hay evidencia de limpieza y cuenta (por eso toda consulta que alimenta estas métricas pide el
+changelog, incluidos SLA y Forecast). El CFD sigue usando `getResolutionDate`: ahí el cierre es una
+transición real.
+**Sprints, Evolution por sprint y Capacity**: un cierre sin entrega que **ya estaba cerrado al
+terminar el sprint** queda fuera del sprint (ni alcance ni completado). Si se limpió después, sigue
+contando como alcance no completado en los sprints donde estuvo. Caso real: el board de OLI no toma
+"Cancelado" como terminado, así que Jira arrastraba cada cancelado al sprint siguiente y la app lo
+contaba como completado en todos (OLI-3629: sprints 46-49; 7 completados de más por sprint).
+(`computeSprintMetrics`, `computeSprintSnapshot`, `loadSprintIssues` en `routes/capacity.ts`)
 
 ### Throughput
 Issues resueltos por semana. `resolved.length / weeks`, con `weeks = ceil(periodDays/7)`.
@@ -140,7 +147,8 @@ es `normalize(wipRatio, warning, good)`.
 Por issue, recorre el changelog sumando la duración en cada estado (desde `created`, cerrando en
 la resolución o en "ahora" si sigue abierto). Por estado reporta `totalDays`, `avgDays`,
 `medianDays`, `issueCount`; se ordena por `avgDays` descendente. (`computeTimeInStatus`,
-`routes/analytics.ts`)
+`routes/analytics.ts`) Excluye los cierres sin entrega (`withoutNonDeliveryClosures`): con sus
+meses en TO DO, la limpieza de OLP del 2026-10-14 subía "TO DO" a 58 días de promedio (27 sin ella).
 
 ### WIP Aging
 Antigüedad (días) de cada issue en progreso desde su **última** entrada a in-progress (fallback:
@@ -241,7 +249,9 @@ Resumen es `bloqueadosAhora / WIP` (currently-blocked sobre WIP, no sobre el his
 
 ## SLA
 
-Compliance por prioridad, con base en **Lead Time** (no cycle time). Un issue "cumple" si
+Compliance por prioridad, con base en **Lead Time** (no cycle time), sobre los resueltos (entregados)
+de los **tipos permitidos en Admin**, igual que el resto de las métricas de flujo (hasta 2026-10-26
+no filtraba por tipo y el SLA de OLI era ~70% Tests de QA). Un issue "cumple" si
 `leadTime <= objetivo` de su prioridad. `compliance% = (dentroDeSLA / total) * 100` por prioridad.
 (`sla.ts`)
 Objetivos configurables en Admin, mapeados por prioridad:

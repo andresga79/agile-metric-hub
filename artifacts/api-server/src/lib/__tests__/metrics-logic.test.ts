@@ -20,6 +20,7 @@ import {
   getCycleTimeDays,
   isNonDeliveryClosure,
   getDeliveryDate,
+  withoutNonDeliveryClosures,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -696,6 +697,13 @@ describe("isNonDeliveryClosure / getDeliveryDate", () => {
     );
     expect(await isNonDeliveryClosure(issue)).toBe(true);
     expect(await getDeliveryDate(issue)).toBeNull();
+  });
+
+  it("withoutNonDeliveryClosures drops cleanups and cancellations, keeps open and delivered issues", async () => {
+    const cleanup = withStatusHistory(makeIssue({ key: "C-1", fields: { ...done } }), toDoToDone);
+    const delivered = withStatusHistory(makeIssue({ key: "D-1", fields: { ...done, assignee: dev } }), toDoToDone);
+    const open = makeIssue({ key: "O-1" });
+    expect((await withoutNonDeliveryClosures([cleanup, delivered, open])).map((i) => i.key)).toEqual(["D-1", "O-1"]);
   });
 
   it("an issue that isn't done is never a non-delivery closure", async () => {

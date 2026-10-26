@@ -94,7 +94,9 @@ router.post(
     // Monte Carlo results off the identical underlying 90-day dataset).
     const periodDays = capLookbackDays(body.windowDays ?? 90);
     const [allIssues, allowedIssueTypes] = await Promise.all([
-      getJiraIssuesForProject(projectId, periodDays),
+      // includeChangelog: getDeliveryDate needs it to spot backlog cleanups (and to date the many
+      // done issues without resolutiondate from the changelog instead of `updated`).
+      getJiraIssuesForProject(projectId, periodDays, { includeChangelog: true }),
       getPortfolioAllowedIssueTypes(),
     ]);
     const issues = allIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
