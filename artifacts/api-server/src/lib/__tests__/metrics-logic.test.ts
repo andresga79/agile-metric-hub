@@ -588,18 +588,75 @@ describe("getResolutionDate / getLeadTimeDays / getCycleTimeDays", () => {
     expect(await getCycleTimeDays(issue)).toBeNull();
   });
 
-  it("cycle time runs from the FIRST in-progress transition to resolution", async () => {
+  it("cycle time runs from the first in-progress transition (no pause) to resolution", async () => {
     const issue = withStatusHistory(
-      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-10T00:00:00.000Z" } }),
+      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-10T00:00:00.000Z", assignee: dev } }),
       [
         { from: "To Do", to: "En progreso", at: "2026-09-03T00:00:00.000Z" },
-        { from: "En progreso", to: "To Do", at: "2026-09-04T00:00:00.000Z" },
-        { from: "To Do", to: "En progreso", at: "2026-09-06T00:00:00.000Z" },
-        { from: "En progreso", to: "Listo", at: "2026-09-10T00:00:00.000Z" },
+        { from: "En progreso", to: "En revisión", at: "2026-09-06T00:00:00.000Z" },
+        { from: "En revisión", to: "Listo", at: "2026-09-10T00:00:00.000Z" },
       ]
     );
     expect(await getCycleTimeDays(issue)).toBeCloseTo(7, 5);
     expect(await getLeadTimeDays(issue)).toBeCloseTo(9, 5);
+  });
+
+  // Work paused back to the backlog restarts the clock: OLP-3751 was in DEV in May, sat in TO DO
+  // until August, then took 2 weeks — 95 days of "cycle time" from the first start.
+  it("cycle time restarts at the first in-progress after the issue last went back to the backlog", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-05-01T00:00:00.000Z", resolutiondate: "2026-08-24T00:00:00.000Z", assignee: dev } }),
+      [
+        { from: "TO DO", to: "En progreso", at: "2026-05-20T00:00:00.000Z" },
+        { from: "En progreso", to: "TO DO", at: "2026-06-01T00:00:00.000Z" },
+        { from: "TO DO", to: "En progreso", at: "2026-08-10T00:00:00.000Z" },
+        { from: "En progreso", to: "Listo", at: "2026-08-24T00:00:00.000Z" },
+      ]
+    );
+    expect(await getCycleTimeDays(issue)).toBeCloseTo(14, 5);
+  });
+
+  it("a brief triage stop in progress before going to the backlog doesn't start the clock", async () => {
+    // OLP-3789: En Cola -> En curso -> TO DO within minutes of creation, worked 82 days later.
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-06-04T00:00:00.000Z", resolutiondate: "2026-09-06T00:00:00.000Z", assignee: dev } }),
+      [
+        { from: "En Cola", to: "En progreso", at: "2026-06-04T00:05:00.000Z" },
+        { from: "En progreso", to: "TO DO", at: "2026-06-04T00:10:00.000Z" },
+        { from: "TO DO", to: "Ready for DEV", at: "2026-08-25T00:00:00.000Z" },
+        { from: "Ready for DEV", to: "En progreso", at: "2026-08-26T00:00:00.000Z" },
+        { from: "En progreso", to: "Listo", at: "2026-09-06T00:00:00.000Z" },
+      ]
+    );
+    expect(await getCycleTimeDays(issue)).toBeCloseTo(11, 5);
+  });
+
+  it("queues inside the flow (Ready for QA, Blocked) don't restart the clock", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-09-01T00:00:00.000Z", resolutiondate: "2026-09-20T00:00:00.000Z", assignee: dev } }),
+      [
+        { from: "TO DO", to: "En progreso", at: "2026-09-05T00:00:00.000Z" },
+        { from: "En progreso", to: "Ready for QA", at: "2026-09-10T00:00:00.000Z" },
+        { from: "Ready for QA", to: "En progreso", at: "2026-09-12T00:00:00.000Z" },
+        { from: "En progreso", to: "Blocked", at: "2026-09-14T00:00:00.000Z" },
+        { from: "Blocked", to: "En progreso", at: "2026-09-16T00:00:00.000Z" },
+        { from: "En progreso", to: "Listo", at: "2026-09-20T00:00:00.000Z" },
+      ]
+    );
+    expect(await getCycleTimeDays(issue)).toBeCloseTo(15, 5);
+  });
+
+  it("closed straight from the backlog after a pause: no cycle time (lead time still counts)", async () => {
+    const issue = withStatusHistory(
+      makeIssue({ fields: { ...done, created: "2026-05-01T00:00:00.000Z", resolutiondate: "2026-09-01T00:00:00.000Z", assignee: dev } }),
+      [
+        { from: "TO DO", to: "En progreso", at: "2026-05-10T00:00:00.000Z" },
+        { from: "En progreso", to: "TO DO", at: "2026-05-20T00:00:00.000Z" },
+        { from: "TO DO", to: "Listo", at: "2026-09-01T00:00:00.000Z" },
+      ]
+    );
+    expect(await getCycleTimeDays(issue)).toBeNull();
+    expect(await getLeadTimeDays(issue)).toBeCloseTo(123, 5);
   });
 
   it("cycle time is null when the changelog shows the issue never went through in-progress", async () => {

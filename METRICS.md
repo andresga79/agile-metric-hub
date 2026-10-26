@@ -103,9 +103,16 @@ En el Resumen Ejecutivo la tarjeta "Throughput (90d)" es la **suma de `doneCount
 proyectos visibles (los últimos 90 días).
 
 ### Cycle Time
-Días desde que **empezó el trabajo activo** hasta la resolución. Inicio = **primera** transición
-del changelog hacia un estado de categoría `"indeterminate"` (in-progress); fin = fecha de
-resolución. (`getCycleTimeDays`, `lib/jira.ts`)
+Días desde que **empezó el trabajo que terminó en la entrega** hasta la resolución. Inicio =
+primera transición del changelog hacia un estado de categoría `"indeterminate"` (in-progress)
+**después de la última vuelta a backlog**: si el issue sale de in-progress hacia TO DO / Por hacer
+/ Backlog / En Cola, el reloj se reinicia en el siguiente in-progress. Las colas del flujo ("Ready
+for QA", "READY FOR APPROVE", "Ready for DEV", "Selected for Development") y "Blocked/Bloqueo" no
+reinician. Fin = fecha de resolución. (`getCycleTimeDays` / `findWorkStartTransition`, `lib/jira.ts`)
+Sin trabajo después de la última pausa (cerrado directo desde backlog) → cycle **null**; el lead
+time sí cuenta. Motivo (2026-10-26): contar desde el primer inicio sumaba como trabajo el triage
+de OLP (En Cola → En curso → TO DO en minutos al crear el issue) y los meses de pausa en backlog
+(OLP-3751: 95 → 13 d; OLP 3m: 20.4 → 13.1 d; SP113 30.9 → 14.5 d).
 La categoría de cada transición sale del **id del estado** (`to`/`from` del changelog), no del
 nombre: los proyectos team-managed repiten nombres con otra categoría (en OLP "Ready for DEV" y
 "Ready for QA" son colas, categoría new; en otros proyectos "READY FOR DEV" es indeterminate) y el

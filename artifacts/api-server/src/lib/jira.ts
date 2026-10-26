@@ -571,6 +571,38 @@ function findFirstInProgressTransition(
   return transitions.find((t) => IN_PROGRESS_NAME.test(t.to.trim()));
 }
 
+// Where a paused item goes back to: the backlog, not the queues inside the flow ("Ready for QA",
+// "READY FOR APPROVE", "Ready for DEV", "Selected for Development") or "Blocked", which share the
+// to-do category in these workflows. Survey of the 5 projects' changelogs, 2026-10-26.
+const BACKLOG_NAME = /^(to ?do|por hacer|tareas por hacer|backlog( semanal)?|en cola( \(atrasado\))?|creada|open|abierto)$/i;
+
+/** When the work that ended in delivery started: the first in-progress transition after the issue
+ *  last went back to the backlog (from in-progress). Work paused back to the backlog restarts the
+ *  clock: OLP-3751 was in DEV in May, sat in TO DO until August and took 2 weeks — 95 days of
+ *  "cycle time" counting from the first start; OLP's triage also bounces new issues through
+ *  "En curso" for minutes. Undefined when it was closed straight from the backlog after a pause. */
+function findWorkStartTransition(
+  issue: JiraIssue,
+  categoryMap: Map<string, string>
+): { at: number; to: string } | undefined {
+  const isInProgress = (name: string, id: string | null) => {
+    const cat = statusCategory(categoryMap, name, id);
+    return cat ? cat === "indeterminate" : IN_PROGRESS_NAME.test(name.trim());
+  };
+  const isBacklog = (name: string, id: string | null) => {
+    const cat = statusCategory(categoryMap, name, id);
+    return cat !== "indeterminate" && cat !== "done" && BACKLOG_NAME.test(name.trim());
+  };
+
+  const transitions = statusTransitions(issue);
+  let start: { at: number; to: string } | undefined;
+  for (const t of transitions) {
+    if (!start && isInProgress(t.to, t.toId)) start = { at: t.at, to: t.to };
+    else if (start && isBacklog(t.to, t.toId)) start = undefined;
+  }
+  return start;
+}
+
 const CANCELLED_STATUS = /cancel|descartad|anulad|won'?t do/i;
 
 /** A done-category closure that isn't delivered work, so it must stay out of flow metrics
@@ -631,11 +663,11 @@ export async function getLeadTimeDays(issue: JiraIssue): Promise<number | null> 
   return (resolved.getTime() - created) / (1000 * 60 * 60 * 24);
 }
 
-/** Cycle time (days) = from when active work started (first transition into an
- * "in progress" status) to resolution. Null when the changelog shows the issue never went
- * through in-progress (no active work to measure — falling back to lead time there let a
- * 600-day backlog closure count as 600 days of work). Falls back to lead time only when no
- * changelog was fetched at all. */
+/** Cycle time (days) = from when the work that ended in delivery started (findWorkStartTransition:
+ * first in-progress transition, restarted when the issue goes back to the backlog) to resolution.
+ * Null when the changelog shows no such work (never in progress, or closed straight from the
+ * backlog after a pause — falling back to lead time there let a 600-day backlog closure count as
+ * 600 days of work). Falls back to lead time only when no changelog was fetched at all. */
 export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null> {
   if (!isIssueDone(issue)) return null;
   if (await isNonDeliveryClosure(issue)) return null;
@@ -644,9 +676,9 @@ export async function getCycleTimeDays(issue: JiraIssue): Promise<number | null>
 
   if (!issue.changelog) return getLeadTimeDays(issue);
 
-  const firstInProgress = findFirstInProgressTransition(issue, await getStatusCategoryMap());
-  if (!firstInProgress) return null;
-  return (resolved.getTime() - firstInProgress.at) / (1000 * 60 * 60 * 24);
+  const workStart = findWorkStartTransition(issue, await getStatusCategoryMap());
+  if (!workStart) return null;
+  return (resolved.getTime() - workStart.at) / (1000 * 60 * 60 * 24);
 }
 
 /** Matches status names like "Blocked", "Bloqueado", "Impediment", "Obstáculo" (case-insensitive). */
