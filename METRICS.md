@@ -118,9 +118,12 @@ nombre: los proyectos team-managed repiten nombres con otra categoría (en OLP "
 "Ready for QA" son colas, categoría new; en otros proyectos "READY FOR DEV" es indeterminate) y el
 mapa por nombre dejaba ganar al último, así que OLP arrancaba el reloj al encolar (cycle 3m:
 26.8 -> 20.4 d al corregirlo). Las búsquedas solo por nombre prefieren el estado global.
-(`buildStatusCategoryMap`, `statusCategory`) Se respeta la configuración de cada proyecto: en EXP
-"READY" es indeterminate en Jira, así que su cycle time arranca ahí; si eso no refleja el proceso,
-el ajuste va en el workflow de Jira.
+(`buildStatusCategoryMap`, `statusCategory`) Se respeta la configuración de cada proyecto en Jira:
+si una cola quedó en categoría "In Progress", el ajuste va en el workflow de Jira, no en la app.
+Caso: EXP (team-managed) tenía "READY" (cola entre Por hacer y En curso) como In Progress, el default
+de Jira para columnas intermedias; se pasó a To Do el 2026-10-26 (cycle 3m: 12.7 -> 9.2 d). Tras un
+cambio así, reiniciar la API (el mapa de categorías se cachea en memoria) y recalcular portfolio y
+snapshots.
 **Sin transición a in-progress** (según el changelog): cycle time **null**, el issue no entra al
 promedio (antes caía al Lead Time y un cierre directo de backlog sumaba como meses de trabajo).
 **Fallback a Lead Time** solo si no se pidió el changelog.
