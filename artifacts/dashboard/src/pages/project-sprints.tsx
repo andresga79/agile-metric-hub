@@ -51,6 +51,11 @@ interface CommitmentStats {
 
 // Sample standard deviation (n-1 denominator) — with only a handful of closed sprints, the
 // population formula understates real variance, so this is the more honest estimate to plan on.
+// "Compromiso Recomendado" card: hidden on request (2026-11-06). Its numbers come from the
+// cumulative completion (Done today), which no longer matches the "% real cerrado" the page
+// now leads with. Set to true to bring it back; the computation below is kept.
+const SHOW_RECOMMENDED_COMMITMENT = false;
+
 function commitmentStats(values: number[]): CommitmentStats | null {
   const n = values.length;
   if (n < 2) return null;
@@ -290,6 +295,7 @@ export default function ProjectSprints() {
             </Card>
           )}
 
+          {SHOW_RECOMMENDED_COMMITMENT && (
           <Card className="bg-card/40">
             <CardHeader>
               <CardTitle className="text-lg">{t('page.sprints.recommendedCommitment')}</CardTitle>
@@ -343,6 +349,7 @@ export default function ProjectSprints() {
               )}
             </CardContent>
           </Card>
+          )}
 
           <Card className="bg-card/40">
             <CardHeader>
