@@ -87,6 +87,20 @@ interface SprintMetricsResponse {
   };
 }
 
+/** The issues that make up a sprint's scope: the issue types allowed in Admin, minus
+ *  cancellations / backlog cleanups that are already closed (isNonDeliveryClosure). OLI's board
+ *  doesn't treat "Cancelado" as done, so Jira carries each one into every following sprint and it
+ *  was "completed" in all of them (OLI-3629: sprints 46-49). Shared by the Sprints table and the
+ *  sprint summary so both count the same issues. */
+export async function sprintScopeIssues(
+  sprintIssues: JiraIssue[],
+  allowedIssueTypes: string[]
+): Promise<JiraIssue[]> {
+  const typed = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
+  const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
+  return typed.filter((i, idx) => !(nonDelivery[idx] && isIssueDone(i)));
+}
+
 export async function computeSprintMetrics(
   sprint: JiraSprint,
   sprintIssues: JiraIssue[],
@@ -99,13 +113,7 @@ export async function computeSprintMetrics(
   // sprint it passed through. wasIssueDoneAt keeps the "done at sprint close" alternative.
   const doneAtClose = (i: JiraIssue): boolean => isIssueDone(i);
 
-  // A cancellation / backlog cleanup already closed by the sprint's end is neither scope nor
-  // completed work (isNonDeliveryClosure). OLI's board doesn't treat "Cancelado" as done, so Jira
-  // carries each one into every following sprint and it was "completed" in all of them (OLI-3629:
-  // sprints 46-49). One closed only after this sprint ended was real, unfinished scope here.
-  const typed = sprintIssues.filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
-  const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
-  const filtered = typed.filter((i, idx) => !(nonDelivery[idx] && doneAtClose(i)));
+  const filtered = await sprintScopeIssues(sprintIssues, allowedIssueTypes);
   const doneIssues = filtered.filter(doneAtClose);
   const totalSp = filtered.reduce((sum, i) => sum + getStoryPoints(i), 0);
   const doneSp = doneIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);

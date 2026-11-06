@@ -468,6 +468,83 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
+ * Rovo-style sprint report for the Resumen tab. Same scope as the Sprints table. For a closed sprint "completed" means already done when the sprint closed ("% real cerrado"); for one not closed yet, the current status. previous is the sprint that closed right before this one.
+ *
+ * @summary Executive summary of one sprint (KPIs vs the previous sprint, per member, per issue type)
+ */
+export const GetProjectSprintSummaryParams = zod.object({
+  "projectId": zod.coerce.string(),
+  "sprintId": zod.coerce.number()
+})
+
+export const GetProjectSprintSummaryResponse = zod.object({
+  "kpis": zod.object({
+  "sprintId": zod.number(),
+  "sprintName": zod.string(),
+  "state": zod.string(),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "closeDate": zod.string().nullable(),
+  "committedStoryPoints": zod.number(),
+  "deliveredStoryPoints": zod.number(),
+  "completionRate": zod.number(),
+  "completionBasis": zod.enum(['storyPoints', 'issueCount']),
+  "totalIssues": zod.number(),
+  "completedIssues": zod.number(),
+  "issueCompletionRate": zod.number(),
+  "incompleteIssues": zod.number(),
+  "incompleteStoryPoints": zod.number(),
+  "bugsTotal": zod.number(),
+  "bugsCompleted": zod.number(),
+  "unestimatedIssues": zod.number()
+}),
+  "members": zod.array(zod.object({
+  "accountId": zod.string().nullable(),
+  "name": zod.string().nullable().describe('Current assignee; null = unassigned.'),
+  "totalIssues": zod.number(),
+  "completedIssues": zod.number(),
+  "totalStoryPoints": zod.number(),
+  "completedStoryPoints": zod.number(),
+  "incompleteStoryPoints": zod.number(),
+  "completionRate": zod.number().nullable().describe('Story-point basis; null when the group has no story points.'),
+  "unestimatedIssues": zod.number(),
+  "incompleteKeys": zod.array(zod.string())
+})),
+  "types": zod.array(zod.object({
+  "type": zod.string().describe('Jira\'s own issue type name.'),
+  "totalIssues": zod.number(),
+  "completedIssues": zod.number(),
+  "totalStoryPoints": zod.number(),
+  "completedStoryPoints": zod.number(),
+  "incompleteStoryPoints": zod.number(),
+  "completionRate": zod.number().nullable().describe('Story-point basis; null when the group has no story points.'),
+  "unestimatedIssues": zod.number(),
+  "incompleteKeys": zod.array(zod.string())
+})),
+  "previous": zod.object({
+  "sprintId": zod.number(),
+  "sprintName": zod.string(),
+  "state": zod.string(),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "closeDate": zod.string().nullable(),
+  "committedStoryPoints": zod.number(),
+  "deliveredStoryPoints": zod.number(),
+  "completionRate": zod.number(),
+  "completionBasis": zod.enum(['storyPoints', 'issueCount']),
+  "totalIssues": zod.number(),
+  "completedIssues": zod.number(),
+  "issueCompletionRate": zod.number(),
+  "incompleteIssues": zod.number(),
+  "incompleteStoryPoints": zod.number(),
+  "bugsTotal": zod.number(),
+  "bugsCompleted": zod.number(),
+  "unestimatedIssues": zod.number()
+}).nullable()
+})
+
+
+/**
  * Recommended commitment for a sprint in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. `sprint=next` is the next future sprint, `sprint=active` the one in progress (real working days, progress so far and load on what is still open); absent = next future sprint, else the active one. Scrum projects only.
  *
  * @summary Capacity planning for the next or the active sprint of a Scrum project

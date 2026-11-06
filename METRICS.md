@@ -209,6 +209,18 @@ cerrados, lo que **ya estaba en Done al momento del cierre** (`wasIssueDoneAt` d
 mismo alcance y misma base SP/conteo). `null` en el sprint activo (la UI muestra ahí el avance
 actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP (53.5%).
 
+### Resumen de sprint (pestaña Resumen)
+Informe por sprint al estilo del que generaba Rovo, en la pestaña Resumen de proyectos Scrum
+(`GET /api/projects/:id/sprint-summary/:sprintId`, `lib/sprint-summary.ts`). Mismo alcance que la
+tabla de Sprints (`sprintScopeIssues`: tipos de Admin, sin limpiezas de backlog). "Completado" =
+en Done **al cierre** (`wasIssueDoneAt`, igual que "% Real cerrado"); en un sprint sin cerrar, el
+estado actual. Se compara con el sprint que cerró justo antes (`previousClosedSprint`).
+Secciones: KPIs (comprometido, entregado, % cumplimiento SP, issues, incompletas al cierre, bugs
+resueltos al cierre), SP por integrante (asignado **actual**, como Rovo), rendimiento individual
+y distribución por tipo con el nombre real de Jira (Historia, Tarea Técnica, Deuda Técnica, ...)
+y las claves de lo pendiente. Tablero Sprint 116 cuadra exacto con Rovo: 85/112 SP (75.9%),
+32/42 issues, 10 incompletas (27 SP), 5/5 bugs.
+
 ### Predictability
 `clamp(100 - (stddev / avg) * 50, 0, 100)` sobre el throughput semanal (solo semanas con
 actividad). Cuanto más estable el throughput semana a semana, más alto. Default `50` si no hay

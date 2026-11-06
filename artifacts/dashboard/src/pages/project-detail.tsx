@@ -11,6 +11,7 @@ import { describeTrend, isImproving } from "@/lib/trend-analysis";
 import { ChevronRight, Download, Ban, Target } from "lucide-react";
 import { AreaChart, Area, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs } from "@/components/project-tabs";
+import { SprintSummarySection } from "@/components/sprint-summary-section";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 import { useTimeWindow } from "@/hooks/use-time-window";
 import { useThresholds, type MetricThreshold } from "@/hooks/use-thresholds";
@@ -216,6 +217,8 @@ export default function ProjectDetail() {
 
         {periodReady && <BlockedKpiCard projectId={projectId!} period={period} />}
       </div>
+
+      {project.boardType === 'scrum' && <SprintSummarySection projectId={projectId!} />}
 
       <Card className="bg-card/40">
         <CardHeader>

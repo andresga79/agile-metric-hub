@@ -45,6 +45,7 @@ import type {
   ProjectWithVisibility,
   QaRejectedResponse,
   SprintMetricsResponse,
+  SprintSummaryResponse,
   SuccessResponse,
   User
 } from './api.schemas';
@@ -1460,6 +1461,90 @@ export function useGetProjectSprintMetrics<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProjectSprintMetricsQueryOptions(projectId,period,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProjectSprintSummaryUrl = (projectId: string,
+    sprintId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/sprint-summary/${sprintId}`
+}
+
+/**
+ * Rovo-style sprint report for the Resumen tab. Same scope as the Sprints table. For a closed sprint "completed" means already done when the sprint closed ("% real cerrado"); for one not closed yet, the current status. previous is the sprint that closed right before this one.
+ *
+ * @summary Executive summary of one sprint (KPIs vs the previous sprint, per member, per issue type)
+ */
+export const getProjectSprintSummary = async (projectId: string,
+    sprintId: number, options?: RequestInit): Promise<SprintSummaryResponse> => {
+
+  return customFetch<SprintSummaryResponse>(getGetProjectSprintSummaryUrl(projectId,sprintId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectSprintSummaryQueryKey = (projectId: string,
+    sprintId: number,) => {
+    return [
+    `/api/projects/${projectId}/sprint-summary/${sprintId}`
+    ] as const;
+    }
+
+
+export const getGetProjectSprintSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getProjectSprintSummary>>, TError = ErrorType<ErrorResponse>>(projectId: string,
+    sprintId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectSprintSummaryQueryKey(projectId,sprintId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectSprintSummary>>> = ({ signal }) => getProjectSprintSummary(projectId,sprintId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined && sprintId !== null && sprintId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectSprintSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectSprintSummary>>>
+export type GetProjectSprintSummaryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Executive summary of one sprint (KPIs vs the previous sprint, per member, per issue type)
+ */
+
+export function useGetProjectSprintSummary<TData = Awaited<ReturnType<typeof getProjectSprintSummary>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string,
+    sprintId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectSprintSummaryQueryOptions(projectId,sprintId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

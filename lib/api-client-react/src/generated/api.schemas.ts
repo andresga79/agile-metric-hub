@@ -444,6 +444,71 @@ export interface QaRejectedResponse {
   linkedBugs: LinkedBug[];
 }
 
+export type SprintSummaryKpisCompletionBasis = typeof SprintSummaryKpisCompletionBasis[keyof typeof SprintSummaryKpisCompletionBasis];
+
+
+export const SprintSummaryKpisCompletionBasis = {
+  storyPoints: 'storyPoints',
+  issueCount: 'issueCount',
+} as const;
+
+export interface SprintSummaryKpis {
+  sprintId: number;
+  sprintName: string;
+  state: string;
+  startDate: string | null;
+  endDate: string | null;
+  closeDate: string | null;
+  committedStoryPoints: number;
+  deliveredStoryPoints: number;
+  completionRate: number;
+  completionBasis: SprintSummaryKpisCompletionBasis;
+  totalIssues: number;
+  completedIssues: number;
+  issueCompletionRate: number;
+  incompleteIssues: number;
+  incompleteStoryPoints: number;
+  bugsTotal: number;
+  bugsCompleted: number;
+  unestimatedIssues: number;
+}
+
+export interface SprintSummaryMember {
+  accountId: string | null;
+  /** Current assignee; null = unassigned. */
+  name: string | null;
+  totalIssues: number;
+  completedIssues: number;
+  totalStoryPoints: number;
+  completedStoryPoints: number;
+  incompleteStoryPoints: number;
+  /** Story-point basis; null when the group has no story points. */
+  completionRate: number | null;
+  unestimatedIssues: number;
+  incompleteKeys: string[];
+}
+
+export interface SprintSummaryType {
+  /** Jira's own issue type name. */
+  type: string;
+  totalIssues: number;
+  completedIssues: number;
+  totalStoryPoints: number;
+  completedStoryPoints: number;
+  incompleteStoryPoints: number;
+  /** Story-point basis; null when the group has no story points. */
+  completionRate: number | null;
+  unestimatedIssues: number;
+  incompleteKeys: string[];
+}
+
+export interface SprintSummaryResponse {
+  kpis: SprintSummaryKpis;
+  members: SprintSummaryMember[];
+  types: SprintSummaryType[];
+  previous: SprintSummaryKpis | null;
+}
+
 /**
  * Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches.
  */

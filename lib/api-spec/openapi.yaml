@@ -470,6 +470,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/sprint-summary/{sprintId}:
+    get:
+      operationId: getProjectSprintSummary
+      tags: [metrics]
+      summary: Executive summary of one sprint (KPIs vs the previous sprint, per member, per issue type)
+      description: >
+        Rovo-style sprint report for the Resumen tab. Same scope as the Sprints table. For a closed
+        sprint "completed" means already done when the sprint closed ("% real cerrado"); for one not
+        closed yet, the current status. previous is the sprint that closed right before this one.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: sprintId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sprint summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintSummaryResponse"
+        "400":
+          description: Project is not a Scrum project, or invalid sprint id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or sprint not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/capacity:
     get:
       operationId: getProjectCapacity
@@ -1380,6 +1418,129 @@ components:
           type: boolean
           description: Whether the parent story was rejected by QA
 
+    SprintSummaryKpis:
+      type: object
+      required: [sprintId, sprintName, state, startDate, endDate, closeDate, committedStoryPoints,
+        deliveredStoryPoints, completionRate, completionBasis, totalIssues, completedIssues,
+        issueCompletionRate, incompleteIssues, incompleteStoryPoints, bugsTotal, bugsCompleted,
+        unestimatedIssues]
+      properties:
+        sprintId:
+          type: integer
+        sprintName:
+          type: string
+        state:
+          type: string
+        startDate:
+          type: string
+          nullable: true
+        endDate:
+          type: string
+          nullable: true
+        closeDate:
+          type: string
+          nullable: true
+        committedStoryPoints:
+          type: number
+        deliveredStoryPoints:
+          type: number
+        completionRate:
+          type: number
+        completionBasis:
+          type: string
+          enum: [storyPoints, issueCount]
+        totalIssues:
+          type: integer
+        completedIssues:
+          type: integer
+        issueCompletionRate:
+          type: number
+        incompleteIssues:
+          type: integer
+        incompleteStoryPoints:
+          type: number
+        bugsTotal:
+          type: integer
+        bugsCompleted:
+          type: integer
+        unestimatedIssues:
+          type: integer
+    SprintSummaryMember:
+      type: object
+      required: [accountId, name, totalIssues, completedIssues, totalStoryPoints, completedStoryPoints, incompleteStoryPoints, completionRate, unestimatedIssues, incompleteKeys]
+      properties:
+        accountId:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+          description: Current assignee; null = unassigned.
+        totalIssues:
+          type: integer
+        completedIssues:
+          type: integer
+        totalStoryPoints:
+          type: number
+        completedStoryPoints:
+          type: number
+        incompleteStoryPoints:
+          type: number
+        completionRate:
+          type: number
+          nullable: true
+          description: Story-point basis; null when the group has no story points.
+        unestimatedIssues:
+          type: integer
+        incompleteKeys:
+          type: array
+          items:
+            type: string
+    SprintSummaryType:
+      type: object
+      required: [type, totalIssues, completedIssues, totalStoryPoints, completedStoryPoints, incompleteStoryPoints, completionRate, unestimatedIssues, incompleteKeys]
+      properties:
+        type:
+          type: string
+          description: Jira's own issue type name.
+        totalIssues:
+          type: integer
+        completedIssues:
+          type: integer
+        totalStoryPoints:
+          type: number
+        completedStoryPoints:
+          type: number
+        incompleteStoryPoints:
+          type: number
+        completionRate:
+          type: number
+          nullable: true
+          description: Story-point basis; null when the group has no story points.
+        unestimatedIssues:
+          type: integer
+        incompleteKeys:
+          type: array
+          items:
+            type: string
+    SprintSummaryResponse:
+      type: object
+      required: [kpis, members, types, previous]
+      properties:
+        kpis:
+          $ref: "#/components/schemas/SprintSummaryKpis"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/SprintSummaryMember"
+        types:
+          type: array
+          items:
+            $ref: "#/components/schemas/SprintSummaryType"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/SprintSummaryKpis"
+          nullable: true
     SprintMetricsResponse:
       type: object
       required: [sprints, summary]
