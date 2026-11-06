@@ -108,12 +108,32 @@ export default function ProjectSprints() {
   const issuesStats = commitmentStats(closedSprints.map((s) => s.completedIssues));
   const spStats = commitmentStats(closedSprints.map((s) => s.completedStoryPoints));
 
-  const velocityTrendLine = linearTrend(sprints.map((s) => s.velocity));
+  // "% Real cerrado": what was already done when each sprint closed. The active sprint hasn't
+  // closed, so its current progress stands in (same as the table column).
+  const realClosedSp = (s: (typeof sprints)[number]) => s.closedAtSprintEndStoryPoints ?? s.completedStoryPoints;
+  const realClosedRate = (s: (typeof sprints)[number]) => s.closedAtSprintEndRate ?? s.completionRate;
+  const closedRealRates = closedSprints
+    .map((s) => s.closedAtSprintEndRate)
+    .filter((r): r is number => r != null);
+  const avgRealClosedRate = closedRealRates.length > 0
+    ? closedRealRates.reduce((a, b) => a + b, 0) / closedRealRates.length
+    : 0;
+
+  // Issues already Done when each sprint closed, averaged over closed sprints (a count, not a %).
+  const sprintsWithRealIssues = closedSprints.filter((s) => s.closedAtSprintEndIssues != null);
+  const avgRealClosedIssues = sprintsWithRealIssues.length > 0
+    ? sprintsWithRealIssues.reduce((sum, s) => sum + (s.closedAtSprintEndIssues ?? 0), 0) / sprintsWithRealIssues.length
+    : 0;
+  const avgPlannedIssues = sprintsWithRealIssues.length > 0
+    ? sprintsWithRealIssues.reduce((sum, s) => sum + s.totalIssues, 0) / sprintsWithRealIssues.length
+    : 0;
+
+  const velocityTrendLine = linearTrend(sprints.map(realClosedSp));
   const chartData = sprints.map((s, i) => ({
     name: s.sprintName.replace(/^.*\s/, "S"),
     plannedStoryPoints: s.totalStoryPoints,
-    velocity: s.velocity,
-    completionRate: s.completionRate,
+    realClosedSp: realClosedSp(s),
+    realClosedRate: realClosedRate(s),
     velocityTrend: velocityTrendLine[i],
   }));
 
@@ -161,7 +181,7 @@ export default function ProjectSprints() {
               {t('page.sprints.truncated', { shown: sprints.length, total: summary?.totalSprintsInPeriod ?? sprints.length })}
             </p>
           )}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
@@ -191,12 +211,30 @@ export default function ProjectSprints() {
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                  <CheckCircle2 size={14} /> {t('page.sprints.avgCompletion')}
+                  <CheckCircle2 size={14} /> {t('page.sprints.avgRealClosed')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{pct(summary?.avgCompletionRate ?? 0)}</div>
-                <p className="text-xs text-muted-foreground mt-1">{t('page.sprints.pctCompleted')}</p>
+                <div className="text-3xl font-bold" title={t('page.sprints.avgCumulativeHint', { value: pct(summary?.avgCompletionRate ?? 0) })}>
+                  {pct(avgRealClosedRate)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{t('page.sprints.avgRealClosedDesc')}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <BarChart3 size={14} /> {t('page.sprints.avgRealClosedIssues')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold" title={t('page.sprints.avgRealClosedIssuesHint')}>
+                  {avgRealClosedIssues.toFixed(1)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('page.sprints.avgRealClosedIssuesDesc', { planned: avgPlannedIssues.toFixed(1) })}
+                </p>
               </CardContent>
             </Card>
 
@@ -231,14 +269,14 @@ export default function ProjectSprints() {
                     />
                     <Legend wrapperStyle={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }} />
                     <Bar dataKey="plannedStoryPoints" fill="hsl(var(--muted-foreground))" fillOpacity={0.25} radius={[2, 2, 0, 0]} name={`${t('page.sprints.spPlanned')} (SP)`} />
-                    <Bar dataKey="velocity" radius={[2, 2, 0, 0]} name={`${t('terms.velocity')} (SP)`}>
+                    <Bar dataKey="realClosedSp" radius={[2, 2, 0, 0]} name={t('page.sprints.realClosedSpSeries')}>
                       {chartData.map((d, i) => (
                         <Cell
                           key={i}
                           fill={
-                            d.completionRate >= completionThreshold.good
+                            d.realClosedRate >= completionThreshold.good
                               ? "hsl(142, 76%, 36%)"
-                              : d.completionRate >= completionThreshold.warning
+                              : d.realClosedRate >= completionThreshold.warning
                               ? "hsl(38, 92%, 50%)"
                               : "hsl(var(--destructive))"
                           }
@@ -324,9 +362,10 @@ export default function ProjectSprints() {
                     <TableHead className="text-right">{t('page.sprints.spPlanned')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.spDone')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.carryover')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.completion')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.addedAfterPlanning')}</TableHead>
+                    <TableHead className="text-right" title={t('page.sprints.completionTooltip')}>{t('page.sprints.completion')}</TableHead>
+                    <TableHead className="text-right" title={t('page.sprints.realClosedTooltip')}>{t('page.sprints.realClosed')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.cycleTime')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.reopened')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.breakdownCol')}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -370,7 +409,24 @@ export default function ProjectSprints() {
                             <span className="text-muted-foreground">0</span>
                           )}
                         </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs"
+                          title={s.addedAfterPlanningCount > 0
+                            ? `${t('page.sprints.addedAfterPlanningTooltip')}\n\n${t('page.sprints.addedAfterPlanningKeys', { keys: s.addedAfterPlanningKeys.join(', ') })}`
+                            : t('page.sprints.addedAfterPlanningTooltip')}
+                        >
+                          {s.addedAfterPlanningCount > 0 ? (
+                            <span className="px-1.5 py-0.5 rounded font-semibold bg-sky-500/15 text-sky-400">
+                              {s.addedAfterPlanningCount} ({s.addedAfterPlanningStoryPoints.toFixed(0)} SP)
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
+                          {s.state === "active" ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
                           <span
                             className={`text-xs font-semibold px-2 py-0.5 rounded ${
                               s.completionRate >= completionThreshold.good ? "bg-green-500/20 text-green-400" :
@@ -382,15 +438,39 @@ export default function ProjectSprints() {
                             {pct(s.completionRate)}
                             <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
                           </span>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">{days(s.avgCycleTimeDays)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {s.reopenedCount > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded font-semibold bg-red-500/15 text-red-400">{s.reopenedCount}</span>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
                           )}
                         </TableCell>
+                        <TableCell className="text-right">
+                          {s.closedAtSprintEndRate != null ? (
+                            <span
+                              className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                s.closedAtSprintEndRate >= completionThreshold.good ? "bg-green-500/20 text-green-400" :
+                                s.closedAtSprintEndRate >= completionThreshold.warning ? "bg-orange-500/20 text-orange-400" :
+                                "bg-red-500/20 text-red-400"
+                              }`}
+                              title={t('page.sprints.realClosedDetail', {
+                                issues: s.closedAtSprintEndIssues ?? 0,
+                                total: s.totalIssues,
+                                sp: (s.closedAtSprintEndStoryPoints ?? 0).toFixed(0),
+                                totalSp: s.totalStoryPoints.toFixed(0),
+                              })}
+                            >
+                              {pct(s.closedAtSprintEndRate)}
+                              <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
+                            </span>
+                          ) : s.state === "active" ? (
+                            <span
+                              className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400"
+                              title={t('page.sprints.realClosedActive')}
+                            >
+                              {pct(s.completionRate)}
+                              <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">{days(s.avgCycleTimeDays)}</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
                           <span className="text-blue-400">{s.breakdown.Story}</span>S /
                           <span className="text-red-400">{s.breakdown.Bug}</span>B /

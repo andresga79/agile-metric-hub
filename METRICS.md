@@ -188,19 +188,26 @@ banda "En Progreso" queda siempre en 0). (`cfd.ts`)
 sprints de la ventana (`2s`/`6s`), o los sprints cerrados en el período, o estimado como 1 sprint
 cada 14 días si no hay. (`computeMetrics`, `routes/metrics.ts`) En ventanas de sprint el gráfico
 asigna cada issue al sprint en cuyo `[inicio, cierre)` se resolvió (`buildSprintVelocityBuckets`).
-Por sprint individual (pestaña Sprints), la velocity = story points **completados al cierre**
-(ver Sprint Completion Rate). Ambas vistas deberían dar ~lo mismo (OLI 6s: 65.3 vs 65.2).
+Por sprint individual (pestaña Sprints), la velocity = story points **en Done hoy** (ver Sprint
+Completion Rate); puede superar a la del gráfico porque acredita lo arrastrado a cada sprint.
 
 ### Sprint Completion Rate
 Si el sprint tiene story points cargados: `(doneSp / totalSp) * 100`; si no, por conteo:
 `(issuesCompletados / issuesTotales) * 100`. Los promedios de resumen solo incluyen sprints
 **cerrados** (excluye el activo). (`computeSprintMetrics`, `routes/sprint-metrics.ts`)
-"Completado" en un sprint **cerrado** = estaba en un estado "done" **al momento del cierre**
-(`completeDate`, o `endDate`), reconstruido desde el changelog (`wasIssueDoneAt`, misma regla que
-el reporte de sprint de Jira; sin changelog: done ahora y `resolutiondate <= cierre`). En el
-sprint **activo** = `isIssueDone` actual. Antes se usaba el estado actual también para sprints
-cerrados, así que lo arrastrado y terminado en sprints siguientes se le acreditaba a cada sprint
-por el que pasó (los sprints viejos llegaban al ~100%). Evolution usa la misma regla.
+"Completado" = el issue está **hoy** en un estado de categoría Done (`isIssueDone`), en sprints
+cerrados y activos — la misma regla de los resúmenes de sprint de Rovo (2026-11-06, para cuadrar
+con Rovo: Tablero Sprint 117 = 99 SP comprometidos, 86 SP / 33 issues completados, 86.9%).
+Consecuencia aceptada: lo arrastrado y terminado en sprints siguientes se acredita a cada sprint
+por el que pasó, así que los sprints viejos tienden al ~100%. Hasta esa fecha se usaba "done al
+cierre" (`wasIssueDoneAt`, reconstruido desde el changelog). Evolution y Capacidad usan la misma
+regla. Tipos incluidos según Admin (Tablero/global: Story, Task, Bug, Spike, Tech Debt); Rovo
+además cuenta Epics, que acá no entran.
+
+**% Real cerrado** (`closedAtSprintEndRate`, columna aparte en la pestaña Sprints): para sprints
+cerrados, lo que **ya estaba en Done al momento del cierre** (`wasIssueDoneAt` desde el changelog,
+mismo alcance y misma base SP/conteo). `null` en el sprint activo (la UI muestra ahí el avance
+actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP (53.5%).
 
 ### Predictability
 `clamp(100 - (stddev / avg) * 50, 0, 100)` sobre el throughput semanal (solo semanas con
@@ -296,7 +303,7 @@ Objetivos configurables en Admin, mapeados por prioridad:
   (`backfillWeeklySnapshots`: recalcula lead/cycle time y throughput de semanas completas; la
   tasa de rechazo QA se conserva porque necesita también los issues no resueltos).
 - **Scrum (por sprint):** `computeSprintSnapshot` sobre los issues del sprint, con la regla de
-  "completado al cierre".
+  "completado = Done hoy".
 
 ---
 
@@ -354,7 +361,7 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 - **Tasa del equipo**: últimos 6 sprints cerrados. Por sprint, `SP completados / días-persona` e
   `issues completados / días-persona`; `días-persona = Σ (días hábiles reales × dedicación − ausencia)`
   con la disponibilidad guardada en Capacity, o cada asignado a tiempo completo si el sprint no se
-  planificó ahí. Completado = done al cierre (`wasIssueDoneAt`). Solo issues del proyecto (prefijo
+  planificó ahí. Completado = Done hoy (`isIssueDone`). Solo issues del proyecto (prefijo
   de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
 - **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
 - **Quién cuenta**: solo los devs. Admin marca una vez por proyecto quién cuenta (`capacity_roster`);

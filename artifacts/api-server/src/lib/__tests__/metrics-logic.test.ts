@@ -9,6 +9,9 @@ import {
   findQaRejections,
   computeQaRejectionRate,
   isCarryoverIssue,
+  sprintPlanningCutoff,
+  sprintEntryTime,
+  isAddedAfterPlanning,
   resolveSprintWindowDays,
   SPRINT_WINDOW_MAX_LOOKBACK_DAYS,
   buildSprintVelocityBuckets,
@@ -136,7 +139,12 @@ describe("mapIssueType", () => {
   });
 
   it("falls back to Other for unknown types", () => {
-    expect(mapIssueType("Spike")).toBe("Other");
+    expect(mapIssueType("Iniciativa")).toBe("Other");
+  });
+
+  it("maps Spike and Deuda Técnica to their own types so Admin can include them", () => {
+    expect(mapIssueType("Spike")).toBe("Spike");
+    expect(mapIssueType("Deuda Técnica")).toBe("Tech Debt");
   });
 });
 
@@ -321,6 +329,87 @@ describe("isCarryoverIssue", () => {
       { from: "", to: "Some Deleted Sprint, Sprint 111", at: "2026-06-16T00:00:00.000Z" },
     ]);
     expect(isCarryoverIssue(issue, allSprints, sprint111)).toBe(false);
+  });
+});
+
+// --- added after planning ----------------------------------------------------
+describe("isAddedAfterPlanning", () => {
+  const TZ = "America/Santiago";
+  // OLP Sprint 116: started Mon 2026-10-05 09:00 local (UTC-3), planning that afternoon.
+  const sprint116 = makeSprint({ id: 4335, name: "Sprint 116", state: "closed", startDate: "2026-10-05T12:00:08.000Z" });
+  const sprintHistory = (key: string, created: string, t: Array<{ from: string; to: string; at: string }>) =>
+    withSprintHistory(makeIssue({ id: key, key, fields: { created } }), t);
+
+  it("cuts off at the local midnight that ends day 1", () => {
+    expect(sprintPlanningCutoff(sprint116, TZ)?.toISOString()).toBe("2026-10-06T03:00:00.000Z");
+  });
+
+  it("follows Chile's winter offset (UTC-4) too", () => {
+    const winter = makeSprint({ id: 1, name: "W", startDate: "2026-07-06T13:00:00.000Z" });
+    expect(sprintPlanningCutoff(winter, TZ)?.toISOString()).toBe("2026-07-07T04:00:00.000Z");
+  });
+
+  it("a sprint started late in the local evening still cuts at that local day's end, not the UTC one", () => {
+    // 22:30 local on Oct 5 is already Oct 6 in UTC.
+    const late = makeSprint({ id: 2, name: "L", startDate: "2026-10-06T01:30:00.000Z" });
+    expect(sprintPlanningCutoff(late, TZ)?.toISOString()).toBe("2026-10-06T03:00:00.000Z");
+  });
+
+  it("work moved in when the previous sprint closed on day 1 is planned scope", () => {
+    const carried = sprintHistory("A", "2026-08-01T00:00:00.000Z", [
+      { from: "Sprint 115", to: "Sprint 115, Sprint 116", at: "2026-10-05T12:48:00.000Z" },
+    ]);
+    expect(isAddedAfterPlanning(carried, sprint116, TZ)).toBe(false);
+  });
+
+  it("work added during the day-1 afternoon planning is planned scope", () => {
+    const planned = sprintHistory("B", "2026-10-02T00:00:00.000Z", [
+      { from: "", to: "Sprint 116", at: "2026-10-05T20:55:00.000Z" },
+    ]);
+    expect(isAddedAfterPlanning(planned, sprint116, TZ)).toBe(false);
+  });
+
+  it("work added on day 2 or later is unplanned", () => {
+    const added = sprintHistory("C", "2026-10-02T00:00:00.000Z", [
+      { from: "", to: "Sprint 116", at: "2026-10-06T16:16:00.000Z" },
+    ]);
+    expect(isAddedAfterPlanning(added, sprint116, TZ)).toBe(true);
+  });
+
+  it("an issue created straight into the sprint (no Sprint history) enters at its creation date", () => {
+    expect(isAddedAfterPlanning(makeIssue({ id: "D", key: "D", fields: { created: "2026-10-07T17:43:00.000Z" } }), sprint116, TZ)).toBe(true);
+    expect(isAddedAfterPlanning(makeIssue({ id: "E", key: "E", fields: { created: "2026-10-02T23:16:00.000Z" } }), sprint116, TZ)).toBe(false);
+  });
+
+  it("a removal and later re-add counts from the re-add", () => {
+    const readded = sprintHistory("F", "2026-10-03T00:00:00.000Z", [
+      { from: "", to: "Sprint 116", at: "2026-10-04T00:00:00.000Z" },
+      { from: "Sprint 116", to: "", at: "2026-10-05T14:55:00.000Z" },
+      { from: "", to: "Sprint 116", at: "2026-10-06T16:16:00.000Z" },
+    ]);
+    expect(sprintEntryTime(readded, sprint116).toISOString()).toBe("2026-10-06T16:16:00.000Z");
+    expect(isAddedAfterPlanning(readded, sprint116, TZ)).toBe(true);
+  });
+
+  it("being moved on to a later sprint isn't an entry into this one", () => {
+    const movedOn = sprintHistory("G", "2026-08-01T00:00:00.000Z", [
+      { from: "Sprint 115", to: "Sprint 115, Sprint 116", at: "2026-10-05T12:48:00.000Z" },
+      { from: "Sprint 115, Sprint 116", to: "Sprint 115, Sprint 116, Sprint 117", at: "2026-10-19T13:01:00.000Z" },
+    ]);
+    expect(isAddedAfterPlanning(movedOn, sprint116, TZ)).toBe(false);
+  });
+
+  it("matches by sprint id when Jira sends ids, even if the name changed", () => {
+    const issue = makeIssue({ id: "H", key: "H", fields: { created: "2026-08-01T00:00:00.000Z" } });
+    issue.changelog = { histories: [{ created: "2026-10-08T12:00:00.000Z", items: [
+      { field: "Sprint", from: "4233", fromString: "Old name", to: "4233, 4335", toString: "Old name, Renamed" },
+    ] }] };
+    expect(isAddedAfterPlanning(issue, sprint116, TZ)).toBe(true);
+  });
+
+  it("is false for a sprint without a start date", () => {
+    const future = makeSprint({ id: 9, name: "Future", state: "future" });
+    expect(isAddedAfterPlanning(makeIssue({ id: "I", key: "I" }), future, TZ)).toBe(false);
   });
 });
 

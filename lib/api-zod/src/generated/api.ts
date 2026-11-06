@@ -448,6 +448,12 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "carryoverCount": zod.number().describe('Number of issues in this sprint that were already assigned to an earlier sprint (per Jira\'s Sprint field history) whose end date precedes this sprint\'s start date — work that slipped from a previous sprint into this one.'),
   "carryoverStoryPoints": zod.number().describe('Story points belonging to carryoverCount issues.'),
   "carryoverRate": zod.number().describe('Percentage of this sprint\'s total story points that is carryover (0-100).'),
+  "addedAfterPlanningCount": zod.number().describe('Issues that entered this sprint after its planning (end of the sprint\'s first day, team timezone), per Jira\'s Sprint field history or the creation date when created straight into the sprint. A removal and later re-add counts from the re-add.'),
+  "addedAfterPlanningStoryPoints": zod.number().describe('Story points belonging to addedAfterPlanningCount issues.'),
+  "addedAfterPlanningKeys": zod.array(zod.string()).describe('Keys of the addedAfterPlanningCount issues.'),
+  "closedAtSprintEndIssues": zod.number().nullable().describe('Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative).'),
+  "closedAtSprintEndStoryPoints": zod.number().nullable().describe('Story points of closedAtSprintEndIssues. Null while the sprint is not closed.'),
+  "closedAtSprintEndRate": zod.number().nullable().describe('\"% real cerrado\": closedAtSprintEnd over the sprint\'s scope, on the same completionBasis as completionRate. Null while the sprint is not closed.'),
   "goal": zod.string().nullish().describe('This sprint\'s goal, as set in Jira. Null when the sprint has no goal or it\'s blank.')
 })),
   "summary": zod.object({

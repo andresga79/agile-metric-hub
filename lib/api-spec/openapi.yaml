@@ -1572,7 +1572,8 @@ components:
         [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
          completedIssues, completedStoryPoints, completionRate, completionBasis, velocity,
          reopenedCount, avgCycleTimeDays, breakdown, carryoverCount, carryoverStoryPoints,
-         carryoverRate]
+         carryoverRate, addedAfterPlanningCount, addedAfterPlanningStoryPoints, addedAfterPlanningKeys,
+         closedAtSprintEndIssues, closedAtSprintEndStoryPoints, closedAtSprintEndRate]
       properties:
         sprintId:
           type: integer
@@ -1618,6 +1619,29 @@ components:
         carryoverRate:
           type: number
           description: Percentage of this sprint's total story points that is carryover (0-100).
+        addedAfterPlanningCount:
+          type: integer
+          description: Issues that entered this sprint after its planning (end of the sprint's first day, team timezone), per Jira's Sprint field history or the creation date when created straight into the sprint. A removal and later re-add counts from the re-add.
+        addedAfterPlanningStoryPoints:
+          type: number
+          description: Story points belonging to addedAfterPlanningCount issues.
+        addedAfterPlanningKeys:
+          type: array
+          items:
+            type: string
+          description: Keys of the addedAfterPlanningCount issues.
+        closedAtSprintEndIssues:
+          type: integer
+          nullable: true
+          description: Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative).
+        closedAtSprintEndStoryPoints:
+          type: number
+          nullable: true
+          description: Story points of closedAtSprintEndIssues. Null while the sprint is not closed.
+        closedAtSprintEndRate:
+          type: number
+          nullable: true
+          description: "\"% real cerrado\": closedAtSprintEnd over the sprint's scope, on the same completionBasis as completionRate. Null while the sprint is not closed."
         goal:
           type: ["string", "null"]
           description: This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.

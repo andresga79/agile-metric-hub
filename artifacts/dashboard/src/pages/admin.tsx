@@ -82,6 +82,7 @@ const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
   { value: "Test", label: "Test" },
   { value: "Test Plan", label: "Test Plan" },
   { value: "Spike", label: "Spike" },
+  { value: "Tech Debt", label: "Deuda Técnica / Tech Debt" },
 ];
 
 export default function Admin() {

@@ -19,6 +19,13 @@ const ISSUE_TYPE_MAP: Record<string, string> = {
   "test execution": "Test Execution",
   test: "Test",
   "test plan": "Test Plan",
+  // Admin offered "Spike" for a long time, but it mapped to "Other" here so checking it there
+  // counted nothing. Same for Jira's Spanish "Deuda Técnica" type.
+  spike: "Spike",
+  "tech debt": "Tech Debt",
+  "technical debt": "Tech Debt",
+  "deuda técnica": "Tech Debt",
+  "deuda tecnica": "Tech Debt",
   // Spanish
   historia: "Story",
   "historia de usuario": "Story",
@@ -804,6 +811,67 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
     if (candidateEnd !== null && candidateEnd < currentStart) return true;
   }
   return false;
+}
+
+// Sprint dates are compared as local calendar days in the team's timezone (the same TZ the
+// container runs in). Chile shifts offset during the year, so a fixed -3h would drift.
+const SPRINT_TIMEZONE = process.env.TZ || "America/Santiago";
+
+/** Offset (ms) of `timeZone` from UTC at instant `utcMs`. */
+function timeZoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - Math.floor(utcMs / 1000) * 1000;
+}
+
+/** End of the sprint's first calendar day (local midnight that follows its start), in
+ *  `timeZone`. Planning happens the afternoon of day 1, so this is the cutoff after which work
+ *  entering the sprint wasn't part of the plan. Jira's own startDate can't be the cutoff: OLP's
+ *  sprints are started at 08:00-09:00 and the previous one is only closed (moving its unfinished
+ *  work in) around 10:00 the same day, all before the planning. Null without a startDate. */
+export function sprintPlanningCutoff(sprint: JiraSprint, timeZone: string = SPRINT_TIMEZONE): Date | null {
+  if (!sprint.startDate) return null;
+  const startMs = new Date(sprint.startDate).getTime();
+  const local = new Date(startMs + timeZoneOffsetMs(startMs, timeZone));
+  const nextMidnightAsUtc = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 1);
+  // Local midnight -> UTC; re-read the offset at the result in case a DST switch sits in between.
+  let utc = nextMidnightAsUtc - timeZoneOffsetMs(nextMidnightAsUtc, timeZone);
+  utc = nextMidnightAsUtc - timeZoneOffsetMs(utc, timeZone);
+  return new Date(utc);
+}
+
+function sprintListHas(ids: string | null | undefined, names: string | null | undefined, sprint: JiraSprint): boolean {
+  // Match by id when Jira sends it (names can be reused/renamed); fall back to the name.
+  if (ids) return ids.split(",").some((id) => id.trim() === String(sprint.id));
+  return (names ?? "").split(",").some((n) => n.trim() === sprint.name);
+}
+
+/** When the issue (last) entered `sprint`: the latest Sprint-field change that added it. An
+ *  issue created straight into the sprint has no such entry, so its creation date is used. A
+ *  removal followed by a re-add counts from the re-add - it came back into the plan. */
+export function sprintEntryTime(issue: JiraIssue, sprint: JiraSprint): Date {
+  let entry = new Date(issue.fields.created).getTime();
+  for (const h of issue.changelog?.histories ?? []) {
+    for (const item of h.items) {
+      if (item.field !== "Sprint") continue;
+      const added = sprintListHas(item.to, item.toString, sprint) && !sprintListHas(item.from, item.fromString, sprint);
+      if (!added) continue;
+      const at = new Date(h.created).getTime();
+      if (at > entry) entry = at;
+    }
+  }
+  return new Date(entry);
+}
+
+/** Whether the issue entered `sprint` after its planning (end of day 1, see sprintPlanningCutoff)
+ *  - unplanned scope added mid-sprint. False when the sprint has no startDate. */
+export function isAddedAfterPlanning(issue: JiraIssue, sprint: JiraSprint, timeZone?: string): boolean {
+  const cutoff = sprintPlanningCutoff(sprint, timeZone);
+  return cutoff !== null && sprintEntryTime(issue, sprint).getTime() >= cutoff.getTime();
 }
 
 /** Days from now back to the start of the earliest sprint among the last

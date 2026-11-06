@@ -23,6 +23,10 @@ const ISSUE_TYPE_ALIASES: Record<string, string> = {
   "test execution": "Test Execution",
   test: "Test",
   "test plan": "Test Plan",
+  spike: "Spike",
+  "tech debt": "Tech Debt",
+  "deuda tecnica": "Tech Debt",
+  "deuda técnica": "Tech Debt",
 };
 
 function normalizeIssueTypeName(value: string): string {

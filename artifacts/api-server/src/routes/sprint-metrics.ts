@@ -10,12 +10,13 @@ import {
   getCycleTimeDays,
   countReopenedIssues,
   isCarryoverIssue,
-  mapIssueType,
-  getEffectiveIssueType,
-  periodToDays,
+  isAddedAfterPlanning,
   sprintCloseTime,
   wasIssueDoneAt,
   getStatusCategoryMap,
+  mapIssueType,
+  getEffectiveIssueType,
+  periodToDays,
   type JiraSprint,
   type JiraIssue,
   isJiraConfigured,
@@ -55,6 +56,16 @@ export interface SprintMetric {
   carryoverCount: number;
   carryoverStoryPoints: number;
   carryoverRate: number;
+  // Issues that entered the sprint after its planning (end of day 1) - unplanned scope.
+  addedAfterPlanningCount: number;
+  addedAfterPlanningStoryPoints: number;
+  addedAfterPlanningKeys: string[];
+  // "% real cerrado": what was already done at the moment the sprint closed (wasIssueDoneAt), as
+  // opposed to completed* above, which is the current status (cumulative, like Rovo). Null for a
+  // sprint that hasn't closed yet. Same scope (filtered issues) and same SP/issue-count basis.
+  closedAtSprintEndIssues: number | null;
+  closedAtSprintEndStoryPoints: number | null;
+  closedAtSprintEndRate: number | null;
   goal: string | null;
 }
 
@@ -82,12 +93,11 @@ export async function computeSprintMetrics(
   allowedIssueTypes: string[],
   allSprints: JiraSprint[]
 ): Promise<SprintMetric> {
-  // A closed sprint completed only what was done when it closed - not work carried over and
-  // finished in a later sprint (see wasIssueDoneAt). An active sprint uses the current status.
-  const closeTime = sprintCloseTime(sprint);
-  const categoryMap = closeTime ? await getStatusCategoryMap() : null;
-  const doneAtClose = (i: JiraIssue): boolean =>
-    closeTime && categoryMap ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i);
+  // Completed = done in Jira NOW, the same rule as Jira's Rovo sprint summaries (decided
+  // 2026-11-06 so the Sprints tab matches what the team reads in Rovo). Trade-off accepted on
+  // purpose: an issue carried over and finished in a later sprint counts as completed in every
+  // sprint it passed through. wasIssueDoneAt keeps the "done at sprint close" alternative.
+  const doneAtClose = (i: JiraIssue): boolean => isIssueDone(i);
 
   // A cancellation / backlog cleanup already closed by the sprint's end is neither scope nor
   // completed work (isNonDeliveryClosure). OLI's board doesn't treat "Cancelado" as done, so Jira
@@ -118,6 +128,8 @@ export async function computeSprintMetrics(
   const carryoverCount = carryoverIssues.length;
   const carryoverStoryPoints = carryoverIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
+  const addedAfterPlanning = filtered.filter((i) => isAddedAfterPlanning(i, sprint));
+
   const cycleTimes = await Promise.all(
     doneIssues.map((i) => getCycleTimeDays(i))
   );
@@ -125,6 +137,16 @@ export async function computeSprintMetrics(
   const avgCycleTimeDays = validCycleTimes.length > 0
     ? validCycleTimes.reduce((a, b) => a + b, 0) / validCycleTimes.length
     : null;
+
+  const closeTime = sprintCloseTime(sprint);
+  let closedAtSprintEndIssues: number | null = null;
+  let closedAtSprintEndStoryPoints: number | null = null;
+  if (closeTime) {
+    const categoryMap = await getStatusCategoryMap();
+    const doneAtEnd = filtered.filter((i) => wasIssueDoneAt(i, closeTime, categoryMap));
+    closedAtSprintEndIssues = doneAtEnd.length;
+    closedAtSprintEndStoryPoints = doneAtEnd.reduce((sum, i) => sum + getStoryPoints(i), 0);
+  }
 
   const completedIssues = doneIssues.length;
   const totalIssues = filtered.length;
@@ -152,6 +174,17 @@ export async function computeSprintMetrics(
     carryoverCount,
     carryoverStoryPoints,
     carryoverRate: totalSp > 0 ? (carryoverStoryPoints / totalSp) * 100 : 0,
+    addedAfterPlanningCount: addedAfterPlanning.length,
+    addedAfterPlanningStoryPoints: addedAfterPlanning.reduce((sum, i) => sum + getStoryPoints(i), 0),
+    addedAfterPlanningKeys: addedAfterPlanning.map((i) => i.key),
+    closedAtSprintEndIssues,
+    closedAtSprintEndStoryPoints,
+    closedAtSprintEndRate:
+      closedAtSprintEndIssues === null || closedAtSprintEndStoryPoints === null
+        ? null
+        : completionBasis === "storyPoints"
+          ? (closedAtSprintEndStoryPoints / totalSp) * 100
+          : totalIssues > 0 ? (closedAtSprintEndIssues / totalIssues) * 100 : 0,
     goal: sprint.goal?.trim() || null,
   };
 }

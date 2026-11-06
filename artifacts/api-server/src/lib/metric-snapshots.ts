@@ -13,8 +13,6 @@ import {
   getStatusCategoryMap,
   findQaRejections,
   JIRA_MAX_LOOKBACK_DAYS,
-  sprintCloseTime,
-  wasIssueDoneAt,
   getResolvedJiraIssuesInRange,
   type JiraIssue,
   type JiraSprint,
@@ -267,16 +265,11 @@ export async function computeSprintSnapshot(
   const filteredIssues = issues.filter((issue) =>
     allowedIssueTypes.includes(getEffectiveIssueType(issue))
   );
-  const categoryMap = await getStatusCategoryMap();
-  // Same "completed at sprint close" rule as computeSprintMetrics, so Evolution's per-sprint
-  // throughput matches the Sprints tab instead of growing as carried-over work gets finished.
-  const closeTime = sprintCloseTime(sprint);
-  // Cancellations / backlog cleanups closed within the sprint aren't delivery: same rule as every
+  // Same "done in Jira now" rule as computeSprintMetrics, so Evolution's per-sprint throughput
+  // matches the Sprints tab. Cancellations / backlog cleanups aren't delivery: same rule as every
   // other throughput (isNonDeliveryClosure), and their lead/cycle time is already null.
   const doneIssues = await withoutNonDeliveryClosures(
-    filteredIssues.filter((issue) =>
-      closeTime ? wasIssueDoneAt(issue, closeTime, categoryMap) : isIssueDone(issue)
-    )
+    filteredIssues.filter((issue) => isIssueDone(issue))
   );
 
   const resolvedIssues = await Promise.all(

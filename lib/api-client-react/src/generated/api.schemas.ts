@@ -492,6 +492,18 @@ export interface SprintMetric {
   carryoverStoryPoints: number;
   /** Percentage of this sprint's total story points that is carryover (0-100). */
   carryoverRate: number;
+  /** Issues that entered this sprint after its planning (end of the sprint's first day, team timezone), per Jira's Sprint field history or the creation date when created straight into the sprint. A removal and later re-add counts from the re-add. */
+  addedAfterPlanningCount: number;
+  /** Story points belonging to addedAfterPlanningCount issues. */
+  addedAfterPlanningStoryPoints: number;
+  /** Keys of the addedAfterPlanningCount issues. */
+  addedAfterPlanningKeys: string[];
+  /** Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative). */
+  closedAtSprintEndIssues: number | null;
+  /** Story points of closedAtSprintEndIssues. Null while the sprint is not closed. */
+  closedAtSprintEndStoryPoints: number | null;
+  /** "% real cerrado": closedAtSprintEnd over the sprint's scope, on the same completionBasis as completionRate. Null while the sprint is not closed. */
+  closedAtSprintEndRate: number | null;
   /**
      * This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.
      * @nullable

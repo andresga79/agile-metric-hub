@@ -58,8 +58,12 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   (período anterior, backfill) y `getJiraIssuesForWindow` (ventanas `2s`/`6s`, hasta 150 días,
   porque 6 sprints + el activo suelen pasar de 90). No subir el límite global sin revisar
   Forecast/Analíticas.
-- **Completado de sprint = "done al cierre"** (`wasIssueDoneAt`, desde el changelog), no el
-  estado actual — si no, el trabajo arrastrado se acredita a cada sprint por el que pasó.
+- **Completado de sprint = estado actual en Jira** (`isIssueDone`), igual que los resúmenes de
+  sprint de Rovo (decidido 2026-11-06 para cuadrar con Rovo). Costo aceptado: lo arrastrado y
+  terminado después se acredita a cada sprint por el que pasó (sprints viejos cerca del 100%).
+  Antes era "done al cierre" (`wasIssueDoneAt`, sigue en `lib/jira.ts` por si se vuelve atrás).
+  Aplica a Sprints, Capacidad y snapshots de Evolution. La pestaña Sprints muestra además
+  "% Real cerrado" (`closedAtSprintEndRate`, = `wasIssueDoneAt` al cierre) en columna aparte.
 - **Sync serializado (concurrency=1)**: `warmVisibleProjectsCache` y
   `calculateAndCachePortfolio` corren de a un proyecto por vez, a propósito — fix de un
   crash loop por OOM en el free tier de 512MB (ver `SESSION_LOG.md`, 2026-07-27). Más

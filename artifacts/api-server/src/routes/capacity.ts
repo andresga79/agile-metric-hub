@@ -12,9 +12,6 @@ import {
   getStoryPoints,
   isIssueDone,
   isNonDeliveryClosure,
-  wasIssueDoneAt,
-  sprintCloseTime,
-  getStatusCategoryMap,
   getEffectiveIssueType,
   type JiraIssue,
   type JiraSprint,
@@ -69,13 +66,11 @@ function toMember(row: SprintCapacityRow): MemberAvailability {
 async function loadSprintIssues(
   sprint: JiraSprint,
   projectKey: string,
-  allowedIssueTypes: string[],
-  categoryMap: Map<string, string>
+  allowedIssueTypes: string[]
 ): Promise<CapacityIssue[]> {
   const issues = await getSprintIssues(sprint.id);
-  const closeTime = sprintCloseTime(sprint);
-  const doneAtClose = (i: JiraIssue): boolean =>
-    closeTime ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i);
+  // Same "done in Jira now" rule as the Sprints tab (computeSprintMetrics).
+  const doneAtClose = (i: JiraIssue): boolean => isIssueDone(i);
   const typed = issues
     .filter((i: JiraIssue) => i.key.startsWith(`${projectKey}-`))
     .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
@@ -130,11 +125,10 @@ router.get(
       const project = await ensureScrumProject(projectId, res);
       if (!project) return;
 
-      const [sprints, future, allowedIssueTypes, categoryMap] = await Promise.all([
+      const [sprints, future, allowedIssueTypes] = await Promise.all([
         getJiraSprints(projectId, 50),
         getFutureJiraSprints(projectId),
         getPortfolioAllowedIssueTypes(),
-        getStatusCategoryMap(),
       ]);
       // getJiraSprints sorts by end date descending.
       const closed = sprints.filter((s) => s.state === "closed").slice(0, HISTORY_SPRINTS);
@@ -177,9 +171,9 @@ router.get(
       }
 
       const [closedIssues, nextIssues, activeIssues] = await Promise.all([
-        Promise.all(closed.map((s) => loadSprintIssues(s, project.key, allowedIssueTypes, categoryMap))),
-        next ? loadSprintIssues(next, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
-        active && !isActive ? loadSprintIssues(active, project.key, allowedIssueTypes, categoryMap) : Promise.resolve([]),
+        Promise.all(closed.map((s) => loadSprintIssues(s, project.key, allowedIssueTypes))),
+        next ? loadSprintIssues(next, project.key, allowedIssueTypes) : Promise.resolve([]),
+        active && !isActive ? loadSprintIssues(active, project.key, allowedIssueTypes) : Promise.resolve([]),
       ]);
 
       const samples = closed
