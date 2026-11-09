@@ -140,7 +140,7 @@ export function ScrumSections({ v, jiraUrl }: { v: ScrumView; jiraUrl: string | 
       <StabilityChart v={v} />
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 20 }}>
         <CycleChart v={v} />
-        <WaitingSection v={v} jiraUrl={jiraUrl} />
+        <WaitingSection flow={v.flow} jiraUrl={jiraUrl} />
       </section>
       <TrendsTable v={v} />
     </>

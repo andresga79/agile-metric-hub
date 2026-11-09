@@ -1,12 +1,13 @@
 import { AlertTriangle } from "lucide-react";
+import type { V2FlowBlock, V2TrendRow } from "@workspace/api-client-react";
 import { fmtDays, fmtNum, fmtPct, fmtPp } from "../format";
 import { DeltaText, GlassCard, SectionTitle, V2_WARN } from "../ui";
 import { GREY, MUTED, Scroll, Section, comparison, sprintLabel, type ScrumView } from "./shared";
 
-export function WaitingSection({ v, jiraUrl }: { v: ScrumView; jiraUrl: string | null }) {
-  const rows = [...v.flow.timeInStatus].sort((a, b) => b.avgDays - a.avgDays);
+export function WaitingSection({ flow, jiraUrl }: { flow: V2FlowBlock; jiraUrl: string | null }) {
+  const rows = [...flow.timeInStatus].sort((a, b) => b.avgDays - a.avgDays);
   const max = Math.max(0.1, ...rows.map((r) => r.avgDays));
-  const { total, aged } = v.flow.wip;
+  const { total, aged } = flow.wip;
   return (
     <Section id="t-acumula" title="Dónde espera el trabajo" subtitle="Días promedio que pasa un issue en cada estado del flujo.">
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -72,18 +73,23 @@ export function TrendsTable({ v }: { v: ScrumView }) {
   const after = cmp.recent;
   const before = cmp.previous;
   const range = (arr: typeof v.sprints) => (arr.length ? ` (${sprintLabel(arr[0].name)} a ${sprintLabel(arr[arr.length - 1].name).replace(/^Sprint\s+/i, "")})` : "");
+  const subtitle =
+    v.sprints.length === 0
+      ? "Sin sprints cerrados."
+      : !cmp.hasComparison
+        ? `Últimos ${after.length} sprints${range(after)}. Sin dato previo para comparar.`
+        : `Últimos ${after.length} sprints${range(after)} contra ${cmp.previousLabel}${before ? range(before) : ""}.`;
+  return <TrendsCard trends={v.trends} subtitle={subtitle} />;
+}
+
+export function TrendsCard({ trends, subtitle, labels }: { trends: V2TrendRow[]; subtitle: string; labels?: Record<string, string> }) {
   const cell = { padding: "12px", borderBottom: "1px solid rgba(255,255,255,0.08)", textAlign: "left" as const };
+  const names = { ...LABEL, ...labels };
   return (
     <GlassCard aria-labelledby="t-tend">
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <SectionTitle id="t-tend">Tendencia del equipo</SectionTitle>
-        <p style={{ fontSize: 14, color: MUTED }}>
-          {v.sprints.length === 0
-            ? "Sin sprints cerrados."
-            : !cmp.hasComparison
-              ? `Últimos ${after.length} sprints${range(after)}. Sin dato previo para comparar.`
-              : `Últimos ${after.length} sprints${range(after)} contra ${cmp.previousLabel}${before ? range(before) : ""}.`}
-        </p>
+        <p style={{ fontSize: 14, color: MUTED }}>{subtitle}</p>
       </div>
       <Scroll>
         <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 14 }}>
@@ -96,9 +102,9 @@ export function TrendsTable({ v }: { v: ScrumView }) {
             </tr>
           </thead>
           <tbody>
-            {v.trends.map((t) => (
+            {trends.map((t) => (
               <tr key={t.key}>
-                <th scope="row" style={{ ...cell, fontWeight: 500 }}>{LABEL[t.key] ?? t.key}</th>
+                <th scope="row" style={{ ...cell, fontWeight: 500 }}>{names[t.key] ?? t.key}</th>
                 <td style={cell}>{value(t.key, t.before)}</td>
                 <td style={cell}>{value(t.key, t.after)}</td>
                 <td style={cell}>
