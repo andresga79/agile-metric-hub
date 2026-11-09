@@ -1,9 +1,11 @@
-import { getEffectiveIssueType, getStoryPoints, type JiraIssue, type JiraSprint } from "./jira";
+import { getEffectiveIssueType, getStoryPoints, isIssueDone, type JiraIssue, type JiraSprint } from "./jira";
 
 // Per-sprint executive summary (Resumen tab): the Rovo-style report the team used to ask Rovo for,
 // built from the same scope as the Sprints table. "Completed" is whatever `isDone` says - the
 // route passes "done at sprint close" (wasIssueDoneAt) for a closed sprint, so a ticket finished
-// in the next sprint is incomplete here, same as the "% real cerrado" column.
+// in the next sprint is incomplete here, same as the "% real cerrado" column. The doneToday* KPIs
+// are Rovo's own number (current status, isIssueDone) over the same scope and basis, so both can
+// be shown side by side; for a sprint still open they equal the completed ones.
 
 export interface SprintSummaryKpis {
   sprintId: number;
@@ -25,6 +27,10 @@ export interface SprintSummaryKpis {
   bugsTotal: number;
   bugsCompleted: number;
   unestimatedIssues: number;
+  // "Done hoy": done by current status (isIssueDone), same scope and basis as completionRate.
+  doneTodayStoryPoints: number;
+  doneTodayIssues: number;
+  doneTodayRate: number;
 }
 
 export interface SprintSummaryGroup {
@@ -98,6 +104,9 @@ export function buildSprintSummaryKpis(
   const bugs = scope.filter((i) => getEffectiveIssueType(i) === "Bug");
   const basis: SprintSummaryKpis["completionBasis"] = committed > 0 ? "storyPoints" : "issueCount";
   const issueRate = scope.length > 0 ? (done.length / scope.length) * 100 : 0;
+  const doneToday = scope.filter(isIssueDone);
+  const doneTodaySp = doneToday.reduce((sum, i) => sum + getStoryPoints(i), 0);
+  const doneTodayIssueRate = scope.length > 0 ? (doneToday.length / scope.length) * 100 : 0;
   return {
     sprintId: sprint.id,
     sprintName: sprint.name,
@@ -117,6 +126,9 @@ export function buildSprintSummaryKpis(
     bugsTotal: bugs.length,
     bugsCompleted: bugs.filter(isDone).length,
     unestimatedIssues: scope.filter(isUnestimated).length,
+    doneTodayStoryPoints: doneTodaySp,
+    doneTodayIssues: doneToday.length,
+    doneTodayRate: basis === "storyPoints" ? (doneTodaySp / committed) * 100 : doneTodayIssueRate,
   };
 }
 

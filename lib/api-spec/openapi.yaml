@@ -508,6 +508,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v2/portfolio:
+    get:
+      operationId: getV2Portfolio
+      tags: [metrics]
+      summary: v2 portfolio - one row per visible team, built from the same team views
+      description: >
+        Scrum rows use the last `sprints` closed sprints (real closed rate); Kanban rows always
+        use 90 days. A project whose Jira data fails comes back as a row with `error` set.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/V2SprintWindow"
+      responses:
+        "200":
+          description: Portfolio view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V2PortfolioView"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v2/projects/{projectId}/team:
+    get:
+      operationId: getV2Team
+      tags: [metrics]
+      summary: v2 team view (Scrum by sprints, Kanban by days)
+      description: >
+        Scrum projects read `sprints` (3, 6 or 12; default 6); Kanban/simple projects read `days`
+        (30, 90 or 180; default 90). The response is discriminated by `boardType`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/V2SprintWindow"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum: [30, 90, 180]
+      responses:
+        "200":
+          description: Team view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V2TeamView"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No access to the Sprints or Kanban section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/capacity:
     get:
       operationId: getProjectCapacity
@@ -799,6 +870,13 @@ components:
       schema:
         type: string
         enum: ["1m", "3m"]
+    V2SprintWindow:
+      name: sprints
+      in: query
+      required: false
+      schema:
+        type: integer
+        enum: [3, 6, 12]
 
   schemas:
     HealthStatus:
@@ -1423,7 +1501,7 @@ components:
       required: [sprintId, sprintName, state, startDate, endDate, closeDate, committedStoryPoints,
         deliveredStoryPoints, completionRate, completionBasis, totalIssues, completedIssues,
         issueCompletionRate, incompleteIssues, incompleteStoryPoints, bugsTotal, bugsCompleted,
-        unestimatedIssues]
+        unestimatedIssues, doneTodayStoryPoints, doneTodayIssues, doneTodayRate]
       properties:
         sprintId:
           type: integer
@@ -1465,6 +1543,14 @@ components:
           type: integer
         unestimatedIssues:
           type: integer
+        doneTodayStoryPoints:
+          type: number
+          description: Done hoy (current status, Rovo's number), same scope as committedStoryPoints.
+        doneTodayIssues:
+          type: integer
+        doneTodayRate:
+          type: number
+          description: Done hoy rate on the same basis as completionRate (story points, or issue count).
     SprintSummaryMember:
       type: object
       required: [accountId, name, totalIssues, completedIssues, totalStoryPoints, completedStoryPoints, incompleteStoryPoints, completionRate, unestimatedIssues, incompleteKeys]
@@ -1541,6 +1627,267 @@ components:
           allOf:
             - $ref: "#/components/schemas/SprintSummaryKpis"
           nullable: true
+    V2SprintFacts:
+      type: object
+      description: Per-sprint base every v2 view is computed from. rovo* = Done hoy (current status); real* = done at sprint close (null while not closed).
+      required: [sprintId, name, state, startDate, endDate, closeDate, basis, committedSp, committedIssues,
+        rovoDoneSp, rovoDoneIssues, rovoRate, realDoneSp, realDoneIssues, realRate, addedSp, addedIssues,
+        addedRate, carryoverSp, carryoverRate, deliveredByType, cycleTimes, leadTimes]
+      properties:
+        sprintId: { type: integer }
+        name: { type: string }
+        state: { type: string, enum: [closed, active] }
+        startDate: { type: string, nullable: true }
+        endDate: { type: string, nullable: true }
+        closeDate: { type: string, nullable: true }
+        basis: { type: string, enum: [storyPoints, issueCount] }
+        committedSp: { type: number }
+        committedIssues: { type: integer }
+        rovoDoneSp: { type: number }
+        rovoDoneIssues: { type: integer }
+        rovoRate: { type: number }
+        realDoneSp: { type: number, nullable: true }
+        realDoneIssues: { type: integer, nullable: true }
+        realRate: { type: number, nullable: true }
+        addedSp: { type: number }
+        addedIssues: { type: integer }
+        addedRate: { type: number }
+        carryoverSp: { type: number }
+        carryoverRate: { type: number }
+        deliveredByType:
+          type: object
+          required: [historia, tecnico, bug]
+          properties:
+            historia: { type: integer }
+            tecnico: { type: integer }
+            bug: { type: integer }
+        cycleTimes:
+          type: array
+          items: { type: number }
+        leadTimes:
+          type: array
+          items: { type: number }
+    V2TrendRow:
+      type: object
+      required: [key, before, after, delta, unit, betterWhen]
+      properties:
+        key:
+          type: string
+          enum: [realRate, closedSp, closedIssues, cycleMedian, leadMedian, addedRate, carryoverRate]
+        before: { type: number, nullable: true }
+        after: { type: number, nullable: true }
+        delta: { type: number, nullable: true }
+        unit: { type: string, enum: [pp, "%"] }
+        betterWhen: { type: string, enum: [up, down] }
+    V2TimeInStatusRow:
+      type: object
+      required: [status, avgDays, waiting]
+      properties:
+        status: { type: string }
+        avgDays: { type: number }
+        waiting: { type: boolean }
+    V2WipAgingItem:
+      type: object
+      required: [id, key, summary, assignee, issueType, priority, daysInProgress, alertLevel, enteredDate]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        summary: { type: string }
+        assignee: { type: string, nullable: true }
+        issueType: { type: string }
+        priority: { type: string }
+        daysInProgress: { type: number }
+        alertLevel: { type: string, enum: [critical, warning, watch, null], nullable: true }
+        enteredDate: { type: string }
+    V2FlowBlock:
+      type: object
+      required: [cycleMedian, cycleP85, cycleMedianDeltaPct, leadMedian, leadP85, flowEfficiencyPct, timeInStatus, wip]
+      properties:
+        cycleMedian: { type: number, nullable: true }
+        cycleP85: { type: number, nullable: true }
+        cycleMedianDeltaPct: { type: number, nullable: true }
+        leadMedian: { type: number, nullable: true }
+        leadP85: { type: number, nullable: true }
+        flowEfficiencyPct: { type: number, nullable: true }
+        timeInStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2TimeInStatusRow"
+        wip:
+          type: object
+          required: [total, aged]
+          properties:
+            total: { type: integer }
+            aged:
+              type: array
+              items:
+                $ref: "#/components/schemas/V2WipAgingItem"
+    V2PlanningRecommendation:
+      type: object
+      description: Capacity for the next sprint from the last 3 closed sprints (real closed numbers).
+      required: [basedOn, totalSp, totalIssues, plannedSp, plannedIssues, marginSp, marginIssues, unplannedPct]
+      properties:
+        basedOn:
+          type: array
+          items: { type: string }
+        totalSp: { type: number, nullable: true }
+        totalIssues: { type: integer }
+        plannedSp: { type: number, nullable: true }
+        plannedIssues: { type: integer }
+        marginSp: { type: number, nullable: true }
+        marginIssues: { type: integer }
+        unplannedPct: { type: number }
+    V2ScrumTeamView:
+      type: object
+      required: [boardType, projectId, projectKey, projectName, windowSprints, sprints, active, nextSprintName,
+        compliance, flow, planning, trends, attention, generatedAt]
+      properties:
+        boardType: { type: string, enum: [scrum] }
+        projectId: { type: string }
+        projectKey: { type: string }
+        projectName: { type: string }
+        windowSprints: { type: integer, enum: [3, 6, 12] }
+        sprints:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2SprintFacts"
+        active:
+          allOf:
+            - $ref: "#/components/schemas/V2SprintFacts"
+          nullable: true
+        nextSprintName: { type: string, nullable: true }
+        compliance:
+          type: object
+          required: [avgRealRate, deltaPp, stdDevPp, band, minRate, maxRate]
+          properties:
+            avgRealRate: { type: number, nullable: true }
+            deltaPp: { type: number, nullable: true }
+            stdDevPp: { type: number, nullable: true }
+            band: { type: string, enum: [alta, media, baja, null], nullable: true }
+            minRate: { type: number, nullable: true }
+            maxRate: { type: number, nullable: true }
+        flow:
+          $ref: "#/components/schemas/V2FlowBlock"
+        planning:
+          allOf:
+            - $ref: "#/components/schemas/V2PlanningRecommendation"
+          nullable: true
+        trends:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2TrendRow"
+        attention:
+          type: array
+          items: { type: string }
+        generatedAt: { type: string }
+    V2WeekBucket:
+      type: object
+      required: [weekStart, historia, tecnico, bug, cycleAvg, leadAvg]
+      properties:
+        weekStart: { type: string }
+        historia: { type: integer }
+        tecnico: { type: integer }
+        bug: { type: integer }
+        cycleAvg: { type: number, nullable: true }
+        leadAvg: { type: number, nullable: true }
+    V2KanbanTeamView:
+      type: object
+      required: [boardType, projectId, projectKey, projectName, windowDays, delivered, deliveredPrevious,
+        deliveredDeltaPct, byWeek, flow, trends, attention, generatedAt]
+      properties:
+        boardType: { type: string, enum: [kanban] }
+        projectId: { type: string }
+        projectKey: { type: string }
+        projectName: { type: string }
+        windowDays: { type: integer, enum: [30, 90, 180] }
+        delivered: { type: integer }
+        deliveredPrevious: { type: integer }
+        deliveredDeltaPct: { type: number, nullable: true }
+        byWeek:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2WeekBucket"
+        flow:
+          $ref: "#/components/schemas/V2FlowBlock"
+        trends:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2TrendRow"
+        attention:
+          type: array
+          items: { type: string }
+        generatedAt: { type: string }
+    V2TeamView:
+      oneOf:
+        - $ref: "#/components/schemas/V2ScrumTeamView"
+        - $ref: "#/components/schemas/V2KanbanTeamView"
+      discriminator:
+        propertyName: boardType
+        mapping:
+          scrum: "#/components/schemas/V2ScrumTeamView"
+          kanban: "#/components/schemas/V2KanbanTeamView"
+    V2PortfolioRow:
+      type: object
+      required: [projectId, projectKey, projectName, boardType, avgRealRate, realDeltaPp, band, minRate, maxRate,
+        cycleMedian, cycleMedianDeltaPct, delivered, deliveredDeltaPct, addedRate, carryoverRate, attention,
+        reading, error]
+      properties:
+        projectId: { type: string }
+        projectKey: { type: string }
+        projectName: { type: string }
+        boardType: { type: string, enum: [scrum, kanban] }
+        avgRealRate: { type: number, nullable: true }
+        realDeltaPp: { type: number, nullable: true }
+        band: { type: string, enum: [alta, media, baja, null], nullable: true }
+        minRate: { type: number, nullable: true }
+        maxRate: { type: number, nullable: true }
+        cycleMedian: { type: number, nullable: true }
+        cycleMedianDeltaPct: { type: number, nullable: true }
+        delivered: { type: integer, nullable: true }
+        deliveredDeltaPct: { type: number, nullable: true }
+        addedRate: { type: number, nullable: true }
+        carryoverRate: { type: number, nullable: true }
+        attention:
+          type: array
+          items: { type: string }
+        reading: { type: string }
+        error: { type: string, nullable: true }
+    V2PortfolioView:
+      type: object
+      required: [windowSprints, rows, summary, headline, generatedAt]
+      properties:
+        windowSprints: { type: integer, enum: [3, 6, 12] }
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2PortfolioRow"
+        summary:
+          type: object
+          required: [scrumAvgRealRate, scrumRates, improving, scrumTeams, attention]
+          properties:
+            scrumAvgRealRate: { type: number, nullable: true }
+            scrumRates:
+              type: array
+              items:
+                type: object
+                required: [projectName, rate]
+                properties:
+                  projectName: { type: string }
+                  rate: { type: number }
+            improving: { type: integer }
+            scrumTeams: { type: integer }
+            attention:
+              type: array
+              items:
+                type: object
+                required: [projectName, reasons]
+                properties:
+                  projectName: { type: string }
+                  reasons:
+                    type: array
+                    items: { type: string }
+        headline: { type: string }
+        generatedAt: { type: string }
     SprintMetricsResponse:
       type: object
       required: [sprints, summary]

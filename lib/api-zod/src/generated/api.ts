@@ -496,7 +496,10 @@ export const GetProjectSprintSummaryResponse = zod.object({
   "incompleteStoryPoints": zod.number(),
   "bugsTotal": zod.number(),
   "bugsCompleted": zod.number(),
-  "unestimatedIssues": zod.number()
+  "unestimatedIssues": zod.number(),
+  "doneTodayStoryPoints": zod.number().describe('Done hoy (current status, Rovo\'s number), same scope as committedStoryPoints.'),
+  "doneTodayIssues": zod.number(),
+  "doneTodayRate": zod.number().describe('Done hoy rate on the same basis as completionRate (story points, or issue count).')
 }),
   "members": zod.array(zod.object({
   "accountId": zod.string().nullable(),
@@ -539,9 +542,252 @@ export const GetProjectSprintSummaryResponse = zod.object({
   "incompleteStoryPoints": zod.number(),
   "bugsTotal": zod.number(),
   "bugsCompleted": zod.number(),
-  "unestimatedIssues": zod.number()
+  "unestimatedIssues": zod.number(),
+  "doneTodayStoryPoints": zod.number().describe('Done hoy (current status, Rovo\'s number), same scope as committedStoryPoints.'),
+  "doneTodayIssues": zod.number(),
+  "doneTodayRate": zod.number().describe('Done hoy rate on the same basis as completionRate (story points, or issue count).')
 }).nullable()
 })
+
+
+/**
+ * Scrum rows use the last `sprints` closed sprints (real closed rate); Kanban rows always use 90 days. A project whose Jira data fails comes back as a row with `error` set.
+ *
+ * @summary v2 portfolio - one row per visible team, built from the same team views
+ */
+export const GetV2PortfolioQueryParams = zod.object({
+  "sprints": zod.union([zod.literal(3),zod.literal(6),zod.literal(12)]).optional()
+})
+
+export const GetV2PortfolioResponse = zod.object({
+  "windowSprints": zod.union([zod.literal(3),zod.literal(6),zod.literal(12)]),
+  "rows": zod.array(zod.object({
+  "projectId": zod.string(),
+  "projectKey": zod.string(),
+  "projectName": zod.string(),
+  "boardType": zod.enum(['scrum', 'kanban']),
+  "avgRealRate": zod.number().nullable(),
+  "realDeltaPp": zod.number().nullable(),
+  "band": zod.union([zod.literal('alta'),zod.literal('media'),zod.literal('baja'),zod.literal(null)]).nullable(),
+  "minRate": zod.number().nullable(),
+  "maxRate": zod.number().nullable(),
+  "cycleMedian": zod.number().nullable(),
+  "cycleMedianDeltaPct": zod.number().nullable(),
+  "delivered": zod.number().nullable(),
+  "deliveredDeltaPct": zod.number().nullable(),
+  "addedRate": zod.number().nullable(),
+  "carryoverRate": zod.number().nullable(),
+  "attention": zod.array(zod.string()),
+  "reading": zod.string(),
+  "error": zod.string().nullable()
+})),
+  "summary": zod.object({
+  "scrumAvgRealRate": zod.number().nullable(),
+  "scrumRates": zod.array(zod.object({
+  "projectName": zod.string(),
+  "rate": zod.number()
+})),
+  "improving": zod.number(),
+  "scrumTeams": zod.number(),
+  "attention": zod.array(zod.object({
+  "projectName": zod.string(),
+  "reasons": zod.array(zod.string())
+}))
+}),
+  "headline": zod.string(),
+  "generatedAt": zod.string()
+})
+
+
+/**
+ * Scrum projects read `sprints` (3, 6 or 12; default 6); Kanban/simple projects read `days` (30, 90 or 180; default 90). The response is discriminated by `boardType`.
+ *
+ * @summary v2 team view (Scrum by sprints, Kanban by days)
+ */
+export const GetV2TeamParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetV2TeamQueryParams = zod.object({
+  "sprints": zod.union([zod.literal(3),zod.literal(6),zod.literal(12)]).optional(),
+  "days": zod.union([zod.literal(30),zod.literal(90),zod.literal(180)]).optional()
+})
+
+export const GetV2TeamResponse = zod.union([zod.object({
+  "boardType": zod.enum(['scrum']),
+  "projectId": zod.string(),
+  "projectKey": zod.string(),
+  "projectName": zod.string(),
+  "windowSprints": zod.union([zod.literal(3),zod.literal(6),zod.literal(12)]),
+  "sprints": zod.array(zod.object({
+  "sprintId": zod.number(),
+  "name": zod.string(),
+  "state": zod.enum(['closed', 'active']),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "closeDate": zod.string().nullable(),
+  "basis": zod.enum(['storyPoints', 'issueCount']),
+  "committedSp": zod.number(),
+  "committedIssues": zod.number(),
+  "rovoDoneSp": zod.number(),
+  "rovoDoneIssues": zod.number(),
+  "rovoRate": zod.number(),
+  "realDoneSp": zod.number().nullable(),
+  "realDoneIssues": zod.number().nullable(),
+  "realRate": zod.number().nullable(),
+  "addedSp": zod.number(),
+  "addedIssues": zod.number(),
+  "addedRate": zod.number(),
+  "carryoverSp": zod.number(),
+  "carryoverRate": zod.number(),
+  "deliveredByType": zod.object({
+  "historia": zod.number(),
+  "tecnico": zod.number(),
+  "bug": zod.number()
+}),
+  "cycleTimes": zod.array(zod.number()),
+  "leadTimes": zod.array(zod.number())
+}).describe('Per-sprint base every v2 view is computed from. rovo\* = Done hoy (current status); real\* = done at sprint close (null while not closed).')),
+  "active": zod.object({
+  "sprintId": zod.number(),
+  "name": zod.string(),
+  "state": zod.enum(['closed', 'active']),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "closeDate": zod.string().nullable(),
+  "basis": zod.enum(['storyPoints', 'issueCount']),
+  "committedSp": zod.number(),
+  "committedIssues": zod.number(),
+  "rovoDoneSp": zod.number(),
+  "rovoDoneIssues": zod.number(),
+  "rovoRate": zod.number(),
+  "realDoneSp": zod.number().nullable(),
+  "realDoneIssues": zod.number().nullable(),
+  "realRate": zod.number().nullable(),
+  "addedSp": zod.number(),
+  "addedIssues": zod.number(),
+  "addedRate": zod.number(),
+  "carryoverSp": zod.number(),
+  "carryoverRate": zod.number(),
+  "deliveredByType": zod.object({
+  "historia": zod.number(),
+  "tecnico": zod.number(),
+  "bug": zod.number()
+}),
+  "cycleTimes": zod.array(zod.number()),
+  "leadTimes": zod.array(zod.number())
+}).describe('Per-sprint base every v2 view is computed from. rovo\* = Done hoy (current status); real\* = done at sprint close (null while not closed).').nullable(),
+  "nextSprintName": zod.string().nullable(),
+  "compliance": zod.object({
+  "avgRealRate": zod.number().nullable(),
+  "deltaPp": zod.number().nullable(),
+  "stdDevPp": zod.number().nullable(),
+  "band": zod.union([zod.literal('alta'),zod.literal('media'),zod.literal('baja'),zod.literal(null)]).nullable(),
+  "minRate": zod.number().nullable(),
+  "maxRate": zod.number().nullable()
+}),
+  "flow": zod.object({
+  "cycleMedian": zod.number().nullable(),
+  "cycleP85": zod.number().nullable(),
+  "cycleMedianDeltaPct": zod.number().nullable(),
+  "leadMedian": zod.number().nullable(),
+  "leadP85": zod.number().nullable(),
+  "flowEfficiencyPct": zod.number().nullable(),
+  "timeInStatus": zod.array(zod.object({
+  "status": zod.string(),
+  "avgDays": zod.number(),
+  "waiting": zod.boolean()
+})),
+  "wip": zod.object({
+  "total": zod.number(),
+  "aged": zod.array(zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "summary": zod.string(),
+  "assignee": zod.string().nullable(),
+  "issueType": zod.string(),
+  "priority": zod.string(),
+  "daysInProgress": zod.number(),
+  "alertLevel": zod.union([zod.literal('critical'),zod.literal('warning'),zod.literal('watch'),zod.literal(null)]).nullable(),
+  "enteredDate": zod.string()
+}))
+})
+}),
+  "planning": zod.object({
+  "basedOn": zod.array(zod.string()),
+  "totalSp": zod.number().nullable(),
+  "totalIssues": zod.number(),
+  "plannedSp": zod.number().nullable(),
+  "plannedIssues": zod.number(),
+  "marginSp": zod.number().nullable(),
+  "marginIssues": zod.number(),
+  "unplannedPct": zod.number()
+}).describe('Capacity for the next sprint from the last 3 closed sprints (real closed numbers).').nullable(),
+  "trends": zod.array(zod.object({
+  "key": zod.enum(['realRate', 'closedSp', 'closedIssues', 'cycleMedian', 'leadMedian', 'addedRate', 'carryoverRate']),
+  "before": zod.number().nullable(),
+  "after": zod.number().nullable(),
+  "delta": zod.number().nullable(),
+  "unit": zod.enum(['pp', '%']),
+  "betterWhen": zod.enum(['up', 'down'])
+})),
+  "attention": zod.array(zod.string()),
+  "generatedAt": zod.string()
+}),zod.object({
+  "boardType": zod.enum(['kanban']),
+  "projectId": zod.string(),
+  "projectKey": zod.string(),
+  "projectName": zod.string(),
+  "windowDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180)]),
+  "delivered": zod.number(),
+  "deliveredPrevious": zod.number(),
+  "deliveredDeltaPct": zod.number().nullable(),
+  "byWeek": zod.array(zod.object({
+  "weekStart": zod.string(),
+  "historia": zod.number(),
+  "tecnico": zod.number(),
+  "bug": zod.number(),
+  "cycleAvg": zod.number().nullable(),
+  "leadAvg": zod.number().nullable()
+})),
+  "flow": zod.object({
+  "cycleMedian": zod.number().nullable(),
+  "cycleP85": zod.number().nullable(),
+  "cycleMedianDeltaPct": zod.number().nullable(),
+  "leadMedian": zod.number().nullable(),
+  "leadP85": zod.number().nullable(),
+  "flowEfficiencyPct": zod.number().nullable(),
+  "timeInStatus": zod.array(zod.object({
+  "status": zod.string(),
+  "avgDays": zod.number(),
+  "waiting": zod.boolean()
+})),
+  "wip": zod.object({
+  "total": zod.number(),
+  "aged": zod.array(zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "summary": zod.string(),
+  "assignee": zod.string().nullable(),
+  "issueType": zod.string(),
+  "priority": zod.string(),
+  "daysInProgress": zod.number(),
+  "alertLevel": zod.union([zod.literal('critical'),zod.literal('warning'),zod.literal('watch'),zod.literal(null)]).nullable(),
+  "enteredDate": zod.string()
+}))
+})
+}),
+  "trends": zod.array(zod.object({
+  "key": zod.enum(['realRate', 'closedSp', 'closedIssues', 'cycleMedian', 'leadMedian', 'addedRate', 'carryoverRate']),
+  "before": zod.number().nullable(),
+  "after": zod.number().nullable(),
+  "delta": zod.number().nullable(),
+  "unit": zod.enum(['pp', '%']),
+  "betterWhen": zod.enum(['up', 'down'])
+})),
+  "attention": zod.array(zod.string()),
+  "generatedAt": zod.string()
+})])
 
 
 /**

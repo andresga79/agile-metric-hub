@@ -276,6 +276,10 @@ async function executeSync(trigger: SyncTrigger): Promise<void> {
       logger.warn({ err }, "RC epics sync failed, continuing");
     });
     await calculateAndCachePortfolio({ forceRefresh });
+    // v2 team views (Scrum 6 sprints / Kanban 90 days), serial like the warm above. Imported
+    // lazily: v2/service imports withCache from this module. warmV2Cache never throws.
+    const { warmV2Cache } = await import("./v2/service");
+    await warmV2Cache(forceRefresh);
     lastSyncedAt = new Date();
     lastSyncOutcome = syncFailedProjects > 0 ? "partial" : "success";
     logger.info(

@@ -71,6 +71,42 @@ describe("buildSprintSummary", () => {
   });
 });
 
+// Rovo's number ("Done hoy": current status) next to the real one (done at sprint close): an issue
+// finished after the sprint closed counts in the first and not in the second.
+describe("buildSprintSummary Done hoy", () => {
+  const scope = [
+    issue("B-1", { type: "Historia", sp: 5, done: true }),
+    issue("B-2", { type: "Historia", sp: 3, done: true }), // finished after close
+    issue("B-3", { type: "Historia", sp: 2, done: false }),
+  ];
+  const doneAtClose = (i: JiraIssue) => i.key === "B-1";
+  const k = buildSprintSummary(sprint, scope, doneAtClose).kpis;
+
+  it("real completion excludes work finished after close; Done hoy counts it", () => {
+    expect(k.deliveredStoryPoints).toBe(5);
+    expect(k.completionRate).toBeCloseTo(50, 5);
+    expect(k.doneTodayStoryPoints).toBe(8);
+    expect(k.doneTodayIssues).toBe(2);
+    expect(k.doneTodayRate).toBeCloseTo(80, 5);
+    expect(k.completionRate).toBeLessThan(k.doneTodayRate);
+  });
+
+  it("Done hoy uses the same basis as completion (issue count without story points)", () => {
+    const noSp = [
+      issue("C-1", { type: "Historia", done: true }),
+      issue("C-2", { type: "Historia", done: true }),
+      issue("C-3", { type: "Historia", done: false }),
+      issue("C-4", { type: "Historia", done: false }),
+    ];
+    const kk = buildSprintSummary(sprint, noSp, (i) => i.key === "C-1").kpis;
+    expect(kk.completionBasis).toBe("issueCount");
+    expect(kk.completionRate).toBeCloseTo(25, 5);
+    expect(kk.doneTodayStoryPoints).toBe(0);
+    expect(kk.doneTodayIssues).toBe(2);
+    expect(kk.doneTodayRate).toBeCloseTo(50, 5);
+  });
+});
+
 describe("previousClosedSprint", () => {
   const s115: JiraSprint = { id: 115, name: "115", state: "closed", completeDate: "2026-10-05T12:48:00.000Z" };
   const s117: JiraSprint = { id: 117, name: "117", state: "closed", completeDate: "2026-11-02T13:00:00.000Z" };

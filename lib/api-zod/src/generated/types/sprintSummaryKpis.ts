@@ -26,4 +26,9 @@ export interface SprintSummaryKpis {
   bugsTotal: number;
   bugsCompleted: number;
   unestimatedIssues: number;
+  /** Done hoy (current status, Rovo's number), same scope as committedStoryPoints. */
+  doneTodayStoryPoints: number;
+  doneTodayIssues: number;
+  /** Done hoy rate on the same basis as completionRate (story points, or issue count). */
+  doneTodayRate: number;
 }
