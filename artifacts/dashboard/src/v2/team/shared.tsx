@@ -137,7 +137,7 @@ export const MINI_GRID: CSSProperties = { display: "grid", gridTemplateColumns: 
 
 /** Scrolls inside its box so charts keep their size at 390 px. */
 export function Scroll({ children }: { children: ReactNode }) {
-  return <div style={{ overflowX: "auto", paddingBottom: 4 }}>{children}</div>;
+  return <div className="v2-scroll-x">{children}</div>;
 }
 
 /** "Tablero Sprint 117" -> "Sprint 117". */

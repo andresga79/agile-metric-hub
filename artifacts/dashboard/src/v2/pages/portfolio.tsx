@@ -74,7 +74,7 @@ function Row({ r }: { r: V2PortfolioRow }) {
         ) : (
           <>
             <span style={STRONG}>{fmtPct(r.avgRealRate, 0)}</span>{" "}
-            <span style={{ marginLeft: 6 }}>
+            <span style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
               <DeltaText value={r.realDeltaPp} unit="pp" betterWhen="up" />
             </span>
             <div style={{ marginTop: 4 }}>
@@ -85,17 +85,17 @@ function Row({ r }: { r: V2PortfolioRow }) {
       </td>
       <td style={CELL}>
         <span style={STRONG}>{fmtDays(r.cycleMedian)}</span>{" "}
-        <span style={{ marginLeft: 6 }}>
+        <span style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
           <DeltaText value={r.cycleMedianDeltaPct} unit="%" betterWhen="down" />
         </span>
       </td>
       <td style={CELL}>
         <span style={STRONG}>{fmtNum(r.delivered, 0)}</span>{" "}
-        <span style={{ marginLeft: 6 }}>
+        <span style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
           <DeltaText value={r.deliveredDeltaPct} unit="%" betterWhen="up" />
         </span>
       </td>
-      <td style={{ ...CELL, fontSize: 13, whiteSpace: "nowrap" }}>
+      <td style={{ ...CELL, fontSize: 13 }}>
         {kanban ? (
           <span style={{ color: MUTED }}>No aplica</span>
         ) : (
@@ -105,7 +105,7 @@ function Row({ r }: { r: V2PortfolioRow }) {
           </>
         )}
       </td>
-      <td style={{ ...CELL, fontSize: 13, maxWidth: 320 }}>{r.reading}</td>
+      <td style={{ ...CELL, fontSize: 13, minWidth: 160, maxWidth: 320 }}>{r.reading}</td>
     </tr>
   );
 }
@@ -189,8 +189,8 @@ export default function V2Portfolio() {
             Cada fila lleva al detalle del equipo. Flechas: cambio contra el período anterior.
           </p>
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", minWidth: 1040, borderCollapse: "collapse", fontSize: 14 }}>
+        <div className="v2-scroll-x">
+          <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ color: MUTED, fontSize: 13 }}>
                 <th scope="col" style={HEAD}>Equipo</th>
