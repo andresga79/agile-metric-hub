@@ -884,12 +884,12 @@ describe("isNonDeliveryClosure / getDeliveryDate", () => {
       expect(await isNonDeliveryClosure(issue)).toBe(false);
     });
 
-    it("assigned now but only assigned after closing is non-delivery", async () => {
+    it("assigned now but only assigned after closing is delivery (OLP-3954)", async () => {
       const issue = withChangelog(dev, [
         hist("2026-10-14T00:00:00.000Z", status("TO DO", "DONE")),
         hist("2026-10-20T00:00:00.000Z", assignee(null, "dev-1") as never),
       ]);
-      expect(await isNonDeliveryClosure(issue)).toBe(true);
+      expect(await isNonDeliveryClosure(issue)).toBe(false);
     });
 
     it("a first assignee change with a `from` means it was assigned from the start", async () => {
