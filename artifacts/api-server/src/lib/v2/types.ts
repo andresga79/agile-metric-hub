@@ -115,3 +115,38 @@ export interface KanbanTeamView {
 }
 
 export type TeamView = ScrumTeamView | KanbanTeamView;
+
+export interface PortfolioRow {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  boardType: "scrum" | "kanban";
+  avgRealRate: number | null;
+  realDeltaPp: number | null;
+  band: PredictabilityBand | null;
+  minRate: number | null;
+  maxRate: number | null;
+  cycleMedian: number | null;
+  cycleMedianDeltaPct: number | null;
+  delivered: number | null;
+  deliveredDeltaPct: number | null;
+  addedRate: number | null;
+  carryoverRate: number | null;
+  attention: string[];
+  reading: string;
+  error: string | null;
+}
+
+export interface PortfolioView {
+  windowSprints: 3 | 6 | 12;
+  rows: PortfolioRow[];
+  summary: {
+    scrumAvgRealRate: number | null;
+    scrumRates: { projectName: string; rate: number }[];
+    improving: number;
+    scrumTeams: number;
+    attention: { projectName: string; reasons: string[] }[];
+  };
+  headline: string;
+  generatedAt: string;
+}
