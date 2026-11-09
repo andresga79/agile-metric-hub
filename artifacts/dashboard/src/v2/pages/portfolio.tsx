@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useGetV2Portfolio, type V2PortfolioRow } from "@workspace/api-client-react";
+import { getGetV2PortfolioQueryKey, useGetV2Portfolio, type V2PortfolioRow } from "@workspace/api-client-react";
 import { fmtDays, fmtNum, fmtPct } from "../format";
 import { BandPill, DeltaText, GlassCard, SectionTitle, V2_GOOD, V2_WARN, WindowToggle } from "../ui";
 
@@ -110,11 +111,14 @@ function Row({ r }: { r: V2PortfolioRow }) {
 
 export default function V2Portfolio() {
   const [win, setWin] = useState<Win>(6);
-  const { data, isLoading, isError } = useGetV2Portfolio({ sprints: win });
+  const { data, isLoading, isError, isFetching } = useGetV2Portfolio(
+    { sprints: win },
+    { query: { queryKey: getGetV2PortfolioQueryKey({ sprints: win }), placeholderData: keepPreviousData } },
+  );
 
   const toggle = <WindowToggle options={OPTIONS} value={win} onChange={setWin} label="Ventana de sprints" />;
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <GlassCard>
         <p>Cargando…</p>
@@ -141,10 +145,19 @@ export default function V2Portfolio() {
         <p style={{ fontSize: 15, color: MUTED, maxWidth: "72ch" }}>{headline}</p>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 6 }}>
           {toggle}
+          {isFetching && (
+            <span role="status" style={{ fontSize: 13, color: MUTED }}>
+              Actualizando…
+            </span>
+          )}
           <span style={{ fontSize: 13, color: MUTED }}>Últimos {data.windowSprints} sprints · Kanban: últimos 90 días</span>
         </div>
       </section>
 
+      <div
+        aria-busy={isFetching}
+        style={{ display: "flex", flexDirection: "column", gap: 28, opacity: isFetching ? 0.6 : 1, transition: "opacity 150ms" }}
+      >
       <section
         aria-label="Resumen del portafolio"
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}
@@ -200,6 +213,7 @@ export default function V2Portfolio() {
         por volumen y tiempo. Predictibilidad: alta si el cumplimiento varía hasta 8 pp entre sprints, media hasta 12 pp,
         baja sobre 12 pp. Estabilidad: promedio de {data.windowSprints} sprints, en SP.
       </p>
+      </div>
     </div>
   );
 }
