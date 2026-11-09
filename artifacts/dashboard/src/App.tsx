@@ -24,6 +24,10 @@ import ProjectCapacity from "@/pages/project-capacity";
 import ProjectKanban from "@/pages/project-kanban";
 import Admin from "@/pages/admin";
 import AdminReleaseKeywords from "@/pages/admin-release-keywords";
+import { V2Layout } from "@/v2/layout";
+import V2Portfolio from "@/v2/pages/portfolio";
+import V2Team from "@/v2/pages/team";
+import V2Sprint from "@/v2/pages/sprint";
 
 import "@/lib/auth"; // init auth token getter
 import { getAuthToken, setAuthToken } from "@/lib/auth";
@@ -101,6 +105,16 @@ function useRoleGuard() {
   return user ?? null;
 }
 
+function V2Route({ component: Component }: { component: React.ComponentType<any> }) {
+  const user = useRoleGuard();
+  if (!user) return null;
+  return (
+    <V2Layout>
+      <Component />
+    </V2Layout>
+  );
+}
+
 function RedirectToDashboard() {
   const [, setLocation] = useLocation();
   setLocation("/");
@@ -155,6 +169,16 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/kanban">
         {() => <SectionRoute section="kanban" component={ProjectKanban} />}
+      </Route>
+
+      <Route path="/v2">
+        {() => <V2Route component={V2Portfolio} />}
+      </Route>
+      <Route path="/v2/projects/:projectId">
+        {() => <V2Route component={V2Team} />}
+      </Route>
+      <Route path="/v2/projects/:projectId/sprints/:sprintId">
+        {() => <V2Route component={V2Sprint} />}
       </Route>
 
       <Route path="/settings">
