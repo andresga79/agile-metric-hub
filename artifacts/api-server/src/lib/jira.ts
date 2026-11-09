@@ -610,11 +610,27 @@ function findWorkStartTransition(
   return start;
 }
 
+/** Whether the issue had an assignee at `at` (ms), rebuilt from the changelog's "assignee" items.
+ *  Changes stamped at `at` count (the closing and the assignment can share one history entry).
+ *  The first change's `from` is the initial value; with no changes the current assignee applies. */
+function wasAssignedAt(issue: JiraIssue, at: number): boolean {
+  const changes = (issue.changelog?.histories ?? [])
+    .flatMap((h) => h.items.filter((it) => it.field === "assignee").map((it) => ({ at: new Date(h.created).getTime(), it })))
+    .sort((a, b) => a.at - b.at);
+  if (changes.length === 0) return !!issue.fields.assignee;
+  let current = !!(changes[0].it.from ?? changes[0].it.fromString);
+  for (const c of changes) {
+    if (c.at > at) break;
+    current = !!(c.it.to ?? c.it.toString);
+  }
+  return current;
+}
+
 const CANCELLED_STATUS = /cancel|descartad|anulad|won'?t do/i;
 
 /** A done-category closure that isn't delivered work, so it must stay out of flow metrics
  *  (throughput, lead/cycle time, SLA): a cancelled issue ("Cancelado" is done category here), or
- *  backlog cleanup — unassigned and closed straight from a to-do status (TO DO -> DONE),
+ *  backlog cleanup — unassigned (when it was closed) and closed straight from a to-do status (TO DO -> DONE),
  *  per its changelog. OLP closed ~20 such items on 2026-10-14, some 600 days old, and the month's
  *  avg lead time went from ~20 to 81 days. That includes items that touched in-progress long ago
  *  (or for minutes, by mistake) and were parked back in TO DO, so "ever in progress" isn't enough.
@@ -623,7 +639,7 @@ const CANCELLED_STATUS = /cancel|descartad|anulad|won'?t do/i;
 export async function isNonDeliveryClosure(issue: JiraIssue): Promise<boolean> {
   if (!isIssueDone(issue)) return false;
   if (CANCELLED_STATUS.test(issue.fields.status.name)) return true;
-  if (issue.fields.assignee || !issue.changelog) return false;
+  if (!issue.changelog) return false;
 
   const categoryMap = await getStatusCategoryMap();
   const isDone = (name: string, id: string | null) => {
@@ -640,7 +656,13 @@ export async function isNonDeliveryClosure(issue: JiraIssue): Promise<boolean> {
     .find((t) => isDone(t.to, t.toId) && !isDone(t.from, t.fromId));
   // QA/blocked statuses are to-do category in some of these workflows ("Ready for QA", "Blocked"),
   // but closing from them is the normal end of worked items, not a backlog cleanup.
-  if (closing) return !isInProgress(closing.from, closing.fromId) && !isQaStatus(closing.from) && !isBlockedStatus(closing.from);
+  if (closing) {
+    // Who held it when it was closed, not now: ORINI-509 was assigned, closed, then unassigned two
+    // days later, and still counts as delivered work.
+    if (wasAssignedAt(issue, closing.at)) return false;
+    return !isInProgress(closing.from, closing.fromId) && !isQaStatus(closing.from) && !isBlockedStatus(closing.from);
+  }
+  if (issue.fields.assignee) return false;
   return !findFirstInProgressTransition(issue, categoryMap);
 }
 

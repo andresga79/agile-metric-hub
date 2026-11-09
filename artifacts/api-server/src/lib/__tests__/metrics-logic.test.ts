@@ -847,6 +847,60 @@ describe("isNonDeliveryClosure / getDeliveryDate", () => {
     expect(await getDeliveryDate(issue)).toBeNull();
   });
 
+  describe("assignee at the closing transition (ORINI-509)", () => {
+    const hist = (created: string, ...items: Record<string, string | null>[]) => ({
+      created,
+      items: items.map((it) => ({ field: "status", ...it })),
+    });
+    const status = (from: string, to: string) => ({ fromString: from, toString: to });
+    const assignee = (from: string | null, to: string | null) => ({ field: "assignee", from, to, fromString: from, toString: to });
+    const withChangelog = (current: typeof dev | null, histories: unknown[]) =>
+      ({
+        ...makeIssue({ fields: { ...done, assignee: current ?? undefined } }),
+        changelog: { histories },
+      }) as unknown as JiraIssue;
+
+    it("assigned in the same entry as the closing and unassigned two days later is delivery", async () => {
+      const issue = withChangelog(null, [
+        hist("2026-10-21T10:00:00.000Z", status("Por hacer", "En curso")),
+        hist("2026-10-22T10:00:00.000Z", status("En curso", "Por hacer")),
+        { created: "2026-10-27T08:31:00.000Z", items: [assignee(null, "alvaro"), { field: "status", ...status("Por hacer", "Listo") }] },
+        hist("2026-10-29T09:00:00.000Z", assignee("alvaro", null) as never),
+      ]);
+      expect(await isNonDeliveryClosure(issue)).toBe(false);
+    });
+
+    it("unassigned at close and still unassigned is non-delivery (unchanged)", async () => {
+      const issue = withChangelog(null, [hist("2026-10-14T00:00:00.000Z", status("TO DO", "DONE"))]);
+      expect(await isNonDeliveryClosure(issue)).toBe(true);
+    });
+
+    it("assigned at close but unassigned now is delivery", async () => {
+      const issue = withChangelog(null, [
+        hist("2026-10-01T00:00:00.000Z", assignee(null, "dev-1") as never),
+        hist("2026-10-14T00:00:00.000Z", status("TO DO", "DONE")),
+        hist("2026-10-20T00:00:00.000Z", assignee("dev-1", null) as never),
+      ]);
+      expect(await isNonDeliveryClosure(issue)).toBe(false);
+    });
+
+    it("assigned now but only assigned after closing is non-delivery", async () => {
+      const issue = withChangelog(dev, [
+        hist("2026-10-14T00:00:00.000Z", status("TO DO", "DONE")),
+        hist("2026-10-20T00:00:00.000Z", assignee(null, "dev-1") as never),
+      ]);
+      expect(await isNonDeliveryClosure(issue)).toBe(true);
+    });
+
+    it("a first assignee change with a `from` means it was assigned from the start", async () => {
+      const issue = withChangelog(null, [
+        hist("2026-10-14T00:00:00.000Z", status("TO DO", "DONE")),
+        hist("2026-10-20T00:00:00.000Z", assignee("dev-1", null) as never),
+      ]);
+      expect(await isNonDeliveryClosure(issue)).toBe(false);
+    });
+  });
+
   it("withoutNonDeliveryClosures drops cleanups and cancellations, keeps open and delivered issues", async () => {
     const cleanup = withStatusHistory(makeIssue({ key: "C-1", fields: { ...done } }), toDoToDone);
     const delivered = withStatusHistory(makeIssue({ key: "D-1", fields: { ...done, assignee: dev } }), toDoToDone);

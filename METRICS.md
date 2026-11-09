@@ -79,7 +79,7 @@ Throughput, lead/cycle time, SLA, forecast, portfolio y snapshots de Evolution c
 de categoría done que son:
 - **Cancelados**: estado `Cancelado` (o *cancel/descartad/anulad/won't do*), que Jira pone en
   categoría done.
-- **Limpieza de backlog**: **sin asignado** y cuyo último paso a done vino desde un estado "por
+- **Limpieza de backlog**: **sin asignado al momento del cierre** (se reconstruye desde el changelog, no el asignado actual: ORINI-509 se asignó, cerró y desasignó después, y cuenta) y cuyo último paso a done vino desde un estado "por
   hacer" (ej. `TO DO → DONE`; no cuenta como limpieza si viene de un estado de QA o bloqueado),
   aunque alguna vez haya tocado in-progress. Caso real: OLP, 2026-10-14, ~25 issues de hasta 600
   días cerrados en bloque llevaron el lead time del mes de ~20 a 81 días.
