@@ -142,11 +142,11 @@ export function KanbanCycleChart({ v }: { v: KanbanView }) {
   const step = 56;
   const W = Math.max(560, 88 + (pts.length - 1) * step);
   const x = (i: number) => 44 + i * step;
-  const cMax = Math.max(16, ...pts.map((p) => p.cycle ?? 0));
-  const lMax = Math.max(40, ...pts.map((p) => p.lead ?? 0));
-  const yC = (n: number) => Math.round(140 - (n / cMax) * 100);
-  const yL = (n: number) => Math.round(140 - (n / lMax) * 100);
-  const line = (key: "cycle" | "lead", y: (n: number) => number) =>
+  // One y-scale for both lines: lead time (created -> Done) contains the cycle time, so it must
+  // never plot below it.
+  const yMax = Math.max(16, ...pts.map((p) => Math.max(p.cycle ?? 0, p.lead ?? 0)));
+  const y = (n: number) => Math.round(140 - (n / yMax) * 100);
+  const line = (key: "cycle" | "lead") =>
     pts.filter((p) => p[key] != null).map((p) => `${x(p.i)},${y(p[key] as number)}`).join(" ");
   const f = v.flow;
   return (
@@ -157,19 +157,19 @@ export function KanbanCycleChart({ v }: { v: KanbanView }) {
             <line x1="24" y1="140" x2={W - 20} y2="140" stroke="rgba(255,255,255,0.14)" />
             <line x1="24" y1="90" x2={W - 20} y2="90" stroke="rgba(255,255,255,0.08)" />
             <line x1="24" y1="40" x2={W - 20} y2="40" stroke="rgba(255,255,255,0.08)" />
-            <polyline points={line("lead", yL)} fill="none" stroke={GREY} strokeWidth="2" strokeDasharray="5 4" />
-            <polyline points={line("cycle", yC)} fill="none" stroke={PINK} strokeWidth="3" />
+            <polyline points={line("lead")} fill="none" stroke={GREY} strokeWidth="2" strokeDasharray="5 4" />
+            <polyline points={line("cycle")} fill="none" stroke={PINK} strokeWidth="3" />
             {pts.map((p) => (
               <g key={p.w.weekStart}>
                 {p.cycle != null && (
                   <>
-                    <circle cx={x(p.i)} cy={yC(p.cycle)} r="4" fill={PINK} />
-                    <text x={x(p.i)} y={yC(p.cycle) - 10} textAnchor="middle" fill="#fff" fontSize="13" fontFamily="Jost, sans-serif">
+                    <circle cx={x(p.i)} cy={y(p.cycle)} r="4" fill={PINK} />
+                    <text x={x(p.i)} y={y(p.cycle) - 10} textAnchor="middle" fill="#fff" fontSize="13" fontFamily="Jost, sans-serif">
                       {fmtNum(p.cycle)} d
                     </text>
                   </>
                 )}
-                {p.lead != null && <circle cx={x(p.i)} cy={yL(p.lead)} r="3" fill={GREY} />}
+                {p.lead != null && <circle cx={x(p.i)} cy={y(p.lead)} r="3" fill={GREY} />}
                 <text x={x(p.i)} y="164" textAnchor="middle" fill="rgba(255,255,255,0.70)" fontSize="12" fontFamily="Jost, sans-serif">
                   {weekLabel(p.w.weekStart)}
                 </text>

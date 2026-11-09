@@ -44,11 +44,11 @@ export function QuickAnswers({ v }: { v: ScrumView }) {
     <section aria-label="Respuestas rápidas" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 16 }}>
       <Answer
         q="¿Cumplimos lo que comprometemos?"
-        big={<span style={{ ...BIG, color: rateColor(c.avgRealRate) }}>{fmtPct(c.avgRealRate)}</span>}
+        big={<span style={{ ...BIG, color: rateColor(c.avgRealRate, v.thresholds) }}>{fmtPct(c.avgRealRate)}</span>}
         unit="real cerrado"
         delta={<DeltaText value={c.deltaPp} betterWhen="up">{c.deltaPp == null ? "sin dato previo" : `${fmtPp(c.deltaPp)} en los últimos ${h} sprints`}</DeltaText>}
         note={tenth == null ? "Sin sprints cerrados todavía." : `De cada 10 SP comprometidos, se cierran ${tenth} dentro del sprint.`}
-        extra={<BandPill band={c.band} min={c.minRate} max={c.maxRate} />}
+        extra={<BandPill band={c.band} min={c.minRate} max={c.maxRate} thresholds={v.thresholds} />}
       />
       <Answer
         q="¿Cuánto tarda de iniciado a entregado?"
@@ -65,7 +65,7 @@ export function QuickAnswers({ v }: { v: ScrumView }) {
       />
       <Answer
         q="¿Cómo va el último sprint?"
-        big={<span style={{ ...BIG, color: rateColor(last?.rovoRate ?? null) }}>{last ? fmtPct(last.rovoRate) : "—"}</span>}
+        big={<span style={{ ...BIG, color: rateColor(last?.rovoRate ?? null, v.thresholds) }}>{last ? fmtPct(last.rovoRate) : "—"}</span>}
         unit={last ? `${sprintLabel(last.name)} · real cerrado ${fmtPct(last.realRate)}` : undefined}
         delta={last && vsAvg != null && <DeltaText value={vsAvg} betterWhen="up">{`${fmtNum(Math.abs(vsAvg))} pp ${vsAvg < 0 ? "bajo" : "sobre"} el promedio real`}</DeltaText>}
         note={
@@ -97,10 +97,16 @@ const IMPROVE: Record<string, string> = {
   carryoverRate: "Lo arrastrado de sprints anteriores",
 };
 
+/** Capacity always comes from the last 3 closed sprints, whatever the window: "Sale de los sprints 115 a 117". */
+const sprintNumber = (name: string) => sprintLabel(name).replace(/^Sprint\s+/i, "");
+const basedOnText = (names: string[]) =>
+  names.length === 0
+    ? ""
+    : `Sale de los sprints ${sprintNumber(names[0])} a ${sprintNumber(names[names.length - 1])}`;
+
 export function PlanningSection({ v }: { v: ScrumView }) {
   const p = v.planning;
   if (!p) return null;
-  const h = comparison(v).recent.length;
   const waiting = [...v.flow.timeInStatus].filter((r) => r.waiting).sort((a, b) => b.avgDays - a.avgDays)[0];
   const better = v.trends.find((t) => t.delta != null && t.delta !== 0 && (t.betterWhen === "up" ? t.delta > 0 : t.delta < 0));
   const sp = p.totalSp != null && p.plannedSp != null;
@@ -109,7 +115,7 @@ export function PlanningSection({ v }: { v: ScrumView }) {
     <GlassCard aria-labelledby="t-planning">
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <SectionTitle id="t-planning">{`Para la planning de ${v.nextSprintName ? sprintLabel(v.nextSprintName) : "el próximo sprint"}`}</SectionTitle>
-        <span style={{ fontSize: 13, color: MUTED }}>Sale de las tendencias de los últimos {h} sprints</span>
+        <span style={{ fontSize: 13, color: MUTED }}>{basedOnText(p.basedOn)}</span>
       </div>
       <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
         <Tip icon={<Flag {...icon} />} title={sp ? `Planificar ~${fmtNum(p.plannedSp, 0)} SP (${p.plannedIssues} issues) y dejar ~${fmtNum(p.marginSp, 0)} SP de margen para lo que entra después` : `Planificar ~${p.plannedIssues} issues y dejar ~${p.marginIssues} de margen para lo que entra después`}>

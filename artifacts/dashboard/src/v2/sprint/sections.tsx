@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { SprintSummaryKpis, SprintSummaryResponse } from "@workspace/api-client-react";
+import type { SprintSummaryKpis, SprintSummaryResponse, V2Thresholds } from "@workspace/api-client-react";
 import { DeltaText, V2_GOOD, V2_WARN } from "../ui";
 import { fmtNum, fmtPct } from "../format";
 import { BIG, GREY, MiniCard, MINI_GRID, MUTED, SMALL, Scroll, Section, rateColor } from "../team/shared";
@@ -11,13 +11,15 @@ const dateOnly = (v: string | null) =>
 const TH = { textAlign: "right", padding: "8px 10px", fontSize: 13, fontWeight: 500, color: MUTED, whiteSpace: "nowrap" } as const;
 const TD = { textAlign: "right", padding: "8px 10px", fontSize: 14, whiteSpace: "nowrap" } as const;
 type Delta = { v: number; unit: string; lowerBetter: boolean };
+/** The project's thresholds (from the team view); null while it loads -> default colours. */
+type Th = V2Thresholds | null | undefined;
 const ROW = { borderTop: "1px solid var(--nxt-glass-border-1)" } as const;
 
 function Keys({ keys }: { keys: string[] }) {
   return <span style={{ fontSize: 12, color: MUTED }}>{keys.length ? keys.join(", ") : "—"}</span>;
 }
 
-export function Headline({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummaryKpis | null }) {
+export function Headline({ k, prev, thresholds }: { k: SprintSummaryKpis; prev: SprintSummaryKpis | null; thresholds: Th }) {
   const byIssues = k.completionBasis === "issueCount";
   const unit = byIssues ? "issues" : "SP";
   const closed = k.state === "closed";
@@ -28,18 +30,18 @@ export function Headline({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummar
     <div style={MINI_GRID}>
       {closed ? (
         <MiniCard label="Hecho hoy (Rovo)" note={`${sp(done)} de ${sp(total)} ${unit} · estado actual`}>
-          <span style={{ ...BIG, color: rateColor(k.doneTodayRate) }}>{fmtPct(k.doneTodayRate)}</span>
+          <span style={{ ...BIG, color: rateColor(k.doneTodayRate, thresholds) }}>{fmtPct(k.doneTodayRate)}</span>
           {prev && <DeltaText value={k.doneTodayRate - prev.doneTodayRate} unit="pp" betterWhen="up" />}
         </MiniCard>
       ) : (
+        // No delta while the sprint is open: a sprint in progress against a closed one is not like-for-like.
         <MiniCard label="Avance actual" note={`${sp(done)} de ${sp(total)} ${unit} · El real cerrado se fija al cerrar el sprint`}>
-          <span style={{ ...BIG, color: rateColor(k.doneTodayRate) }}>{fmtPct(k.doneTodayRate)}</span>
-          {prev && <DeltaText value={k.doneTodayRate - prev.doneTodayRate} unit="pp" betterWhen="up" />}
+          <span style={{ ...BIG, color: rateColor(k.doneTodayRate, thresholds) }}>{fmtPct(k.doneTodayRate)}</span>
         </MiniCard>
       )}
       {closed && (
         <MiniCard label="Real cerrado" note={`${sp(real)} de ${sp(total)} ${unit} · al cierre`}>
-          <span style={{ ...BIG, color: rateColor(k.completionRate) }}>{fmtPct(k.completionRate)}</span>
+          <span style={{ ...BIG, color: rateColor(k.completionRate, thresholds) }}>{fmtPct(k.completionRate)}</span>
           {prev && <DeltaText value={k.completionRate - prev.completionRate} unit="pp" betterWhen="up" />}
         </MiniCard>
       )}
@@ -134,7 +136,7 @@ export function MemberBars({ data }: { data: SprintSummaryResponse }) {
   );
 }
 
-export function MemberTable({ data }: { data: SprintSummaryResponse }) {
+export function MemberTable({ data, thresholds }: { data: SprintSummaryResponse; thresholds: Th }) {
   const k = data.kpis;
   const cell = (n: ReactNode) => <td style={TD}>{n}</td>;
   return (
@@ -160,7 +162,7 @@ export function MemberTable({ data }: { data: SprintSummaryResponse }) {
                 {cell(m.completedIssues)}
                 {cell(sp(m.totalStoryPoints))}
                 {cell(sp(m.completedStoryPoints))}
-                <td style={{ ...TD, fontWeight: 600, color: rateColor(m.completionRate) }}>{fmtPct(m.completionRate)}</td>
+                <td style={{ ...TD, fontWeight: 600, color: rateColor(m.completionRate, thresholds) }}>{fmtPct(m.completionRate)}</td>
                 <td style={{ ...TD, textAlign: "left", whiteSpace: "normal", minWidth: 140 }}>
                   <Keys keys={m.incompleteKeys} />
                 </td>
@@ -172,7 +174,7 @@ export function MemberTable({ data }: { data: SprintSummaryResponse }) {
               {cell(k.completedIssues)}
               {cell(sp(k.committedStoryPoints))}
               {cell(sp(k.deliveredStoryPoints))}
-              <td style={{ ...TD, color: rateColor(k.completionRate) }}>{fmtPct(k.completionRate)}</td>
+              <td style={{ ...TD, color: rateColor(k.completionRate, thresholds) }}>{fmtPct(k.completionRate)}</td>
               <td />
             </tr>
           </tbody>

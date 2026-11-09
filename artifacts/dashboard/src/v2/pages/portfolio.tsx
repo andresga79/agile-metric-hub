@@ -3,7 +3,8 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { getGetV2PortfolioQueryKey, useGetV2Portfolio, type V2PortfolioRow } from "@workspace/api-client-react";
 import { fmtDays, fmtNum, fmtPct } from "../format";
-import { BandPill, DeltaText, GlassCard, SectionTitle, V2_GOOD, V2_WARN, WindowToggle } from "../ui";
+import { BandPill, DeltaText, GlassCard, SectionTitle, V2_GOOD, V2_WARN, WindowToggle, predictabilityText } from "../ui";
+import { comparisonSides } from "../team/shared";
 
 type Win = 3 | 6 | 12;
 const OPTIONS: { value: Win; label: string }[] = [
@@ -77,7 +78,7 @@ function Row({ r }: { r: V2PortfolioRow }) {
               <DeltaText value={r.realDeltaPp} unit="pp" betterWhen="up" />
             </span>
             <div style={{ marginTop: 4 }}>
-              <BandPill band={r.band} min={r.minRate} max={r.maxRate} />
+              <BandPill band={r.band} min={r.minRate} max={r.maxRate} thresholds={r.thresholds} />
             </div>
           </>
         )}
@@ -134,7 +135,8 @@ export default function V2Portfolio() {
   }
 
   const { rows, summary, headline } = data;
-  const half = Math.max(1, Math.floor(data.windowSprints / 2));
+  // Same split as the backend trends: 3 -> the 3 shown vs the 3 before them; 6/12 -> halves.
+  const sides = comparisonSides(data.windowSprints);
   const attention = summary.attention;
 
   return (
@@ -171,7 +173,7 @@ export default function V2Portfolio() {
             : summary.scrumRates.map((s) => `${s.projectName} ${fmtPct(s.rate, 0)}`).join(" · ")}
         </StatCard>
         <StatCard label="Equipos que mejoran" value={`${summary.improving} de ${summary.scrumTeams}`} color={V2_GOOD}>
-          Scrum: últimos {half} sprints mejor que los {half} anteriores
+          Scrum: últimos {sides.recent} sprints mejor que los {sides.previous} anteriores
         </StatCard>
         <StatCard label="Requiere atención" value={attention.length} color={attention.length > 0 ? V2_WARN : V2_GOOD}>
           {attention.length === 0
@@ -210,8 +212,8 @@ export default function V2Portfolio() {
 
       <p style={{ fontSize: 12, color: MUTED }}>
         Cumplimiento = SP en Done al cierre de cada sprint sobre los comprometidos. No aplica a equipos Kanban, que se miden
-        por volumen y tiempo. Predictibilidad: alta si el cumplimiento varía hasta 8 pp entre sprints, media hasta 12 pp,
-        baja sobre 12 pp. Estabilidad: promedio de {data.windowSprints} sprints, en SP.
+        por volumen y tiempo. Predictibilidad, según la variación del cumplimiento entre sprints:{" "}
+        {predictabilityText(data.thresholds)}. Estabilidad: promedio de {data.windowSprints} sprints, en SP.
       </p>
       </div>
     </div>

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { getGetProjectQueryKey, getGetV2TeamQueryKey, useGetProject, useGetV2Team } from "@workspace/api-client-react";
 import { GlassCard, WindowToggle } from "../ui";
@@ -22,14 +21,26 @@ const MUTED = "rgba(255,255,255,0.70)";
 
 export default function V2Team() {
   const { projectId = "" } = useParams<{ projectId?: string }>();
+  // Keyed by project: switching teams in the header resets the window/board-type state, so the
+  // next team starts at its default (warm) window instead of inheriting e.g. a cold 12.
+  return <TeamPage key={projectId} projectId={projectId} />;
+}
+
+function TeamPage({ projectId }: { projectId: string }) {
   const [win, setWin] = useState<Win>(6);
   const [days, setDays] = useState<Days>(90);
   // The board type is only known from the response: ask with the sprint window first, then switch to `days`
   // once the project turns out to be Kanban.
   const [kanban, setKanban] = useState(false);
   const params = kanban ? { days } : { sprints: win };
+  const teamKey = getGetV2TeamQueryKey(projectId, params);
   const { data, isLoading, isError, isFetching } = useGetV2Team(projectId, params, {
-    query: { queryKey: getGetV2TeamQueryKey(projectId, params), placeholderData: keepPreviousData },
+    query: {
+      queryKey: teamKey,
+      // Keep the previous window on screen while another window of the same team loads; never
+      // show another team's data while this one loads.
+      placeholderData: (prev, prevQuery) => (prev && prevQuery && prevQuery.queryKey[0] === teamKey[0] ? prev : undefined),
+    },
   });
   const isKanban = data?.boardType === "kanban";
   if (isKanban !== kanban && data) setKanban(isKanban);

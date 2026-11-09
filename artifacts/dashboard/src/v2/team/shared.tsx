@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { V2ScrumTeamView, V2SprintFacts } from "@workspace/api-client-react";
+import type { V2ScrumTeamView, V2SprintFacts, V2Thresholds } from "@workspace/api-client-react";
 import { GlassCard, SectionTitle, V2_BAD, V2_GOOD, V2_WARN } from "../ui";
 
 export type ScrumView = V2ScrumTeamView;
@@ -23,6 +23,14 @@ export interface Comparison {
 }
 
 /**
+ * How the backend splits a sprint window for trends (api-server lib/v2/window.ts): 3 -> the 3
+ * displayed vs the 3 closed before them; 6/12 -> most recent half vs the earlier half.
+ */
+export function comparisonSides(windowSprints: 3 | 6 | 12): { recent: number; previous: number } {
+  return windowSprints === 3 ? { recent: 3, previous: 3 } : { recent: windowSprints / 2, previous: windowSprints / 2 };
+}
+
+/**
  * Mirrors the backend trend split: 6/12 with enough closed sprints -> halves of `sprints`;
  * 3 -> all displayed vs the 3 closed before them (not in `sprints`); fewer sprints than the
  * window -> everything is recent and there is no previous side.
@@ -33,14 +41,22 @@ export function comparison(v: ScrumView): Comparison {
   const { sprints, windowSprints } = v;
   if (!hasComparison) return { recent: sprints, previous: null, previousLabel: "sin dato previo", hasComparison };
   if (windowSprints === 3) return { recent: sprints, previous: null, previousLabel: "los 3 sprints anteriores", hasComparison };
-  const h = windowSprints / 2;
+  const h = comparisonSides(windowSprints).recent;
   if (sprints.length < windowSprints) return { recent: sprints, previous: null, previousLabel: "sin dato previo", hasComparison: false };
   return { recent: sprints.slice(-h), previous: sprints.slice(-2 * h, -h), previousLabel: `los ${h} anteriores`, hasComparison };
 }
 
-export function rateColor(rate: number | null): string {
+const DEFAULT_COMPLETION = { completionGood: 80, completionWarning: 50 };
+
+/** Colour of a completion rate by the sprintCompletionReal thresholds (Admin → Health); the 80/50
+ *  defaults only while the thresholds are not loaded yet. */
+export function rateColor(
+  rate: number | null,
+  t: Pick<V2Thresholds, "completionGood" | "completionWarning"> | null | undefined,
+): string {
   if (rate == null) return MUTED;
-  return rate >= 80 ? V2_GOOD : rate >= 50 ? V2_WARN : V2_BAD;
+  const { completionGood, completionWarning } = t ?? DEFAULT_COMPLETION;
+  return rate >= completionGood ? V2_GOOD : rate >= completionWarning ? V2_WARN : V2_BAD;
 }
 
 export const mean = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
