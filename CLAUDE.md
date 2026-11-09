@@ -10,10 +10,10 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   estándar de correr el proyecto en dev, no `pnpm dev` suelto.
 - `cp .env.example .env` antes del primer `up` si no existe `.env` (no viaja con git).
 - `pnpm run typecheck` — typecheck completo del workspace
-- `pnpm run lint` — ESLint (baseline: 0 errores, 140 warnings a propósito, no fuerza
+- `pnpm run lint` — ESLint (baseline: 0 errores, 138 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
-- `pnpm --filter @workspace/api-server test` — vitest, 115 tests (lógica pura de métricas,
+- `pnpm --filter @workspace/api-server test` — vitest, 270 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
 - Reparar snapshots semanales de Evolution anteriores a la ventana de 90 días (admin):
@@ -38,6 +38,8 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 
 - `artifacts/api-server` — API Express: auth, sync de Jira, cálculo de métricas/portfolio
 - `artifacts/dashboard` — frontend Vite/React
+- `artifacts/dashboard/src/v2` — frontend v2: rutas `/v2`, tema Nxtara bajo `.v2-root`, solo español
+- `artifacts/api-server/src/lib/v2` — cálculos v2 (puros) + `service.ts` (Jira, caché, precalentado)
 - `lib/db`, `lib/api-zod`, `lib/api-client-react` — paquetes compartidos del workspace
 
 ## Architecture decisions
@@ -49,6 +51,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - **"Flow Health Score"** (antes mal llamado "DORA Score"): promedio normalizado de
   throughput + cycle time + CFR sobre datos de Jira. **No son métricas DORA reales** (no
   hay fuente de deploys/CI). Ver `METRICS.md` para la fórmula exacta y el resto de métricas.
+- **v2 convive con la app actual** (`/v2`). Titular por sprint = Rovo (Done hoy) con "% real cerrado" al lado; tendencias, predictibilidad, planning y atención usan solo el real cerrado. Portafolio y Equipo salen del mismo cálculo por equipo (la fila se copia de la vista). Fórmulas en `METRICS.md` §v2.
 - **Modelo de acceso**: 2 roles activos — `admin` (control total) y `member` (solo
   lectura, ve todas las secciones). `viewer` existe en el enum pero está dormido (sin
   cuentas asignadas). Cuenta `member` compartida entre varias personas a la vez es válido

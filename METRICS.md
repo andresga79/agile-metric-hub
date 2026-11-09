@@ -390,6 +390,77 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 
 ---
 
+## v2 (vistas `/v2`: Portafolio, Equipo, Sprint)
+
+Convive con la app actual; todo sale de `artifacts/api-server/src/lib/v2/` (cálculos puros) y
+`lib/v2/service.ts` (los conecta con Jira). Regla de oro: el titular por sprint es **Rovo (Done hoy)**
+con el "% real cerrado" al lado, pero tendencias, predictibilidad, recomendación de planning y
+"Requiere atención" usan **solo el real cerrado**.
+
+### SprintFacts: Rovo vs real cerrado
+- Alcance = `sprintScopeIssues` (tipos permitidos). Base: story points si hay comprometidos, si no, conteo de issues.
+- **Rovo (Done hoy)**: `scope.filter(isIssueDone)` — estado actual, sirve también para el sprint activo (`rovoDoneSp/Issues`, `rovoRate`).
+- **Real cerrado**: solo sprints cerrados; `wasIssueDoneAt(issue, sprintCloseTime)` con el changelog (`realDoneSp/Issues`, `realRate`). En el activo es `null`.
+- **No planificado** (`addedRate`): `isAddedAfterPlanning`. **Arrastrado** (`carryoverRate`): `isCarryoverIssue`. Ambos sobre el comprometido, en la misma base.
+- **`deliveredByType`**: lo entregado (real si cerrado, si no Rovo) por `getEffectiveIssueType`: Story → historia, Bug → bug, resto → técnico. Ciclo/lead por issue entregado: `getCycleTimeDays`/`getLeadTimeDays`.
+(`lib/v2/sprint-facts.ts`, `computeSprintFacts`)
+
+### Ventana y comparación
+- `display` = últimos N sprints **cerrados** (N = 3, 6 o 12; otro valor → 6) ordenados por cierre; `active` aparte.
+- `recent`/`previous`: N=3 compara contra los 3 cerrados anteriores; N=6/12 parte `display` por la mitad (últimos N/2 vs primeros N/2). Con menos de N cerrados no hay `previous` ni comparación.
+- Kanban: ventana en días (30/90/180, otro → 90); período actual vs el anterior de igual largo.
+(`lib/v2/window.ts`, `selectSprintWindow`, `parseSprintWindow`, `parseDayWindow`)
+
+### Cumplimiento y predictibilidad (Scrum)
+- Cumplimiento = media de `realRate` de `display`; min/max de esas tasas; `deltaPp` = media(recent) − media(previous) en pp.
+- **Predictibilidad** = desvío estándar **muestral** (n−1) de los `realRate` (null con < 2 sprints). Banda por umbral `sprintPredictability` (default 8/12): ≤ good → alta, ≤ warning → media, si no baja.
+(`lib/v2/team-scrum.ts`, `buildScrumTeamView`; `lib/v2/stats.ts`, `sampleStdDev`, `predictabilityBand`)
+
+### Tendencias
+Filas `before → after` con `delta`: Scrum (recent vs previous): realRate, addedRate, carryoverRate en **pp**; closedSp, closedIssues, cycleMedian, leadMedian en **%** relativo (cycle/lead = mediana de los tiempos de todos los issues del grupo). Kanban (actual vs anterior): closedIssues, cycleMedian, leadMedian en %. Sin base (0 o null) → delta null. Cada fila lleva `betterWhen` (up/down) para colorear.
+(`lib/v2/stats.ts`, `pctChange`, `ppChange`; `buildTrends` en `team-scrum.ts`; `buildKanbanTeamView`)
+
+### Recomendación de planning
+Solo con los últimos 3 sprints cerrados y todos con real cerrado. `total` = media de lo cerrado real (SP solo de sprints con base SP; issues de todos), `noPlanificado%` = media de `addedRate`; `planificar = total × (1 − noPlanificado%)`; margen = total − planificar. Todo redondeado con `Math.round` (total, planificar y margen salen de valores ya redondeados).
+(`lib/v2/planning.ts`, `recommendPlanning`)
+
+### Tiempos
+Ciclo y lead: mediana y P85 (P85 a 1 decimal). **Flow efficiency = media(ciclo) / media(lead) × 100** (null si no hay datos o lead = 0). Scrum agrupa los entregados de `display`; Kanban los del período actual.
+(`lib/v2/flow-block.ts`, `buildFlowBlock`)
+
+### Tiempo por estado y WIP envejecido
+- Tiempo por estado: `computeTimeInStatus` filtrado a la categoría **"en curso"** (`indeterminate`), ordenado por promedio de días; `waiting` = `isWaitingStatus` (regex de nombres de espera: ready/aceptad/listo/espera/pending/bloqueado…).
+- WIP: total de en curso y los envejecidos (`computeWipAging`, nivel `warning`/`critical` según umbral `wipAging`). Scrum: en curso del sprint activo; Kanban: abiertos del proyecto.
+(`lib/v2/flow-block.ts`; `lib/flow-insights.ts`)
+
+### Kanban
+Entregados = resueltos con `isIssueDone`, sin `isNonDeliveryClosure`, tipos permitidos menos los excluidos de Kanban, fecha real de `getResolutionDate`. Se consultan 2× los días de la ventana (actual + anterior). Semanas = ISO (lunes, `isoWeekStart`), con las vacías incluidas, apiladas historia/técnico/bug con ciclo y lead promedio por semana. `deliveredDeltaPct` = % de cambio del conteo.
+(`lib/v2/team-kanban.ts`, `buildKanbanTeamView`; `lib/v2/service.ts`, `buildKanban`)
+
+### Portafolio
+Cada fila se **copia de la vista de equipo** (`toPortfolioRow`), así Portafolio y Equipo nunca divergen: Scrum usa cumplimiento real, banda, min/max, entregados = suma de `realDoneIssues` de los sprints, `deliveredDeltaPct` = tendencia closedIssues, no planificado/arrastrado = media de `display`; Kanban usa los entregados de 90 días (siempre 90 en el portafolio). Un proyecto que falla en Jira sale como fila de error, no rompe el resto.
+- **Resumen**: media de cumplimiento real de los equipos Scrum, cuántos mejoran (`realDeltaPp > 0`), lista de atención.
+- **Lectura por fila**: primero la atención; si no, mejora de cumplimiento, "más y más rápido", más entregado, ciclo menor, o "sin cambios relevantes". **Titular**: "N equipos mejoran su cumplimiento" + primer equipo con atención.
+(`lib/v2/portfolio.ts`, `toPortfolioRow`, `readingFor`, `buildPortfolioView`)
+
+### "Requiere atención"
+Umbrales efectivos del proyecto (`getEffectiveThresholds`, warning; defaults entre paréntesis):
+- Scrum: cumplimiento real medio < `sprintCompletionReal` (50) o banda de predictibilidad "baja" (`sprintPredictability`).
+- Kanban: caída de entregados > `kanbanThroughputDrop` (30 %) o mediana de ciclo > `kanbanCycleTimeRise` (30 %) más alta.
+(`lib/v2/attention.ts`, `scrumAttention`, `kanbanAttention`)
+**Límite**: no hay muestra mínima; con volúmenes Kanban muy chicos un par de issues de diferencia puede disparar la alerta.
+
+### Resumen de sprint: `doneToday*`
+`sprint-summary.ts` expone `doneTodayStoryPoints/Issues/Rate` (estado actual, = Rovo) junto a las cifras de real cerrado; el titular de la vista Sprint usa Done hoy y muestra el % real cerrado al lado. (`lib/sprint-summary.ts`)
+
+### Caché y precalentado
+- Clave `v2:team:<projectId>:s<n>` (Scrum) o `:d<días>` (Kanban), vía `withCache` (TTL 6 h). `getTeamView` en `lib/v2/service.ts`.
+- El sync precalienta (`warmV2Cache`, serie, un proyecto a la vez) **solo** `s6` / `d90`; otras ventanas se calculan al pedirlas.
+- Jira se lee con los helpers `*OrThrow`: si Jira falla se rechaza y **no se cachea** (si no, un sprint vacío daría 0 % por 6 h).
+- **Límites conocidos**: una vista cacheada congela umbrales y "próximo sprint" hasta 6 h (o hasta el siguiente sync/refresh).
+
+---
+
 ## Dónde vive cada cosa (referencia rápida)
 
 | Área | Endpoint / archivo |
@@ -404,4 +475,5 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 | CFD | `routes/cfd.ts` |
 | Resumen Ejecutivo / portfolio (health/QA/tendencias) | `lib/portfolio-cache.ts` + `routes/portfolio.ts` |
 | Capacity (próximo sprint, carga por persona) | `routes/capacity.ts` + `lib/capacity.ts` |
+| Vistas v2 (Portafolio, Equipo, Sprint) | `lib/v2/*.ts` + `lib/v2/service.ts` |
 | Helpers compartidos (cycle/lead time, tipos, estados, thresholds) | `lib/jira.ts`, `lib/health-thresholds.ts` |
