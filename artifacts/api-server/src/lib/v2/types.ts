@@ -57,6 +57,14 @@ export interface FlowBlock {
   wip: { total: number; aged: WipAgingItem[] };
 }
 
+/** Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability). */
+export interface V2Thresholds {
+  completionGood: number;
+  completionWarning: number;
+  predictabilityGood: number;
+  predictabilityWarning: number;
+}
+
 export interface ScrumTeamView {
   boardType: "scrum";
   projectId: string;
@@ -78,6 +86,7 @@ export interface ScrumTeamView {
   planning: PlanningRecommendation | null;
   trends: TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
 
@@ -111,6 +120,7 @@ export interface KanbanTeamView {
   flow: FlowBlock;
   trends: TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
 
@@ -134,6 +144,8 @@ export interface PortfolioRow {
   carryoverRate: number | null;
   attention: string[];
   reading: string;
+  /** The project's effective thresholds its band/attention follow; null on an error row. */
+  thresholds: V2Thresholds | null;
   error: string | null;
 }
 
@@ -148,5 +160,7 @@ export interface PortfolioView {
     attention: { projectName: string; reasons: string[] }[];
   };
   headline: string;
+  /** Global thresholds (no project override), for the portfolio's explanatory copy. */
+  thresholds: V2Thresholds;
   generatedAt: string;
 }

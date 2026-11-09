@@ -30,7 +30,7 @@ const mk = (name: string, rate: number | null, over: Partial<PortfolioRow> = {})
   projectId: name, projectKey: name, projectName: name, boardType: "scrum",
   avgRealRate: rate, realDeltaPp: null, band: null, minRate: null, maxRate: null,
   cycleMedian: null, cycleMedianDeltaPct: null, delivered: null, deliveredDeltaPct: null,
-  addedRate: null, carryoverRate: null, attention: [], reading: "", error: null, ...over,
+  addedRate: null, carryoverRate: null, attention: [], reading: "", thresholds: null, error: null, ...over,
 });
 
 describe("portfolio", () => {
@@ -49,6 +49,7 @@ describe("portfolio", () => {
     expect(r.deliveredDeltaPct).toBe(t.delta);
     expect(r.cycleMedianDeltaPct).toBe(olimpo.flow.cycleMedianDeltaPct);
     expect(r.attention).toEqual(olimpo.attention);
+    expect(r.thresholds).toEqual(olimpo.thresholds);
     expect(r.error).toBeNull();
   });
 

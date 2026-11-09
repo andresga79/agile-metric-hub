@@ -447,6 +447,7 @@ Cada fila se **copia de la vista de equipo** (`toPortfolioRow`), así Portafolio
 Umbrales efectivos del proyecto (`getEffectiveThresholds`, warning; defaults entre paréntesis):
 - Scrum: cumplimiento real medio < `sprintCompletionReal` (50) o banda de predictibilidad "baja" (`sprintPredictability`).
 - Kanban: caída de entregados > `kanbanThroughputDrop` (30 %) o mediana de ciclo > `kanbanCycleTimeRise` (30 %) más alta.
+Los valores del motivo van con un decimal (es-CL) y nunca se redondean sobre el corte: 49,96 → "cumplimiento real 49,9%", no "50%".
 (`lib/v2/attention.ts`, `scrumAttention`, `kanbanAttention`)
 **Límite**: no hay muestra mínima; con volúmenes Kanban muy chicos un par de issues de diferencia puede disparar la alerta.
 
@@ -457,7 +458,8 @@ Umbrales efectivos del proyecto (`getEffectiveThresholds`, warning; defaults ent
 - Clave `v2:team:<projectId>:s<n>` (Scrum) o `:d<días>` (Kanban), vía `withCache` (TTL 6 h). `getTeamView` en `lib/v2/service.ts`.
 - El sync precalienta (`warmV2Cache`, serie, un proyecto a la vez) **solo** `s6` / `d90`; otras ventanas se calculan al pedirlas.
 - Jira se lee con los helpers `*OrThrow`: si Jira falla se rechaza y **no se cachea** (si no, un sprint vacío daría 0 % por 6 h).
-- **Límites conocidos**: una vista cacheada congela umbrales y "próximo sprint" hasta 6 h (o hasta el siguiente sync/refresh).
+- Lo que depende de umbrales (banda de predictibilidad, atención y el objeto `thresholds` que usa el frontend para colores y textos) **no** se cachea: `applyThresholds` lo recalcula en cada lectura con `getEffectiveThresholds(projectId)`, así un cambio en Admin → Health aplica en la siguiente petición. El portafolio agrega `thresholds` globales (sin override) para su pie de página; cada fila trae los de su proyecto. (`lib/v2/thresholds.ts`)
+- **Límites conocidos**: una vista cacheada congela el WIP envejecido (umbral `wipAging`) y el "próximo sprint" hasta 6 h (o hasta el siguiente sync/refresh).
 
 ---
 

@@ -114,6 +114,7 @@ export * from './v2SprintFactsDeliveredByType';
 export * from './v2SprintFactsState';
 export * from './v2SprintWindowParameter';
 export * from './v2TeamView';
+export * from './v2Thresholds';
 export * from './v2TimeInStatusRow';
 export * from './v2TrendRow';
 export * from './v2TrendRowBetterWhen';

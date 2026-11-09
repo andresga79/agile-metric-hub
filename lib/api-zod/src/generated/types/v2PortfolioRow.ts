@@ -7,6 +7,7 @@
  */
 import type { V2PortfolioRowBand } from './v2PortfolioRowBand';
 import type { V2PortfolioRowBoardType } from './v2PortfolioRowBoardType';
+import type { V2Thresholds } from './v2Thresholds';
 
 export interface V2PortfolioRow {
   projectId: string;
@@ -26,5 +27,6 @@ export interface V2PortfolioRow {
   carryoverRate: number | null;
   attention: string[];
   reading: string;
+  thresholds: V2Thresholds | null;
   error: string | null;
 }

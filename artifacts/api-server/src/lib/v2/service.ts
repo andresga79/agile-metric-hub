@@ -32,6 +32,7 @@ import { computeSprintFacts } from "./sprint-facts";
 import { buildScrumTeamView } from "./team-scrum";
 import { buildKanbanTeamView } from "./team-kanban";
 import { buildPortfolioView, errorRow, toPortfolioRow } from "./portfolio";
+import { applyThresholds, v2Thresholds } from "./thresholds";
 import type {
   DeliveredIssue,
   KanbanTeamView,
@@ -192,14 +193,15 @@ export interface TeamViewOptions {
 }
 
 /** The team view for `projectId`: Scrum (by sprints, default 6) or Kanban/simple (by days,
- *  default 90), cached under `v2:team:<projectId>:<s6|d90…>`. Throws ProjectNotFoundError. */
+ *  default 90), cached under `v2:team:<projectId>:<s6|d90…>`; thresholds-dependent fields are
+ *  re-derived on every call (applyThresholds). Throws ProjectNotFoundError. */
 export async function getTeamView(projectId: string, opts: TeamViewOptions = {}): Promise<TeamView> {
   const sprints = opts.sprints ?? 6;
   const days = opts.days ?? 90;
   const forceRefresh = opts.forceRefresh === true;
   // Outside the cache on purpose: a failed detection rejects here, before anything is cached.
   const isScrum = (await getProjectBoardTypeOrThrow(projectId)) === "scrum";
-  return withCache<TeamView>(
+  const view = await withCache<TeamView>(
     teamCacheKey(projectId, isScrum, sprints, days),
     async () => {
       const project = opts.project ?? (await resolveProject(projectId));
@@ -207,6 +209,9 @@ export async function getTeamView(projectId: string, opts: TeamViewOptions = {})
     },
     { forceRefresh },
   );
+  // Band, attention and `thresholds` follow the thresholds as they are now (one cheap DB read),
+  // not as they were when the view was cached: an Admin → Health change applies immediately.
+  return applyThresholds(view, await getEffectiveThresholds(projectId));
 }
 
 /** Portfolio over the visible projects, one project at a time. Kanban rows always use 90 days. */
@@ -234,7 +239,7 @@ export async function getPortfolioView(windowSprints: SprintWindowSize): Promise
       rows.push(errorRow({ ...ref, boardType }, err));
     }
   }
-  return buildPortfolioView(rows, windowSprints);
+  return buildPortfolioView(rows, windowSprints, v2Thresholds(await getEffectiveThresholds()));
 }
 
 /** Pre-builds the default team views (Scrum 6 sprints, Kanban 90 days) after a sync, serially.

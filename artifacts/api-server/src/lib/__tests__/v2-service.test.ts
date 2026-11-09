@@ -15,7 +15,8 @@ vi.mock("../jira-cache", () => ({
   },
 }));
 vi.mock("@workspace/db", () => ({ db: {} }));
-vi.mock("../health-thresholds", () => ({ getEffectiveThresholds: vi.fn(async () => ({})) }));
+const th = vi.hoisted(() => ({ getEffectiveThresholds: vi.fn(async (_projectId?: string) => ({}) as Record<string, unknown>) }));
+vi.mock("../health-thresholds", () => th);
 vi.mock("../portfolio-metric-settings", () => ({
   getPortfolioAllowedIssueTypes: vi.fn(async () => ["Story", "Task", "Bug"]),
   KANBAN_EXCLUDED_ISSUE_TYPES: ["Test Execution", "Test", "Test Plan"],
@@ -99,5 +100,55 @@ describe("v2 service: Jira failures are not cached", () => {
     const view = await getPortfolioView(6);
     expect(view.rows[0]).toMatchObject({ projectKey: "OLP", boardType: "scrum", error: "board 502" });
     expect(store.size).toBe(0);
+  });
+});
+
+describe("v2 service: thresholds apply after the cache read", () => {
+  const eff = (g: number, w: number) => ({ goodValue: g, warningValue: w, isOverride: false });
+  // A view cached before the threshold change (and before views carried `thresholds`):
+  // std dev 10,4 pp was "media" then; avg real 61,8%.
+  const cachedView = () => ({
+    boardType: "scrum", projectId: "10013", projectKey: "OLP", projectName: "Olimpo", windowSprints: 6,
+    sprints: [], active: null, nextSprintName: null,
+    compliance: { avgRealRate: 61.8, deltaPp: 2, stdDevPp: 10.4, band: "media", minRate: 50, maxRate: 75 },
+    flow: { cycleMedian: 3, cycleP85: 5, cycleMedianDeltaPct: null, leadMedian: 6, leadP85: 9, flowEfficiencyPct: 50, timeInStatus: [], wip: { total: 0, aged: [] } },
+    planning: null, trends: [], attention: [], generatedAt: "2026-11-09T00:00:00.000Z",
+  });
+
+  beforeEach(() => {
+    store.clear();
+    store.set("v2:team:10013:s6", cachedView());
+    jira.getProjectBoardTypeOrThrow.mockReset().mockResolvedValue("scrum");
+    jira.getSprintIssuesOrThrow.mockReset().mockResolvedValue([]);
+    th.getEffectiveThresholds.mockReset().mockResolvedValue({});
+  });
+
+  it("re-derives band/attention from the current project thresholds without rebuilding", async () => {
+    th.getEffectiveThresholds.mockResolvedValue({ sprintPredictability: eff(6, 9) });
+    const v = await getTeamView("10013", { sprints: 6 });
+    expect(th.getEffectiveThresholds).toHaveBeenCalledWith("10013");
+    expect(jira.getSprintIssuesOrThrow).not.toHaveBeenCalled();
+    expect(v.boardType).toBe("scrum");
+    if (v.boardType !== "scrum") return;
+    expect(v.compliance.band).toBe("baja");
+    expect(v.attention).toEqual(["predictibilidad baja"]);
+    expect(v.thresholds).toEqual({ completionGood: 80, completionWarning: 50, predictabilityGood: 6, predictabilityWarning: 9 });
+
+    // Admin goes back to the defaults: the very next read follows, same cached facts.
+    th.getEffectiveThresholds.mockResolvedValue({});
+    const again = await getTeamView("10013", { sprints: 6 });
+    if (again.boardType !== "scrum") throw new Error("expected scrum");
+    expect(again.compliance.band).toBe("media");
+    expect(again.attention).toEqual([]);
+  });
+
+  it("portfolio: rows use each project's thresholds, the footer the global ones", async () => {
+    th.getEffectiveThresholds.mockImplementation(async (projectId?: string) =>
+      projectId ? { sprintPredictability: eff(6, 9), sprintCompletionReal: eff(90, 65) } : { sprintPredictability: eff(7, 11) },
+    );
+    const view = await getPortfolioView(6);
+    expect(view.thresholds).toEqual({ completionGood: 80, completionWarning: 50, predictabilityGood: 7, predictabilityWarning: 11 });
+    expect(view.rows[0]).toMatchObject({ band: "baja", attention: ["cumplimiento real 61,8%", "predictibilidad baja"] });
+    expect(view.summary.attention).toEqual([{ projectName: "Olimpo", reasons: ["cumplimiento real 61,8%", "predictibilidad baja"] }]);
   });
 });

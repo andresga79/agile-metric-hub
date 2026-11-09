@@ -3,8 +3,8 @@ import type { TimeInStatusEntry, WipAgingItem } from "../flow-insights";
 import { median } from "../stats";
 import { buildFlowBlock } from "./flow-block";
 import { recommendPlanning } from "./planning";
-import { scrumAttention } from "./attention";
-import { mean, sampleStdDev, pctChange, ppChange, predictabilityBand } from "./stats";
+import { applyThresholds, v2Thresholds } from "./thresholds";
+import { mean, sampleStdDev, pctChange, ppChange } from "./stats";
 import type { ScrumTeamView, SprintFacts, TrendRow } from "./types";
 
 export interface ScrumTeamViewInput {
@@ -19,8 +19,6 @@ export interface ScrumTeamViewInput {
   wipAging: WipAgingItem[];
   thresholds: Record<string, EffectiveThreshold>;
 }
-
-const DEFAULT_PREDICTABILITY = { goodValue: 8, warningValue: 12 };
 
 const realRates = (s: SprintFacts[]): number[] => s.flatMap((x) => (x.realRate === null ? [] : [x.realRate]));
 const pooled = (s: SprintFacts[], pick: (x: SprintFacts) => number[]): number[] => s.flatMap(pick);
@@ -62,7 +60,6 @@ export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
   const rates = realRates(display);
   const avgRealRate = mean(rates);
   const stdDevPp = sampleStdDev(rates);
-  const band = predictabilityBand(stdDevPp, thresholds.sprintPredictability ?? DEFAULT_PREDICTABILITY);
   const deltaPp = previous.length > 0 ? ppChange(mean(realRates(previous)), mean(realRates(recent))) : null;
 
   const trends = buildTrends(recent, previous);
@@ -71,7 +68,8 @@ export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
   const closed = display.filter((s) => s.state === "closed");
   const last3 = closed.slice(-3);
 
-  return {
+  // band, attention and thresholds come from applyThresholds (re-run after every cache read).
+  const view: ScrumTeamView = {
     boardType: "scrum",
     projectId: project.id,
     projectKey: project.key,
@@ -84,14 +82,16 @@ export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
       avgRealRate,
       deltaPp,
       stdDevPp,
-      band,
+      band: null,
       minRate: rates.length ? Math.min(...rates) : null,
       maxRate: rates.length ? Math.max(...rates) : null,
     },
     flow: buildFlowBlock(pooled(display, (x) => x.cycleTimes), pooled(display, (x) => x.leadTimes), cycleDelta, input.timeInStatus, input.wipAging),
     planning: last3.length === 3 ? recommendPlanning(last3) : null,
     trends,
-    attention: scrumAttention(avgRealRate, band, thresholds),
+    attention: [],
+    thresholds: v2Thresholds({}),
     generatedAt: new Date().toISOString(),
   };
+  return applyThresholds(view, thresholds);
 }

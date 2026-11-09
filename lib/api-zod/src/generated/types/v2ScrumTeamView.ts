@@ -11,6 +11,7 @@ import type { V2ScrumTeamViewBoardType } from './v2ScrumTeamViewBoardType';
 import type { V2ScrumTeamViewCompliance } from './v2ScrumTeamViewCompliance';
 import type { V2ScrumTeamViewWindowSprints } from './v2ScrumTeamViewWindowSprints';
 import type { V2SprintFacts } from './v2SprintFacts';
+import type { V2Thresholds } from './v2Thresholds';
 import type { V2TrendRow } from './v2TrendRow';
 
 export interface V2ScrumTeamView {
@@ -27,5 +28,6 @@ export interface V2ScrumTeamView {
   planning: V2PlanningRecommendation | null;
   trends: V2TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }

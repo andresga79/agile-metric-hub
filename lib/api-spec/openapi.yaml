@@ -1737,10 +1737,19 @@ components:
         marginSp: { type: number, nullable: true }
         marginIssues: { type: integer }
         unplannedPct: { type: number }
+    V2Thresholds:
+      type: object
+      description: Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).
+      required: [completionGood, completionWarning, predictabilityGood, predictabilityWarning]
+      properties:
+        completionGood: { type: number }
+        completionWarning: { type: number }
+        predictabilityGood: { type: number }
+        predictabilityWarning: { type: number }
     V2ScrumTeamView:
       type: object
       required: [boardType, projectId, projectKey, projectName, windowSprints, sprints, active, nextSprintName,
-        compliance, flow, planning, trends, attention, generatedAt]
+        compliance, flow, planning, trends, attention, thresholds, generatedAt]
       properties:
         boardType: { type: string, enum: [scrum] }
         projectId: { type: string }
@@ -1779,6 +1788,8 @@ components:
         attention:
           type: array
           items: { type: string }
+        thresholds:
+          $ref: "#/components/schemas/V2Thresholds"
         generatedAt: { type: string }
     V2WeekBucket:
       type: object
@@ -1793,7 +1804,7 @@ components:
     V2KanbanTeamView:
       type: object
       required: [boardType, projectId, projectKey, projectName, windowDays, delivered, deliveredPrevious,
-        deliveredDeltaPct, byWeek, flow, trends, attention, generatedAt]
+        deliveredDeltaPct, byWeek, flow, trends, attention, thresholds, generatedAt]
       properties:
         boardType: { type: string, enum: [kanban] }
         projectId: { type: string }
@@ -1816,6 +1827,8 @@ components:
         attention:
           type: array
           items: { type: string }
+        thresholds:
+          $ref: "#/components/schemas/V2Thresholds"
         generatedAt: { type: string }
     V2TeamView:
       oneOf:
@@ -1830,7 +1843,7 @@ components:
       type: object
       required: [projectId, projectKey, projectName, boardType, avgRealRate, realDeltaPp, band, minRate, maxRate,
         cycleMedian, cycleMedianDeltaPct, delivered, deliveredDeltaPct, addedRate, carryoverRate, attention,
-        reading, error]
+        reading, thresholds, error]
       properties:
         projectId: { type: string }
         projectKey: { type: string }
@@ -1851,10 +1864,14 @@ components:
           type: array
           items: { type: string }
         reading: { type: string }
+        thresholds:
+          allOf:
+            - $ref: "#/components/schemas/V2Thresholds"
+          nullable: true
         error: { type: string, nullable: true }
     V2PortfolioView:
       type: object
-      required: [windowSprints, rows, summary, headline, generatedAt]
+      required: [windowSprints, rows, summary, headline, thresholds, generatedAt]
       properties:
         windowSprints: { type: integer, enum: [3, 6, 12] }
         rows:
@@ -1887,6 +1904,8 @@ components:
                     type: array
                     items: { type: string }
         headline: { type: string }
+        thresholds:
+          $ref: "#/components/schemas/V2Thresholds"
         generatedAt: { type: string }
     SprintMetricsResponse:
       type: object

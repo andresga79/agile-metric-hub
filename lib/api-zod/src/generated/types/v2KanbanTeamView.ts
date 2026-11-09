@@ -8,6 +8,7 @@
 import type { V2FlowBlock } from './v2FlowBlock';
 import type { V2KanbanTeamViewBoardType } from './v2KanbanTeamViewBoardType';
 import type { V2KanbanTeamViewWindowDays } from './v2KanbanTeamViewWindowDays';
+import type { V2Thresholds } from './v2Thresholds';
 import type { V2TrendRow } from './v2TrendRow';
 import type { V2WeekBucket } from './v2WeekBucket';
 
@@ -24,5 +25,6 @@ export interface V2KanbanTeamView {
   flow: V2FlowBlock;
   trends: V2TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }

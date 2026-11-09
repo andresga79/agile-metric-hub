@@ -660,6 +660,16 @@ export interface V2PlanningRecommendation {
   unplannedPct: number;
 }
 
+/**
+ * Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).
+ */
+export interface V2Thresholds {
+  completionGood: number;
+  completionWarning: number;
+  predictabilityGood: number;
+  predictabilityWarning: number;
+}
+
 export type V2ScrumTeamViewBoardType = typeof V2ScrumTeamViewBoardType[keyof typeof V2ScrumTeamViewBoardType];
 
 
@@ -708,6 +718,7 @@ export interface V2ScrumTeamView {
   planning: V2PlanningRecommendation | null;
   trends: V2TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
 
@@ -749,6 +760,7 @@ export interface V2KanbanTeamView {
   flow: V2FlowBlock;
   trends: V2TrendRow[];
   attention: string[];
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
 
@@ -789,6 +801,7 @@ export interface V2PortfolioRow {
   carryoverRate: number | null;
   attention: string[];
   reading: string;
+  thresholds: V2Thresholds | null;
   error: string | null;
 }
 
@@ -824,6 +837,7 @@ export interface V2PortfolioView {
   rows: V2PortfolioRow[];
   summary: V2PortfolioViewSummary;
   headline: string;
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
 

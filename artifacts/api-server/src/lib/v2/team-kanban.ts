@@ -2,9 +2,9 @@ import type { EffectiveThreshold } from "../health-thresholds";
 import type { TimeInStatusEntry, WipAgingItem } from "../flow-insights";
 import { isoWeekStart } from "../iso-week";
 import { median } from "../stats";
-import { kanbanAttention } from "./attention";
 import { buildFlowBlock } from "./flow-block";
 import { mean, pctChange } from "./stats";
+import { applyThresholds, v2Thresholds } from "./thresholds";
 import type { DeliveredIssue, KanbanTeamView, TrendRow, WeekBucket } from "./types";
 
 export interface KanbanTeamViewInput {
@@ -54,7 +54,8 @@ export function buildKanbanTeamView(input: KanbanTeamViewInput): KanbanTeamView 
   ];
   const cycleDelta = trends[1]!.delta;
 
-  return {
+  // attention and thresholds come from applyThresholds (re-run after every cache read).
+  const view: KanbanTeamView = {
     boardType: "kanban",
     projectId: project.id,
     projectKey: project.key,
@@ -72,7 +73,9 @@ export function buildKanbanTeamView(input: KanbanTeamViewInput): KanbanTeamView 
       input.wipAging,
     ),
     trends,
-    attention: kanbanAttention(deliveredDeltaPct, cycleDelta, thresholds),
+    attention: [],
+    thresholds: v2Thresholds({}),
     generatedAt: now.toISOString(),
   };
+  return applyThresholds(view, thresholds);
 }

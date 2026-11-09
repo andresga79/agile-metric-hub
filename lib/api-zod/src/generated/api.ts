@@ -579,6 +579,12 @@ export const GetV2PortfolioResponse = zod.object({
   "carryoverRate": zod.number().nullable(),
   "attention": zod.array(zod.string()),
   "reading": zod.string(),
+  "thresholds": zod.object({
+  "completionGood": zod.number(),
+  "completionWarning": zod.number(),
+  "predictabilityGood": zod.number(),
+  "predictabilityWarning": zod.number()
+}).describe('Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).').nullable(),
   "error": zod.string().nullable()
 })),
   "summary": zod.object({
@@ -595,6 +601,12 @@ export const GetV2PortfolioResponse = zod.object({
 }))
 }),
   "headline": zod.string(),
+  "thresholds": zod.object({
+  "completionGood": zod.number(),
+  "completionWarning": zod.number(),
+  "predictabilityGood": zod.number(),
+  "predictabilityWarning": zod.number()
+}).describe('Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).'),
   "generatedAt": zod.string()
 })
 
@@ -732,6 +744,12 @@ export const GetV2TeamResponse = zod.union([zod.object({
   "betterWhen": zod.enum(['up', 'down'])
 })),
   "attention": zod.array(zod.string()),
+  "thresholds": zod.object({
+  "completionGood": zod.number(),
+  "completionWarning": zod.number(),
+  "predictabilityGood": zod.number(),
+  "predictabilityWarning": zod.number()
+}).describe('Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).'),
   "generatedAt": zod.string()
 }),zod.object({
   "boardType": zod.enum(['kanban']),
@@ -786,6 +804,12 @@ export const GetV2TeamResponse = zod.union([zod.object({
   "betterWhen": zod.enum(['up', 'down'])
 })),
   "attention": zod.array(zod.string()),
+  "thresholds": zod.object({
+  "completionGood": zod.number(),
+  "completionWarning": zod.number(),
+  "predictabilityGood": zod.number(),
+  "predictabilityWarning": zod.number()
+}).describe('Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).'),
   "generatedAt": zod.string()
 })])
 

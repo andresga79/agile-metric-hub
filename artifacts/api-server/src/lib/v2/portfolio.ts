@@ -1,5 +1,6 @@
 import { mean } from "./stats";
-import type { PortfolioRow, PortfolioView, TeamView } from "./types";
+import { v2Thresholds } from "./thresholds";
+import type { PortfolioRow, PortfolioView, TeamView, V2Thresholds } from "./types";
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
@@ -17,7 +18,7 @@ export function toPortfolioRow(view: TeamView): PortfolioRow {
   const common = {
     projectId: view.projectId, projectKey: view.projectKey, projectName: view.projectName,
     cycleMedian: view.flow.cycleMedian, cycleMedianDeltaPct: view.flow.cycleMedianDeltaPct,
-    attention: [...view.attention], reading: "", error: null,
+    attention: [...view.attention], reading: "", thresholds: view.thresholds, error: null,
   };
   let row: PortfolioRow;
   if (view.boardType === "scrum") {
@@ -51,12 +52,18 @@ export function errorRow(
     projectId: project.id, projectKey: project.key, projectName: project.name, boardType: project.boardType,
     avgRealRate: null, realDeltaPp: null, band: null, minRate: null, maxRate: null,
     cycleMedian: null, cycleMedianDeltaPct: null, delivered: null, deliveredDeltaPct: null,
-    addedRate: null, carryoverRate: null, attention: [], reading: "",
+    addedRate: null, carryoverRate: null, attention: [], reading: "", thresholds: null,
     error: err instanceof Error ? err.message : String(err),
   };
 }
 
-export function buildPortfolioView(rows: PortfolioRow[], windowSprints: 3 | 6 | 12): PortfolioView {
+/** `thresholds`: the global ones (no project override), for the explanatory copy; each row's
+ *  band/attention already follow its own project's thresholds. */
+export function buildPortfolioView(
+  rows: PortfolioRow[],
+  windowSprints: 3 | 6 | 12,
+  thresholds: V2Thresholds = v2Thresholds({}),
+): PortfolioView {
   const scrum = rows.filter((r) => r.boardType === "scrum" && !r.error && r.avgRealRate !== null);
   const scrumRates = scrum.map((r) => ({ projectName: r.projectName, rate: r.avgRealRate as number }));
   const improving = scrum.filter((r) => r.realDeltaPp !== null && r.realDeltaPp > 0).length;
@@ -74,6 +81,6 @@ export function buildPortfolioView(rows: PortfolioRow[], windowSprints: 3 | 6 | 
       scrumAvgRealRate: mean(scrumRates.map((r) => r.rate)),
       scrumRates, improving, scrumTeams: scrum.length, attention,
     },
-    headline, generatedAt: new Date().toISOString(),
+    headline, thresholds, generatedAt: new Date().toISOString(),
   };
 }

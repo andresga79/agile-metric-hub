@@ -30,7 +30,7 @@ describe("buildKanbanTeamView", () => {
   });
   it("flags a throughput drop", () => {
     const v = buildKanbanTeamView({ ...base, current: issues(35), previous: issues(69) });
-    expect(v.attention).toEqual(["entregó 49% menos"]);
+    expect(v.attention).toEqual(["entregó 49,3% menos"]); // 35 vs 69: −49,28%
   });
   it("null delta and no attention without previous", () => {
     const v = buildKanbanTeamView({ ...base, current: issues(10), previous: [] });

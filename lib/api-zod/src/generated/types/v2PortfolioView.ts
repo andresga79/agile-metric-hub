@@ -8,11 +8,13 @@
 import type { V2PortfolioRow } from './v2PortfolioRow';
 import type { V2PortfolioViewSummary } from './v2PortfolioViewSummary';
 import type { V2PortfolioViewWindowSprints } from './v2PortfolioViewWindowSprints';
+import type { V2Thresholds } from './v2Thresholds';
 
 export interface V2PortfolioView {
   windowSprints: V2PortfolioViewWindowSprints;
   rows: V2PortfolioRow[];
   summary: V2PortfolioViewSummary;
   headline: string;
+  thresholds: V2Thresholds;
   generatedAt: string;
 }
