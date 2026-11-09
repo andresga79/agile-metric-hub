@@ -1,10 +1,11 @@
 import type { EffectiveThreshold } from "../health-thresholds";
-import { isWaitingStatus, type TimeInStatusEntry, type WipAgingItem } from "../flow-insights";
-import { median, percentile } from "../stats";
+import type { TimeInStatusEntry, WipAgingItem } from "../flow-insights";
+import { median } from "../stats";
+import { buildFlowBlock } from "./flow-block";
 import { recommendPlanning } from "./planning";
 import { scrumAttention } from "./attention";
 import { mean, sampleStdDev, pctChange, ppChange, predictabilityBand } from "./stats";
-import type { FlowBlock, ScrumTeamView, SprintFacts, TrendRow } from "./types";
+import type { ScrumTeamView, SprintFacts, TrendRow } from "./types";
 
 export interface ScrumTeamViewInput {
   project: { id: string; key: string; name: string };
@@ -55,38 +56,6 @@ function buildTrends(recent: SprintFacts[], previous: SprintFacts[]): TrendRow[]
   ];
 }
 
-function buildFlow(
-  display: SprintFacts[],
-  cycleMedianDeltaPct: number | null,
-  timeInStatus: TimeInStatusEntry[],
-  wipAging: WipAgingItem[],
-): FlowBlock {
-  const cycles = pooled(display, (x) => x.cycleTimes);
-  const leads = pooled(display, (x) => x.leadTimes);
-  const cycleMean = mean(cycles);
-  const leadMean = mean(leads);
-  const p85 = (v: number[]) => {
-    const p = percentile(v, 0.85);
-    return p === null ? null : Math.round(p * 10) / 10;
-  };
-  return {
-    cycleMedian: median(cycles),
-    cycleP85: p85(cycles),
-    cycleMedianDeltaPct,
-    leadMedian: median(leads),
-    leadP85: p85(leads),
-    flowEfficiencyPct: cycleMean === null || leadMean === null || leadMean === 0 ? null : (cycleMean / leadMean) * 100,
-    timeInStatus: timeInStatus
-      .filter((t) => t.category === "indeterminate")
-      .sort((a, b) => b.avgDays - a.avgDays)
-      .map((t) => ({ status: t.status, avgDays: t.avgDays, waiting: isWaitingStatus(t.status) })),
-    wip: {
-      total: wipAging.length,
-      aged: wipAging.filter((w) => w.alertLevel === "critical" || w.alertLevel === "warning"),
-    },
-  };
-}
-
 export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
   const { project, windowSprints, display, recent, previous, active, nextSprintName, thresholds } = input;
 
@@ -119,7 +88,7 @@ export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
       minRate: rates.length ? Math.min(...rates) : null,
       maxRate: rates.length ? Math.max(...rates) : null,
     },
-    flow: buildFlow(display, cycleDelta, input.timeInStatus, input.wipAging),
+    flow: buildFlowBlock(pooled(display, (x) => x.cycleTimes), pooled(display, (x) => x.leadTimes), cycleDelta, input.timeInStatus, input.wipAging),
     planning: last3.length === 3 ? recommendPlanning(last3) : null,
     trends,
     attention: scrumAttention(avgRealRate, band, thresholds),

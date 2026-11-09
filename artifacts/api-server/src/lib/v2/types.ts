@@ -80,3 +80,38 @@ export interface ScrumTeamView {
   attention: string[];
   generatedAt: string;
 }
+
+export interface DeliveredIssue {
+  key: string;
+  resolvedAt: string;
+  type: "historia" | "tecnico" | "bug";
+  cycleDays: number | null;
+  leadDays: number | null;
+}
+
+export interface WeekBucket {
+  weekStart: string;
+  historia: number;
+  tecnico: number;
+  bug: number;
+  cycleAvg: number | null;
+  leadAvg: number | null;
+}
+
+export interface KanbanTeamView {
+  boardType: "kanban";
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  windowDays: 30 | 90 | 180;
+  delivered: number;
+  deliveredPrevious: number;
+  deliveredDeltaPct: number | null;
+  byWeek: WeekBucket[];
+  flow: FlowBlock;
+  trends: TrendRow[];
+  attention: string[];
+  generatedAt: string;
+}
+
+export type TeamView = ScrumTeamView | KanbanTeamView;
