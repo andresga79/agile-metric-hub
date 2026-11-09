@@ -1,0 +1,82 @@
+/* Nxtara · Glass dark · Material 3 — tokens (PROPUESTA en revisión)
+   Roles de color con nomenclatura M3, derivados de las rampas Nxtara de fig-tokens.css.
+   Se aplican bajo .nxt-glass (o [data-theme="glass-dark"]) para no afectar el kit actual. */
+.nxt-glass,[data-theme="glass-dark"]{
+  color-scheme:dark;
+  /* Fondo */
+  /* Neutros compartidos Nxtara / Orvix (gris pizarra) — fondos y papers. Solo el primario cambia por marca. */
+  --nxt-slate-950:#12161F;--nxt-slate-900:#171C27;--nxt-slate-850:#1C2230;--nxt-slate-800:#232937;--nxt-slate-700:#2B313E;
+  --nxt-slate-600:#363C49;--nxt-slate-500:#4A5160;--nxt-slate-400:#6B7280;--nxt-slate-300:#9AA1AE;--nxt-slate-200:#C5CAD3;--nxt-slate-100:#E3E6EB;
+  --nxt-bg:#1A1F2C;
+  --nxt-bg-2:#232937;
+  /* Primario = magenta de marca */
+  --nxt-primary:rgb(236,17,123);                     /* nxtara-primary-500 · indicadores, selección */
+  --nxt-primary-ind:var(--nxt-primary);             /* trazos e íconos de acento (línea, anillo, ícono activo) */
+  --nxt-primary-fill:rgb(213,21,119);                /* nxtara-primary-600 · relleno con texto blanco (AA) */
+  --nxt-on-primary:#fff;
+  --nxt-primary-soft:rgb(246,135,189);               /* nxtara-primary-200 · texto/ícono de acento sobre oscuro */
+  --nxt-primary-container:rgba(236,17,123,.24);
+  --nxt-on-primary-container:rgb(253,224,238);       /* nxtara-primary-50 */
+  /* Secundario = gris azulado (antes navy); el navy de marca queda para logo y piezas editoriales */
+  --nxt-secondary:#9AA1AE;
+  --nxt-secondary-container:#3F4552;
+  --nxt-on-secondary-container:#E3E6EB;
+  /* Superficie y contenido */
+  --nxt-ink:#fff;                                    /* texto de máximo énfasis (títulos, valores) */
+  --nxt-tint:255,255,255;                            /* RGB de capas de estado y rellenos sutiles */
+  --nxt-on-surface:rgba(255,255,255,.94);
+  --nxt-on-surface-variant:rgba(255,255,255,.70);
+  --nxt-outline:rgba(255,255,255,.34);
+  --nxt-outline-variant:rgba(255,255,255,.14);
+  --nxt-inverse-surface:#E3E6EB;
+  --nxt-inverse-on-surface:#232937;
+  /* Error (roles M3 oscuros) */
+  --nxt-error:#F2B8B5;
+  --nxt-on-error:#601410;
+  --nxt-error-container:#8C1D18;
+  --nxt-on-error-container:#F9DEDC;
+  /* Vidrio: niveles de elevación M3 0–5 */
+  --nxt-glass-rgb:255,255,255;
+  --nxt-glass-k:1;                                   /* multiplicador de opacidad */
+  --nxt-blur-k:1;                                    /* multiplicador de desenfoque */
+  --nxt-glass-0:rgba(var(--nxt-glass-rgb),calc(.03*var(--nxt-glass-k)));
+  --nxt-glass-1:rgba(var(--nxt-glass-rgb),calc(.06*var(--nxt-glass-k)));
+  --nxt-glass-2:rgba(var(--nxt-glass-rgb),calc(.08*var(--nxt-glass-k)));
+  --nxt-glass-3:rgba(var(--nxt-glass-rgb),calc(.10*var(--nxt-glass-k)));
+  --nxt-glass-4:rgba(var(--nxt-glass-rgb),calc(.12*var(--nxt-glass-k)));
+  --nxt-glass-5:rgba(var(--nxt-glass-rgb),calc(.14*var(--nxt-glass-k)));
+  --nxt-blur-1:calc(14px*var(--nxt-blur-k));
+  --nxt-blur-2:calc(18px*var(--nxt-blur-k));
+  --nxt-blur-3:calc(24px*var(--nxt-blur-k));
+  --nxt-glass-border-0:rgba(255,255,255,.06);
+  --nxt-glass-border-1:rgba(255,255,255,.10);
+  --nxt-glass-border-2:rgba(255,255,255,.12);
+  --nxt-glass-border-3:rgba(255,255,255,.14);
+  --nxt-glass-highlight:inset 0 1px 0 rgba(255,255,255,.14);
+  --nxt-shadow-1:0 4px 16px rgba(0,0,0,.25);
+  --nxt-shadow-2:0 8px 24px rgba(0,0,0,.30);
+  --nxt-shadow-3:0 12px 32px rgba(0,0,0,.35);
+  /* Capas de estado M3 */
+  --nxt-state-hover:.08;
+  --nxt-state-focus:.10;
+  --nxt-state-pressed:.10;
+  --nxt-state-drag:.16;
+  --nxt-disabled-content:rgba(255,255,255,.38);
+  --nxt-disabled-container:rgba(255,255,255,.12);
+  --nxt-focus-ring:var(--nxt-primary-soft);
+  /* Forma M3 */
+  --nxt-r:1;
+  --nxt-shape-xs:calc(4px*var(--nxt-r));
+  --nxt-shape-sm:calc(8px*var(--nxt-r));
+  --nxt-shape-md:calc(12px*var(--nxt-r));
+  --nxt-shape-lg:calc(16px*var(--nxt-r));
+  --nxt-shape-xl:calc(28px*var(--nxt-r));
+  --nxt-shape-full:999px;
+  /* Tipografía: títulos MuseoModerno, resto Jost */
+  --nxt-font-display:"MuseoModerno","Trebuchet MS",Arial,sans-serif;
+  --nxt-font:"Jost","Century Gothic",Arial,sans-serif;
+  /* Movimiento M3 */
+  --nxt-ease:cubic-bezier(.2,0,0,1);
+  --nxt-dur-short:150ms;
+  --nxt-dur:250ms;
+}
