@@ -44,8 +44,8 @@ interface AdminProjectVisibilityRow {
 
 type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
-const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest"];
-const HIGHER_BETTER = ["throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanThroughputDrop", "kanbanCycleTimeRise"];
+const HIGHER_BETTER = ["sprintCompletionReal", "throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
 
 // These are a single target value, not a good/warning band — the backend only ever reads
 // goodValue for them (see sla.ts). warningValue is kept in sync automatically so editing this
@@ -64,6 +64,10 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
   wipAging: { label: "WIP Aging", unit: "d" },
   sprintCompletion: { label: "Sprint Completion", unit: "%" },
+  sprintCompletionReal: { label: "Cumplimiento real (v2)", unit: "%" },
+  sprintPredictability: { label: "Predictibilidad (desvío, v2)", unit: "pp" },
+  kanbanThroughputDrop: { label: "Caída de throughput Kanban (v2)", unit: "%" },
+  kanbanCycleTimeRise: { label: "Subida de tiempo de ciclo Kanban (v2)", unit: "%" },
   slaHighest: { label: "SLA - Prioridad Highest", unit: "h" },
   slaHigh: { label: "SLA - Prioridad High", unit: "d" },
   slaMedium: { label: "SLA - Prioridad Medium", unit: "d" },
