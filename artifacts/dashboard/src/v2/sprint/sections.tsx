@@ -10,6 +10,7 @@ const dateOnly = (v: string | null) =>
 
 const TH = { textAlign: "right", padding: "8px 10px", fontSize: 13, fontWeight: 500, color: MUTED, whiteSpace: "nowrap" } as const;
 const TD = { textAlign: "right", padding: "8px 10px", fontSize: 14, whiteSpace: "nowrap" } as const;
+type Delta = { v: number; unit: string; lowerBetter: boolean };
 const ROW = { borderTop: "1px solid var(--nxt-glass-border-1)" } as const;
 
 function Keys({ keys }: { keys: string[] }) {
@@ -17,20 +18,31 @@ function Keys({ keys }: { keys: string[] }) {
 }
 
 export function Headline({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummaryKpis | null }) {
-  const unit = k.completionBasis === "issueCount" ? "issues" : "SP";
+  const byIssues = k.completionBasis === "issueCount";
+  const unit = byIssues ? "issues" : "SP";
+  const closed = k.state === "closed";
+  const done = byIssues ? k.doneTodayIssues : k.doneTodayStoryPoints;
+  const total = byIssues ? k.totalIssues : k.committedStoryPoints;
+  const real = byIssues ? k.completedIssues : k.deliveredStoryPoints;
   return (
     <div style={MINI_GRID}>
-      <MiniCard
-        label="Hecho hoy (Rovo)"
-        note={`${sp(k.doneTodayStoryPoints)} de ${sp(k.committedStoryPoints)} SP · estado actual`}
-      >
-        <span style={{ ...BIG, color: rateColor(k.doneTodayRate) }}>{fmtPct(k.doneTodayRate)}</span>
-        {prev && <DeltaText value={k.doneTodayRate - prev.doneTodayRate} unit="pp" betterWhen="up" />}
-      </MiniCard>
-      <MiniCard label="Real cerrado" note={`${sp(k.deliveredStoryPoints)} de ${sp(k.committedStoryPoints)} SP · al cierre`}>
-        <span style={{ ...BIG, color: rateColor(k.completionRate) }}>{fmtPct(k.completionRate)}</span>
-        {prev && <DeltaText value={k.completionRate - prev.completionRate} unit="pp" betterWhen="up" />}
-      </MiniCard>
+      {closed ? (
+        <MiniCard label="Hecho hoy (Rovo)" note={`${sp(done)} de ${sp(total)} ${unit} · estado actual`}>
+          <span style={{ ...BIG, color: rateColor(k.doneTodayRate) }}>{fmtPct(k.doneTodayRate)}</span>
+          {prev && <DeltaText value={k.doneTodayRate - prev.doneTodayRate} unit="pp" betterWhen="up" />}
+        </MiniCard>
+      ) : (
+        <MiniCard label="Avance actual" note={`${sp(done)} de ${sp(total)} ${unit} · El real cerrado se fija al cerrar el sprint`}>
+          <span style={{ ...BIG, color: rateColor(k.doneTodayRate) }}>{fmtPct(k.doneTodayRate)}</span>
+          {prev && <DeltaText value={k.doneTodayRate - prev.doneTodayRate} unit="pp" betterWhen="up" />}
+        </MiniCard>
+      )}
+      {closed && (
+        <MiniCard label="Real cerrado" note={`${sp(real)} de ${sp(total)} ${unit} · al cierre`}>
+          <span style={{ ...BIG, color: rateColor(k.completionRate) }}>{fmtPct(k.completionRate)}</span>
+          {prev && <DeltaText value={k.completionRate - prev.completionRate} unit="pp" betterWhen="up" />}
+        </MiniCard>
+      )}
       <MiniCard label="Issues completados" note={`${k.totalIssues} en el alcance · base ${unit}`}>
         <span style={BIG}>
           {k.completedIssues}/{k.totalIssues}
@@ -42,14 +54,18 @@ export function Headline({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummar
 }
 
 export function KpiTable({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummaryKpis | null }) {
-  const rows: { label: string; value: (s: SprintSummaryKpis) => string; delta?: [number, number, boolean?] }[] = [
-    { label: "Comprometido", value: (s) => `${sp(s.committedStoryPoints)} SP`, delta: [k.committedStoryPoints, prev?.committedStoryPoints ?? 0] },
-    { label: "Entregado real", value: (s) => `${sp(s.deliveredStoryPoints)} SP`, delta: [k.deliveredStoryPoints, prev?.deliveredStoryPoints ?? 0] },
-    { label: "Hecho hoy", value: (s) => `${sp(s.doneTodayStoryPoints)} SP (${fmtPct(s.doneTodayRate)})`, delta: [k.doneTodayStoryPoints, prev?.doneTodayStoryPoints ?? 0] },
-    { label: "Cumplimiento real", value: (s) => fmtPct(s.completionRate), delta: [k.completionRate, prev?.completionRate ?? 0] },
-    { label: "Issues", value: (s) => `${s.totalIssues}${s.unestimatedIssues ? ` (${s.unestimatedIssues} sin estimar)` : ""}`, delta: [k.totalIssues, prev?.totalIssues ?? 0] },
-    { label: "Issues completados", value: (s) => `${s.completedIssues} (${fmtPct(s.issueCompletionRate)})`, delta: [k.completedIssues, prev?.completedIssues ?? 0] },
-    { label: "Incompletas", value: (s) => `${s.incompleteIssues} · ${sp(s.incompleteStoryPoints)} SP`, delta: [k.incompleteStoryPoints, prev?.incompleteStoryPoints ?? 0, true] },
+  const closed = k.state === "closed";
+  const d = (c: number, p: number | undefined, unit: string, lowerBetter = false): Delta => ({ v: c - (p ?? 0), unit, lowerBetter });
+  const rows: { label: string; value: (s: SprintSummaryKpis) => string; delta?: Delta }[] = [
+    { label: "Comprometido", value: (s) => `${sp(s.committedStoryPoints)} SP`, delta: d(k.committedStoryPoints, prev?.committedStoryPoints, "SP") },
+    { label: closed ? "Entregado real" : "Entregado (actual)", value: (s) => `${sp(s.deliveredStoryPoints)} SP`, delta: d(k.deliveredStoryPoints, prev?.deliveredStoryPoints, "SP") },
+    ...(closed
+      ? [{ label: "Hecho hoy", value: (s: SprintSummaryKpis) => `${sp(s.doneTodayStoryPoints)} SP (${fmtPct(s.doneTodayRate)})`, delta: d(k.doneTodayStoryPoints, prev?.doneTodayStoryPoints, "SP") }]
+      : []),
+    { label: closed ? "Cumplimiento real" : "Avance (actual)", value: (s) => fmtPct(s.completionRate), delta: d(k.completionRate, prev?.completionRate, "pp") },
+    { label: "Issues", value: (s) => `${s.totalIssues}${s.unestimatedIssues ? ` (${s.unestimatedIssues} sin estimar)` : ""}`, delta: d(k.totalIssues, prev?.totalIssues, "") },
+    { label: "Issues completados", value: (s) => `${s.completedIssues} (${fmtPct(s.issueCompletionRate)})`, delta: d(k.completedIssues, prev?.completedIssues, "") },
+    { label: "Incompletas", value: (s) => `${s.incompleteIssues} · ${sp(s.incompleteStoryPoints)} SP`, delta: d(k.incompleteStoryPoints, prev?.incompleteStoryPoints, "SP", true) },
     { label: "Bugs", value: (s) => (s.bugsTotal ? `${s.bugsCompleted}/${s.bugsTotal} (${fmtPct((s.bugsCompleted / s.bugsTotal) * 100, 0)})` : "—") },
   ];
   return (
@@ -71,7 +87,7 @@ export function KpiTable({ k, prev }: { k: SprintSummaryKpis; prev: SprintSummar
                 <td style={{ ...TD, color: MUTED }}>
                   {prev ? (
                     <>
-                      {r.value(prev)} {r.delta && <DeltaText value={r.delta[0] - r.delta[1]} betterWhen={r.delta[2] ? "down" : "up"} />}
+                      {r.value(prev)} {r.delta && <DeltaText value={r.delta.v} unit={r.delta.unit} betterWhen={r.delta.lowerBetter ? "down" : "up"} />}
                     </>
                   ) : (
                     "—"
@@ -95,7 +111,7 @@ export function MemberBars({ data }: { data: SprintSummaryResponse }) {
       subtitle="Responsable actual de cada issue"
       legend={
         <div style={{ display: "flex", gap: 16, fontSize: 13, color: MUTED }}>
-          <span style={{ color: V2_GOOD }}>■ Completados</span>
+          <span style={{ color: V2_GOOD }}>■ {data.kpis.state === "closed" ? "Completados" : "Completados hoy"}</span>
           <span style={{ color: GREY }}>■ Pendientes</span>
         </div>
       }
