@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { fmtDays, fmtNum, fmtPct, fmtPp } from "../format";
 import { DeltaText, GlassCard, SectionTitle, V2_WARN } from "../ui";
-import { GREY, MUTED, Scroll, Section, half, sprintLabel, type ScrumView } from "./shared";
+import { GREY, MUTED, Scroll, Section, comparison, sprintLabel, type ScrumView } from "./shared";
 
 export function WaitingSection({ v, jiraUrl }: { v: ScrumView; jiraUrl: string | null }) {
   const rows = [...v.flow.timeInStatus].sort((a, b) => b.avgDays - a.avgDays);
@@ -68,9 +68,9 @@ const value = (key: string, n: number | null) =>
   key === "cycleMedian" || key === "leadMedian" ? fmtDays(n) : key === "closedSp" || key === "closedIssues" ? fmtNum(n, 0) : fmtPct(n);
 
 export function TrendsTable({ v }: { v: ScrumView }) {
-  const h = half(v);
-  const after = v.sprints.slice(-h);
-  const before = v.sprints.slice(-2 * h, -h);
+  const cmp = comparison(v);
+  const after = cmp.recent;
+  const before = cmp.previous;
   const range = (arr: typeof v.sprints) => (arr.length ? ` (${sprintLabel(arr[0].name)} a ${sprintLabel(arr[arr.length - 1].name).replace(/^Sprint\s+/i, "")})` : "");
   const cell = { padding: "12px", borderBottom: "1px solid rgba(255,255,255,0.08)", textAlign: "left" as const };
   return (
@@ -78,7 +78,11 @@ export function TrendsTable({ v }: { v: ScrumView }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <SectionTitle id="t-tend">Tendencia del equipo</SectionTitle>
         <p style={{ fontSize: 14, color: MUTED }}>
-          {v.sprints.length === 0 ? "Sin sprints cerrados." : `Últimos ${after.length} sprints${range(after)} contra los ${before.length} anteriores${range(before)}.`}
+          {v.sprints.length === 0
+            ? "Sin sprints cerrados."
+            : !cmp.hasComparison
+              ? `Últimos ${after.length} sprints${range(after)}. Sin dato previo para comparar.`
+              : `Últimos ${after.length} sprints${range(after)} contra ${cmp.previousLabel}${before ? range(before) : ""}.`}
         </p>
       </div>
       <Scroll>

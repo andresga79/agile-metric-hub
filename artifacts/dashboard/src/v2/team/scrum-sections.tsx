@@ -4,7 +4,7 @@ import { fmtDays, fmtDeltaPct, fmtNum, fmtPct, fmtPp } from "../format";
 import { BandPill, DeltaText, GlassCard, SectionTitle } from "../ui";
 import { ComplianceChart, CycleChart, DeliveredChart, StabilityChart } from "./scrum-charts";
 import { TrendsTable, WaitingSection } from "./scrum-flow";
-import { BIG, MUTED, SMALL, half, rateColor, sprintLabel, type ScrumView } from "./shared";
+import { BIG, MUTED, SMALL, comparison, rateColor, sprintLabel, type ScrumView } from "./shared";
 
 const dateFmt = new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" });
 const closeDate = (iso: string | null) => (iso ? dateFmt.format(new Date(iso)).replace(".", "") : null);
@@ -34,7 +34,7 @@ function Answer({ q, big, unit, delta, note, extra }: { q: string; big: ReactNod
 }
 
 export function QuickAnswers({ v }: { v: ScrumView }) {
-  const h = half(v);
+  const h = comparison(v).recent.length;
   const { compliance: c, flow: f } = v;
   const last = v.sprints[v.sprints.length - 1];
   const waiting = [...f.timeInStatus].filter((r) => r.waiting).sort((a, b) => b.avgDays - a.avgDays)[0];
@@ -100,7 +100,7 @@ const IMPROVE: Record<string, string> = {
 export function PlanningSection({ v }: { v: ScrumView }) {
   const p = v.planning;
   if (!p) return null;
-  const h = half(v);
+  const h = comparison(v).recent.length;
   const waiting = [...v.flow.timeInStatus].filter((r) => r.waiting).sort((a, b) => b.avgDays - a.avgDays)[0];
   const better = v.trends.find((t) => t.delta != null && t.delta !== 0 && (t.betterWhen === "up" ? t.delta > 0 : t.delta < 0));
   const sp = p.totalSp != null && p.plannedSp != null;

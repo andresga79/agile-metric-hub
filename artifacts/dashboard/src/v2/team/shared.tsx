@@ -12,7 +12,31 @@ export const COL_W = 92;
 export const BIG: CSSProperties = { fontFamily: "'MuseoModerno', sans-serif", fontWeight: 600, fontSize: 36, lineHeight: "44px" };
 export const SMALL: CSSProperties = { fontSize: 13, color: MUTED };
 
-export const half = (v: ScrumView) => Math.max(1, Math.floor(v.windowSprints / 2));
+export interface Comparison {
+  /** Sprints of the "recent" side, as the backend compares them. */
+  recent: V2SprintFacts[];
+  /** Previous side when it is part of `sprints` (window 6/12 full); null otherwise. */
+  previous: V2SprintFacts[] | null;
+  /** "los 3 sprints anteriores" / "los 3 anteriores". */
+  previousLabel: string;
+  hasComparison: boolean;
+}
+
+/**
+ * Mirrors the backend trend split: 6/12 with enough closed sprints -> halves of `sprints`;
+ * 3 -> all displayed vs the 3 closed before them (not in `sprints`); fewer sprints than the
+ * window -> everything is recent and there is no previous side.
+ */
+export function comparison(v: ScrumView): Comparison {
+  const realRate = v.trends.find((t) => t.key === "realRate");
+  const hasComparison = realRate != null && realRate.before !== null;
+  const { sprints, windowSprints } = v;
+  if (!hasComparison) return { recent: sprints, previous: null, previousLabel: "sin dato previo", hasComparison };
+  if (windowSprints === 3) return { recent: sprints, previous: null, previousLabel: "los 3 sprints anteriores", hasComparison };
+  const h = windowSprints / 2;
+  if (sprints.length < windowSprints) return { recent: sprints, previous: null, previousLabel: "sin dato previo", hasComparison: false };
+  return { recent: sprints.slice(-h), previous: sprints.slice(-2 * h, -h), previousLabel: `los ${h} anteriores`, hasComparison };
+}
 
 export function rateColor(rate: number | null): string {
   if (rate == null) return MUTED;

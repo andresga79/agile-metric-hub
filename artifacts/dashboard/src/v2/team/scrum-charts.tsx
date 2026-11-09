@@ -4,7 +4,7 @@ import { fmtDays, fmtNum, fmtPct, fmtPp, fmtDeltaPct } from "../format";
 import { DeltaText, V2_BAD, V2_GOOD, V2_WARN } from "../ui";
 import {
   CHART_H, COL_W, GREY, Legend, MINI_GRID, MUTED, MiniCard, PINK, BIG, Scroll, Section, SMALL,
-  half, mean, rateColor, shortName, sprintLabel, type ScrumView,
+  comparison, mean, rateColor, shortName, sprintLabel, type ScrumView,
 } from "./shared";
 
 const trend = (v: ScrumView, key: string): V2TrendRow | undefined => v.trends.find((t) => t.key === key);
@@ -54,7 +54,8 @@ export function ComplianceChart({ v, projectId }: { v: ScrumView; projectId: str
 }
 
 export function DeliveredChart({ v }: { v: ScrumView }) {
-  const h = half(v);
+  const cmp = comparison(v);
+  const h = cmp.recent.length;
   const rows = v.sprints.map((s) => {
     const t = s.deliveredByType;
     return { s, t, done: t.historia + t.tecnico + t.bug };
@@ -66,7 +67,7 @@ export function DeliveredChart({ v }: { v: ScrumView }) {
   const bugs = rows.reduce((a, r) => a + r.t.bug, 0);
   const pct = (n: number) => (total ? Math.round((n / total) * 100) : null);
   const closed = trend(v, "closedIssues");
-  const avgPlanned = mean(v.sprints.slice(-h).map((s) => s.committedIssues));
+  const avgPlanned = mean(cmp.recent.map((s) => s.committedIssues));
   return (
     <Section
       id="t-issues"
@@ -86,7 +87,7 @@ export function DeliveredChart({ v }: { v: ScrumView }) {
       <div style={MINI_GRID}>
         <MiniCard label={`Entregados por sprint · últimos ${h}`} note={avgPlanned == null ? "" : `De ${fmtNum(avgPlanned, 0)} en el alcance en promedio.`}>
           <span style={{ ...BIG, fontSize: 28, lineHeight: "36px" }}>{fmtNum(closed?.after ?? null, 0)}</span>
-          <DeltaText value={closed?.delta} betterWhen="up">{`${fmtDeltaPct(closed?.delta)}${closed?.delta == null ? "" : ` vs ${h} anteriores`}`}</DeltaText>
+          <DeltaText value={closed?.delta} betterWhen="up">{`${fmtDeltaPct(closed?.delta)}${closed?.delta == null ? "" : ` vs ${cmp.previousLabel}`}`}</DeltaText>
         </MiniCard>
         <MiniCard label={`Historias de usuario · ${v.windowSprints} sprints`} note="Parte del trabajo entregado que es funcionalidad nueva.">
           <span style={{ ...BIG, fontSize: 28, lineHeight: "36px" }}>{fmtPct(pct(hist), 0)}</span>
@@ -138,7 +139,8 @@ function Meter({ label, value, color }: { label: string; value: number; color: s
 }
 
 export function StabilityChart({ v }: { v: ScrumView }) {
-  const h = half(v);
+  const cmp = comparison(v);
+  const h = cmp.recent.length;
   const added = trend(v, "addedRate");
   const carry = trend(v, "carryoverRate");
   return (
@@ -151,11 +153,11 @@ export function StabilityChart({ v }: { v: ScrumView }) {
       <div style={MINI_GRID}>
         <MiniCard label={`No planificado · últimos ${h} sprints`} note="Parte del sprint que llegó con el sprint ya andando.">
           <span style={{ ...BIG, fontSize: 28, lineHeight: "36px" }}>{fmtPct(added?.after ?? null, 0)}</span>
-          <DeltaText value={added?.delta} betterWhen="down">{`${fmtPp(added?.delta)}${added?.delta == null ? "" : ` vs ${h} anteriores`}`}</DeltaText>
+          <DeltaText value={added?.delta} betterWhen="down">{`${fmtPp(added?.delta)}${added?.delta == null ? "" : ` vs ${cmp.previousLabel}`}`}</DeltaText>
         </MiniCard>
         <MiniCard label={`Arrastrado · últimos ${h} sprints`} note="Parte del sprint que es trabajo que no se terminó antes.">
           <span style={{ ...BIG, fontSize: 28, lineHeight: "36px" }}>{fmtPct(carry?.after ?? null, 0)}</span>
-          <DeltaText value={carry?.delta} betterWhen="down">{`${fmtPp(carry?.delta)}${carry?.delta == null ? "" : ` vs ${h} anteriores`}`}</DeltaText>
+          <DeltaText value={carry?.delta} betterWhen="down">{`${fmtPp(carry?.delta)}${carry?.delta == null ? "" : ` vs ${cmp.previousLabel}`}`}</DeltaText>
         </MiniCard>
       </div>
       <Scroll>
