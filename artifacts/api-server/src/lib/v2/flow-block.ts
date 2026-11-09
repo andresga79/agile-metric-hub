@@ -26,7 +26,9 @@ export function buildFlowBlock(
     leadP85: p85(leads),
     flowEfficiencyPct: cycleMean === null || leadMean === null || leadMean === 0 ? null : (cycleMean / leadMean) * 100,
     timeInStatus: timeInStatus
-      .filter((t) => t.category === "indeterminate")
+      // In-progress statuses, plus mid-flow waiting ones Jira files under To Do ("Ready for DEV").
+      // The plain backlog ("To Do", "Backlog", "Open") never matches isWaitingStatus.
+      .filter((t) => t.category === "indeterminate" || (t.category === "new" && isWaitingStatus(t.status)))
       .sort((a, b) => b.avgDays - a.avgDays)
       .map((t) => ({ status: t.status, avgDays: t.avgDays, waiting: isWaitingStatus(t.status) })),
     wip: {

@@ -28,9 +28,9 @@ describe("buildKanbanTeamView", () => {
     expect(v.deliveredDeltaPct).toBeCloseTo(73.4, 1);
     expect(v.generatedAt).toBe(now.toISOString());
   });
-  it("flags a throughput drop", () => {
+  it("never flags a throughput drop (Kanban is not flagged)", () => {
     const v = buildKanbanTeamView({ ...base, current: issues(35), previous: issues(69) });
-    expect(v.attention).toEqual(["entregó 49,3% menos"]); // 35 vs 69: −49,28%
+    expect(v.attention).toEqual([]); // 35 vs 69: −49,28%, still no alert
   });
   it("null delta and no attention without previous", () => {
     const v = buildKanbanTeamView({ ...base, current: issues(10), previous: [] });

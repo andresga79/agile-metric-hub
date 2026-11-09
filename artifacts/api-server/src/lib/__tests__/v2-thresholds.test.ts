@@ -90,9 +90,10 @@ describe("applyThresholds", () => {
     expect(v.attention).toEqual([]);
   });
 
-  it("kanban attention follows kanbanThroughputDrop", () => {
-    expect(applyThresholds(kanban, {}).attention).toEqual([]);
-    expect(applyThresholds(kanban, { kanbanThroughputDrop: eff(5, 15) }).attention).toEqual(["entregó 20% menos"]);
+  it("kanban is never flagged, whatever its numbers and thresholds", () => {
+    const bad = { ...kanban, deliveredDeltaPct: -80, flow: { ...kanban.flow, cycleMedianDeltaPct: 90 }, attention: ["x"] };
+    expect(applyThresholds(bad, {}).attention).toEqual([]);
+    expect(applyThresholds(bad, { kanbanThroughputDrop: eff(5, 15) }).attention).toEqual([]);
   });
 
   it("a cached view without thresholds (older shape) gets them", () => {

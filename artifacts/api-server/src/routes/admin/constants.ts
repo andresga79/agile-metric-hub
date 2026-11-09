@@ -71,6 +71,4 @@ export const DEFAULT_HEALTH_THRESHOLDS: {
   // v2 views: real (done-at-close) completion, predictability (sample std dev, pp) and Kanban trend alerts.
   { metric: "sprintCompletionReal", goodValue: 80, warningValue: 50 },
   { metric: "sprintPredictability", goodValue: 8, warningValue: 12 },
-  { metric: "kanbanThroughputDrop", goodValue: 10, warningValue: 30 },
-  { metric: "kanbanCycleTimeRise", goodValue: 10, warningValue: 30 },
 ];

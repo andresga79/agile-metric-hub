@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
 import type { V2KanbanTeamView, V2WeekBucket } from "@workspace/api-client-react";
 import { fmtDays, fmtDeltaPct, fmtNum, fmtPct } from "../format";
 import { DeltaText, GlassCard, V2_BAD, V2_GOOD, V2_WARN } from "../ui";
@@ -197,16 +196,6 @@ export function KanbanCycleChart({ v }: { v: KanbanView }) {
   );
 }
 
-export function KanbanAttention({ v }: { v: KanbanView }) {
-  if (v.attention.length === 0) return null;
-  return (
-    <div role="note" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 12, borderRadius: 12, background: "rgba(255,179,102,0.10)", fontSize: 14 }}>
-      <AlertTriangle size={18} color={V2_WARN} aria-hidden="true" style={{ flex: "0 0 auto", marginTop: 2 }} />
-      <span>Atención: {v.attention.join("; ")}.</span>
-    </div>
-  );
-}
-
 export function KanbanTrends({ v }: { v: KanbanView }) {
   return (
     <TrendsCard
@@ -220,7 +209,6 @@ export function KanbanTrends({ v }: { v: KanbanView }) {
 export function KanbanSections({ v, jiraUrl }: { v: KanbanView; jiraUrl: string | null }) {
   return (
     <>
-      <KanbanAttention v={v} />
       <KanbanQuickAnswers v={v} jiraUrl={jiraUrl} />
       <KanbanDeliveredChart v={v} />
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 20 }}>

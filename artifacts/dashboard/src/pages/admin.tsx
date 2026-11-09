@@ -44,7 +44,10 @@ interface AdminProjectVisibilityRow {
 
 type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 
-const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanThroughputDrop", "kanbanCycleTimeRise"];
+// Kanban attention thresholds were retired (2026-11-09); old DBs still hold the rows, so hide them.
+const RETIRED_METRICS = ["kanbanThroughputDrop", "kanbanCycleTimeRise"];
+
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanCycleTimeRise"];
 const HIGHER_BETTER = ["sprintCompletionReal", "throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
 
 // These are a single target value, not a good/warning band — the backend only ever reads
@@ -66,8 +69,6 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   sprintCompletion: { label: "Sprint Completion", unit: "%" },
   sprintCompletionReal: { label: "Cumplimiento real (v2)", unit: "%" },
   sprintPredictability: { label: "Predictibilidad (desvío, v2)", unit: "pp" },
-  kanbanThroughputDrop: { label: "Caída de throughput Kanban (v2)", unit: "%" },
-  kanbanCycleTimeRise: { label: "Subida de tiempo de ciclo Kanban (v2)", unit: "%" },
   slaHighest: { label: "SLA - Prioridad Highest", unit: "h" },
   slaHigh: { label: "SLA - Prioridad High", unit: "d" },
   slaMedium: { label: "SLA - Prioridad Medium", unit: "d" },
@@ -833,7 +834,7 @@ export default function Admin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {thresholds.map((row) => {
+                {thresholds.filter((r) => !RETIRED_METRICS.includes(r.metric)).map((row) => {
                   const meta = METRIC_LABELS[row.metric] ?? { label: row.metric, unit: "" };
                   const isLower = LOWER_BETTER.includes(row.metric);
                   const isSingleValue = SINGLE_VALUE_METRICS.includes(row.metric);
@@ -940,7 +941,7 @@ export default function Admin() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {thresholds.map((globalRow) => {
+                  {thresholds.filter((r) => !RETIRED_METRICS.includes(r.metric)).map((globalRow) => {
                     const meta = METRIC_LABELS[globalRow.metric] ?? { label: globalRow.metric, unit: "" };
                     const row = projectOverrides[globalRow.metric];
                     const active = row?.hasOverride ?? false;

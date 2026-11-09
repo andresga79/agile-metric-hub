@@ -28,17 +28,3 @@ export function scrumAttention(avgRealRate: number | null, band: PredictabilityB
   if (band === "baja") out.push("predictibilidad baja");
   return out;
 }
-
-export function kanbanAttention(throughputDeltaPct: number | null, cycleMedianDeltaPct: number | null, t: Thresholds): string[] {
-  const out: string[] = [];
-  if (throughputDeltaPct !== null) {
-    const drop = -throughputDeltaPct;
-    const cut = warn(t, "kanbanThroughputDrop", 30);
-    if (drop > cut) out.push(`entregó ${pctOutside(drop, cut, "above")}% menos`);
-  }
-  const rise = warn(t, "kanbanCycleTimeRise", 30);
-  if (cycleMedianDeltaPct !== null && cycleMedianDeltaPct > rise) {
-    out.push(`tiempo de ciclo +${pctOutside(cycleMedianDeltaPct, rise, "above")}%`);
-  }
-  return out;
-}

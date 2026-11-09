@@ -91,7 +91,10 @@ Tiempos (sobre los issues entregados al cierre en los sprints de la ventana):
   "Tiempo de entrega" (en la app "lead time" es de creado a Done).
 - **Lead time** = de creado a Done, mismo tratamiento.
 - **Dónde espera el trabajo** = tiempo promedio por estado (`computeTimeInStatus`, de
-  `routes/analytics.ts`), marcando cada estado como "esperando" o "trabajando".
+  `routes/analytics.ts`), marcando cada estado como "esperando" o "trabajando". Entran los estados en curso
+  (`indeterminate`) y también los de espera a mitad de flujo aunque Jira los ponga en To Do
+  ("Ready for DEV", "Ready for QA"; `isWaitingStatus`); el backlog ("To Do", "Backlog",
+  "Open") no. Decisión del usuario, 2026-11-09.
 
 **Ventana**: selector 3 / 6 / 12 sprints cerrados (default 6), más el sprint activo si existe.
 La comparación de tendencia es la mitad reciente contra la mitad anterior de la ventana
@@ -102,16 +105,17 @@ La comparación de tendencia es la mitad reciente contra la mitad anterior de la
 Un equipo aparece en "Requiere atención" del Portafolio si:
 
 - **Scrum**: cumplimiento real promedio de la ventana **< 50%**, **o** predictibilidad **baja**.
-- **Kanban**: throughput **cae > 30%** contra el período anterior, **o** el tiempo de ciclo
-  **sube > 30%**. Período Kanban = últimos 90 días vs los 90 anteriores.
+- **Kanban**: nunca (decisión del usuario, 2026-11-09). Los equipos Kanban se quedan en la
+  tabla del Portafolio (volumen y tiempos) pero no se marcan: ni en la tarjeta, ni en el
+  titular, ni con banner en su página de Equipo. *(Antes: throughput −30% o ciclo +30%.)*
 
 Los cortes van a los **umbrales centralizados** (`DEFAULT_HEALTH_THRESHOLDS` →
 `default_metric_thresholds`, editables en Admin → Health, con override por proyecto), como
 manda la arquitectura del proyecto. Métricas nuevas (pares `goodValue` / `warningValue`):
 - `sprintCompletionReal`: good 80, warning 50 (verde ≥ 80, ámbar ≥ 50, rojo < 50).
 - `sprintPredictability` (desvío en pp): good 8, warning 12.
-- `kanbanThroughputDrop` (% de caída): good 10, warning 30.
-- `kanbanCycleTimeRise` (% de subida): good 10, warning 30.
+- ~~`kanbanThroughputDrop`, `kanbanCycleTimeRise`~~: retirados el 2026-11-09 (las filas ya
+  sembradas en DB se ocultan en Admin → Health, no se borran).
 
 El motivo se muestra junto al equipo ("cumplimiento 46%", "predictibilidad baja", "entregó 49%
 menos").

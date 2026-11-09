@@ -1,5 +1,5 @@
 import type { EffectiveThreshold } from "../health-thresholds";
-import { kanbanAttention, scrumAttention } from "./attention";
+import { scrumAttention } from "./attention";
 import { predictabilityBand } from "./stats";
 import type { TeamView, V2Thresholds } from "./types";
 
@@ -41,7 +41,8 @@ export function applyThresholds<T extends TeamView>(view: T, t: Thresholds): T {
   }
   return {
     ...view,
-    attention: kanbanAttention(view.deliveredDeltaPct, view.flow.cycleMedianDeltaPct, t),
+    // Kanban teams stay in the portfolio table but are never flagged (decision 2026-11-09).
+    attention: [],
     thresholds,
   };
 }

@@ -429,7 +429,7 @@ Ciclo y lead: mediana y P85 (P85 a 1 decimal). **Flow efficiency = media(ciclo) 
 (`lib/v2/flow-block.ts`, `buildFlowBlock`)
 
 ### Tiempo por estado y WIP envejecido
-- Tiempo por estado: `computeTimeInStatus` filtrado a la categoría **"en curso"** (`indeterminate`), ordenado por promedio de días; `waiting` = `isWaitingStatus` (regex de nombres de espera: ready/aceptad/listo/espera/pending/bloqueado…).
+- Tiempo por estado: `computeTimeInStatus` filtrado a la categoría **"en curso"** (`indeterminate`) **más** los estados de categoría `new` cuyo nombre es de espera (`isWaitingStatus`: "Ready for DEV", "Ready for QA"; decisión 2026-11-09). El backlog ("To Do", "Backlog", "Por hacer", "Open") queda fuera. Flow efficiency no cambia. Ordenado por promedio de días; `waiting` = `isWaitingStatus` (regex de nombres de espera: ready/aceptad/listo/espera/pending/bloqueado…).
 - WIP: total de en curso y los envejecidos (`computeWipAging`, nivel `warning`/`critical` según umbral `wipAging`). Scrum: en curso del sprint activo; Kanban: abiertos del proyecto.
 (`lib/v2/flow-block.ts`; `lib/flow-insights.ts`)
 
@@ -438,7 +438,7 @@ Entregados = resueltos con `isIssueDone`, sin `isNonDeliveryClosure`, tipos perm
 (`lib/v2/team-kanban.ts`, `buildKanbanTeamView`; `lib/v2/service.ts`, `buildKanban`)
 
 ### Portafolio
-Cada fila se **copia de la vista de equipo** (`toPortfolioRow`), así Portafolio y Equipo nunca divergen: Scrum usa cumplimiento real, banda, min/max, entregados = suma de `realDoneIssues` de los sprints, `deliveredDeltaPct` = tendencia closedIssues, no planificado/arrastrado = media de `display`; Kanban usa los entregados de 90 días (siempre 90 en el portafolio). Un proyecto que falla en Jira sale como fila de error, no rompe el resto.
+Cada fila se **copia de la vista de equipo** (`toPortfolioRow`), así Portafolio y Equipo nunca divergen: Scrum usa cumplimiento real, banda, min/max, entregados = suma de `realDoneIssues` de los sprints, `deliveredDeltaPct` = tendencia closedIssues, no planificado/arrastrado = media de `display`; Kanban usa los entregados de 90 días (siempre 90 en el portafolio); su lectura nunca es de atención (cae a la mejor señal favorable). Un proyecto que falla en Jira sale como fila de error, no rompe el resto.
 - **Resumen**: media de cumplimiento real de los equipos Scrum, cuántos mejoran (`realDeltaPp > 0`), lista de atención.
 - **Lectura por fila**: primero la atención; si no, mejora de cumplimiento, "más y más rápido", más entregado, ciclo menor, o "sin cambios relevantes". **Titular**: "N equipos mejoran su cumplimiento" + primer equipo con atención.
 (`lib/v2/portfolio.ts`, `toPortfolioRow`, `readingFor`, `buildPortfolioView`)
@@ -446,10 +446,9 @@ Cada fila se **copia de la vista de equipo** (`toPortfolioRow`), así Portafolio
 ### "Requiere atención"
 Umbrales efectivos del proyecto (`getEffectiveThresholds`, warning; defaults entre paréntesis):
 - Scrum: cumplimiento real medio < `sprintCompletionReal` (50) o banda de predictibilidad "baja" (`sprintPredictability`).
-- Kanban: caída de entregados > `kanbanThroughputDrop` (30 %) o mediana de ciclo > `kanbanCycleTimeRise` (30 %) más alta.
+- Kanban: **nunca se marca** (decisión 2026-11-09). Sigue en la tabla del portafolio con volumen y tiempos, pero su `attention` es siempre `[]`: no aparece en "Requiere atención", ni en el titular, ni con banner en su página de Equipo. Los umbrales `kanbanThroughputDrop` / `kanbanCycleTimeRise` se retiraron (las filas antiguas en DB se ocultan en Admin → Health).
 Los valores del motivo van con un decimal (es-CL) y nunca se redondean sobre el corte: 49,96 → "cumplimiento real 49,9%", no "50%".
-(`lib/v2/attention.ts`, `scrumAttention`, `kanbanAttention`)
-**Límite**: no hay muestra mínima; con volúmenes Kanban muy chicos un par de issues de diferencia puede disparar la alerta.
+(`lib/v2/attention.ts`, `scrumAttention`; `lib/v2/thresholds.ts`, `applyThresholds`)
 
 ### Resumen de sprint: `doneToday*`
 `sprint-summary.ts` expone `doneTodayStoryPoints/Issues/Rate` (estado actual, = Rovo) junto a las cifras de real cerrado; el titular de la vista Sprint usa Done hoy y muestra el % real cerrado al lado. (`lib/sprint-summary.ts`)

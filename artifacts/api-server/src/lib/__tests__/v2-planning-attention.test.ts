@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { recommendPlanning } from "../v2/planning";
-import { scrumAttention, kanbanAttention } from "../v2/attention";
+import { scrumAttention } from "../v2/attention";
 import type { SprintFacts } from "../v2/types";
 import type { EffectiveThreshold } from "../health-thresholds";
 
@@ -16,8 +16,6 @@ const facts = [f("S115", 72, 28, 25), f("S116", 85, 32, 42), f("S117", 53, 22, 5
 const eff = (g: number, w: number): EffectiveThreshold => ({ goodValue: g, warningValue: w, isOverride: false });
 const T = {
   sprintCompletionReal: eff(80, 50),
-  kanbanThroughputDrop: eff(10, 30),
-  kanbanCycleTimeRise: eff(10, 30),
 };
 
 describe("recommendPlanning", () => {
@@ -52,26 +50,15 @@ describe("attention", () => {
     expect(scrumAttention(40, "baja", T)).toEqual(["cumplimiento real 40%", "predictibilidad baja"]);
     expect(scrumAttention(null, null, T)).toEqual([]);
   });
-  it("kanban", () => {
-    expect(kanbanAttention(-49, -66, T)).toEqual(["entregó 49% menos"]);
-    expect(kanbanAttention(null, 35, T)).toEqual(["tiempo de ciclo +35%"]);
-    expect(kanbanAttention(-49, 35, T)).toEqual(["entregó 49% menos", "tiempo de ciclo +35%"]);
-    expect(kanbanAttention(null, null, T)).toEqual([]);
-  });
   it("shows one decimal (es-CL) so the reason never contradicts its cut-off", () => {
     expect(scrumAttention(49.6, null, T)).toEqual(["cumplimiento real 49,6%"]);
     expect(scrumAttention(61.78, null, { sprintCompletionReal: eff(80, 65) })).toEqual(["cumplimiento real 61,8%"]);
-    expect(kanbanAttention(-30.4, null, T)).toEqual(["entregó 30,4% menos"]);
-    expect(kanbanAttention(null, 30.4, T)).toEqual(["tiempo de ciclo +30,4%"]);
   });
   it("never rounds onto or across the cut-off", () => {
-    // 49,96 would round to 50 (= the cut-off); 30,04 to 30.
+    // 49,96 would round to 50 (= the cut-off).
     expect(scrumAttention(49.96, null, T)).toEqual(["cumplimiento real 49,9%"]);
-    expect(kanbanAttention(-30.04, null, T)).toEqual(["entregó 30,1% menos"]);
-    expect(kanbanAttention(null, 30.04, T)).toEqual(["tiempo de ciclo +30,1%"]);
   });
   it("falls back to defaults when thresholds are missing", () => {
     expect(scrumAttention(46, null, {})).toEqual(["cumplimiento real 46%"]);
-    expect(kanbanAttention(-49, 35, {})).toHaveLength(2);
   });
 });
