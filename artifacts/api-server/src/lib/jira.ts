@@ -1379,6 +1379,18 @@ export async function getProjectBoardType(
   projectId: string,
   options?: { forceRefresh?: boolean }
 ): Promise<ProjectBoardType> {
+  return getProjectBoardTypeOrThrow(projectId, options).catch((err): "simple" => {
+    logger.warn({ err, projectId }, "Failed to detect board type");
+    return "simple";
+  });
+}
+
+/** getProjectBoardType without the "simple" fallback: a failed detection rejects instead, so a
+ *  caller that caches what it builds on top (v2 team views) can tell "failed" from "really simple". */
+export async function getProjectBoardTypeOrThrow(
+  projectId: string,
+  options?: { forceRefresh?: boolean }
+): Promise<ProjectBoardType> {
   if (!isJiraConfigured()) return MOCK_BOARD_TYPES[projectId] ?? "scrum";
 
   const override = MANUAL_BOARD_OVERRIDES[projectId];
@@ -1420,10 +1432,7 @@ export async function getProjectBoardType(
     const primaryType = (scrum ?? owned[0]!).type;
     if (primaryType === "scrum" || primaryType === "kanban") return primaryType;
     return "simple";
-  }, options).catch((err): "simple" => {
-    logger.warn({ err, projectId }, "Failed to detect board type");
-    return "simple";
-  });
+  }, options);
 }
 
 export async function getBoardId(
@@ -1515,6 +1524,19 @@ export async function getJiraSprints(
   maxResults: number = 50,
   options?: { forceRefresh?: boolean }
 ): Promise<JiraSprint[]> {
+  return getJiraSprintsOrThrow(projectId, maxResults, options).catch((err): JiraSprint[] => {
+    logger.warn({ err, projectId }, "Failed to fetch sprints");
+    return [];
+  });
+}
+
+/** getJiraSprints without the [] fallback on a failed fetch (a board without sprint support is
+ *  still a real []). For v2, which must not cache a view built on a sprint list that failed. */
+export async function getJiraSprintsOrThrow(
+  projectId: string,
+  _maxResults: number = 50,
+  options?: { forceRefresh?: boolean }
+): Promise<JiraSprint[]> {
   if (!isJiraConfigured()) return [];
 
   return withCache(sprintsCacheKey(projectId), async () => {
@@ -1561,10 +1583,7 @@ export async function getJiraSprints(
       // for 6h (which hid velocity and made every sprint-window period 400).
       throw err;
     }
-  }, options).catch((err): JiraSprint[] => {
-    logger.warn({ err, projectId }, "Failed to fetch sprints");
-    return [];
-  });
+  }, options);
 }
 
 /** Upcoming sprints of the project's board, in Jira's board order (the order the team planned
@@ -1573,18 +1592,23 @@ export async function getJiraSprints(
  *  "next sprint". Separate from getJiraSprints on purpose: Sprints, Evolution and the 2s/6s windows
  *  assume closed + active only. */
 export async function getFutureJiraSprints(projectId: string): Promise<JiraSprint[]> {
-  if (!isJiraConfigured()) return [];
   try {
-    const boardId = await findBoardId(projectId);
-    if (!boardId) return [];
-    const data = await jiraAgileFetch<{ values: JiraSprint[] }>(
-      `${JIRA_URL}/rest/agile/1.0/board/${boardId}/sprint?maxResults=50&state=future`
-    );
-    return (data.values ?? []).filter((s) => s.state === "future");
+    return await getFutureJiraSprintsOrThrow(projectId);
   } catch (err) {
     logger.warn({ err, projectId }, "Failed to fetch future sprints");
     return [];
   }
+}
+
+/** getFutureJiraSprints without the [] fallback on a failed fetch (for v2). */
+export async function getFutureJiraSprintsOrThrow(projectId: string): Promise<JiraSprint[]> {
+  if (!isJiraConfigured()) return [];
+  const boardId = await findBoardId(projectId);
+  if (!boardId) return [];
+  const data = await jiraAgileFetch<{ values: JiraSprint[] }>(
+    `${JIRA_URL}/rest/agile/1.0/board/${boardId}/sprint?maxResults=50&state=future`
+  );
+  return (data.values ?? []).filter((s) => s.state === "future");
 }
 
 type JiraSearchResponse = {
@@ -1598,34 +1622,43 @@ export async function getSprintIssues(
   sprintId: number,
   maxResults: number = 100
 ): Promise<JiraIssue[]> {
-  if (!isJiraConfigured()) return [];
-  const fields =
-    "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
   try {
-    const allIssues: JiraIssue[] = [];
-    // Keyset pagination, not pageToken — see getOpenIssuesForProject's comment on why: Jira's
-    // nextPageToken never actually advances on this site.
-    let lastSeenKey: string | null = null;
-    for (let page = 0; page < 5; page++) {
-      const jql = encodeURIComponent(
-        `sprint = ${sprintId}${lastSeenKey ? ` AND key > "${lastSeenKey}"` : ""} ORDER BY key ASC`
-      );
-      const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
-        `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
-      );
-      const pageIssues = result.issues ?? [];
-      if (pageIssues.length === 0) break;
-      allIssues.push(...pageIssues);
-      if (result.isLast || pageIssues.length < maxResults) break;
-      lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
-    }
-    // "Done at sprint close" reads the status at the close instant from the changelog.
-    await completeTruncatedChangelogs(allIssues);
-    return allIssues;
+    return await getSprintIssuesOrThrow(sprintId, maxResults);
   } catch (err) {
     logger.warn({ err, sprintId }, "Failed to fetch sprint issues");
     return [];
   }
+}
+
+/** getSprintIssues without the [] fallback: a failed fetch rejects, so v2 never takes a sprint it
+ *  could not read for an empty one (realRate 0) and caches that. */
+export async function getSprintIssuesOrThrow(
+  sprintId: number,
+  maxResults: number = 100
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) return [];
+  const fields =
+    "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,created,resolutiondate,updated";
+  const allIssues: JiraIssue[] = [];
+  // Keyset pagination, not pageToken — see getOpenIssuesForProject's comment on why: Jira's
+  // nextPageToken never actually advances on this site.
+  let lastSeenKey: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const jql = encodeURIComponent(
+      `sprint = ${sprintId}${lastSeenKey ? ` AND key > "${lastSeenKey}"` : ""} ORDER BY key ASC`
+    );
+    const result: JiraSearchResponse = await jiraFetch<JiraSearchResponse>(
+      `/search/jql?jql=${jql}&maxResults=${maxResults}&fields=${fields}&expand=changelog`
+    );
+    const pageIssues = result.issues ?? [];
+    if (pageIssues.length === 0) break;
+    allIssues.push(...pageIssues);
+    if (result.isLast || pageIssues.length < maxResults) break;
+    lastSeenKey = pageIssues[pageIssues.length - 1]!.key;
+  }
+  // "Done at sprint close" reads the status at the close instant from the changelog.
+  await completeTruncatedChangelogs(allIssues);
+  return allIssues;
 }
 
 export const JIRA_MAX_LOOKBACK_DAYS = 90;

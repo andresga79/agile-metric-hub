@@ -1,16 +1,16 @@
 import {
   getCycleTimeDays,
   getEffectiveIssueType,
-  getFutureJiraSprints,
+  getFutureJiraSprintsOrThrow,
   getBoardStatusNames,
   getJiraProject,
-  getJiraSprints,
+  getJiraSprintsOrThrow,
   getLeadTimeDays,
   getOpenIssuesForProject,
-  getProjectBoardType,
+  getProjectBoardTypeOrThrow,
   getResolutionDate,
   getResolvedJiraIssuesInRange,
-  getSprintIssues,
+  getSprintIssuesOrThrow,
   getStatusCategoryMap,
   isIssueDone,
   isIssueInProgress,
@@ -46,6 +46,11 @@ import type {
 // project, one sprint fetch at a time: each sprint's issues come with full changelogs, and holding
 // several projects' (or sprints') worth at once is what OOM-crashed the API before (CLAUDE.md,
 // "Sync serializado").
+//
+// Jira reads use the *OrThrow helpers: the plain ones turn a failed call into [] / "simple", and a
+// view built on that (a sprint read as empty -> real rate 0, no sprints -> "Sin sprint en curso",
+// a Scrum team rendered as Kanban) would be cached for 6 h. Rejecting instead caches nothing and
+// the portfolio shows the project as an error row.
 
 type ProjectRef = { id: string; key: string; name: string };
 type DayWindow = 30 | 90 | 180;
@@ -72,8 +77,8 @@ async function resolveProject(projectId: string): Promise<ProjectRef> {
 
 async function buildScrum(project: ProjectRef, windowSprints: SprintWindowSize): Promise<ScrumTeamView> {
   const [allSprints, future, allowedIssueTypes, categoryMap, thresholds] = await Promise.all([
-    getJiraSprints(project.id, 50),
-    getFutureJiraSprints(project.id),
+    getJiraSprintsOrThrow(project.id, 50),
+    getFutureJiraSprintsOrThrow(project.id),
     getPortfolioAllowedIssueTypes(),
     getStatusCategoryMap(),
     getEffectiveThresholds(project.id),
@@ -91,7 +96,7 @@ async function buildScrum(project: ProjectRef, windowSprints: SprintWindowSize):
   let wipIssues: JiraIssue[] = [];
   for (const sprint of toCompute.values()) {
     // Sequential on purpose (memory): never Promise.all across sprints.
-    const issues = await getSprintIssues(sprint.id);
+    const issues = await getSprintIssuesOrThrow(sprint.id);
     facts.set(sprint.id, await computeSprintFacts(sprint, issues, allowedIssueTypes, allSprints, categoryMap));
     if (flowSprintIds.has(sprint.id)) {
       const scope = await sprintScopeIssues(issues, allowedIssueTypes);
@@ -192,7 +197,8 @@ export async function getTeamView(projectId: string, opts: TeamViewOptions = {})
   const sprints = opts.sprints ?? 6;
   const days = opts.days ?? 90;
   const forceRefresh = opts.forceRefresh === true;
-  const isScrum = (await getProjectBoardType(projectId)) === "scrum";
+  // Outside the cache on purpose: a failed detection rejects here, before anything is cached.
+  const isScrum = (await getProjectBoardTypeOrThrow(projectId)) === "scrum";
   return withCache<TeamView>(
     teamCacheKey(projectId, isScrum, sprints, days),
     async () => {
@@ -211,8 +217,9 @@ export async function getPortfolioView(windowSprints: SprintWindowSize): Promise
     const ref: ProjectRef = { id: p.id, key: p.key, name: p.name };
     let boardType: "scrum" | "kanban";
     try {
-      boardType = (await getProjectBoardType(p.id)) === "scrum" ? "scrum" : "kanban";
+      boardType = (await getProjectBoardTypeOrThrow(p.id)) === "scrum" ? "scrum" : "kanban";
     } catch (err) {
+      logger.warn({ err, projectId: p.id }, "v2 portfolio: board type detection failed");
       rows.push(errorRow({ ...ref, boardType: "scrum" }, err));
       continue;
     }
