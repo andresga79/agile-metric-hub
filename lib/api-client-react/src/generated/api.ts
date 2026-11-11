@@ -50,6 +50,7 @@ import type {
   SprintSummaryResponse,
   SuccessResponse,
   User,
+  V2CurrentSprintView,
   V2PortfolioView,
   V2TeamView
 } from './api.schemas';
@@ -1726,6 +1727,85 @@ export function useGetV2Team<TData = Awaited<ReturnType<typeof getV2Team>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetV2TeamQueryOptions(projectId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetV2CurrentSprintUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/v2/projects/${projectId}/current-sprint`
+}
+
+/**
+ * The active sprint's facts (Done hoy), its business days as of today, time per flow status of its own issues and today's WIP. The 3/6/12 team windows only hold closed sprints. Kanban/simple boards, or a board with no active sprint, answer with `sprint: null`.
+ *
+ * @summary v2 sprint in progress of a Scrum team (the "Sprint actual" tab)
+ */
+export const getV2CurrentSprint = async (projectId: string, options?: RequestInit): Promise<V2CurrentSprintView> => {
+
+  return customFetch<V2CurrentSprintView>(getGetV2CurrentSprintUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV2CurrentSprintQueryKey = (projectId: string,) => {
+    return [
+    `/api/v2/projects/${projectId}/current-sprint`
+    ] as const;
+    }
+
+
+export const getGetV2CurrentSprintQueryOptions = <TData = Awaited<ReturnType<typeof getV2CurrentSprint>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV2CurrentSprint>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV2CurrentSprintQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV2CurrentSprint>>> = ({ signal }) => getV2CurrentSprint(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV2CurrentSprint>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV2CurrentSprintQueryResult = NonNullable<Awaited<ReturnType<typeof getV2CurrentSprint>>>
+export type GetV2CurrentSprintQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary v2 sprint in progress of a Scrum team (the "Sprint actual" tab)
+ */
+
+export function useGetV2CurrentSprint<TData = Awaited<ReturnType<typeof getV2CurrentSprint>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV2CurrentSprint>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV2CurrentSprintQueryOptions(projectId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

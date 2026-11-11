@@ -1,15 +1,26 @@
 import { AlertTriangle } from "lucide-react";
-import type { V2FlowBlock, V2TrendRow } from "@workspace/api-client-react";
+import type { V2TimeInStatusRow, V2TrendRow, V2WipBlock } from "@workspace/api-client-react";
 import { fmtDays, fmtNum, fmtPct, fmtPp } from "../format";
 import { DeltaText, GlassCard, SectionTitle, V2_WARN } from "../ui";
 import { GREY, MUTED, Scroll, Section, comparison, sprintLabel, type ScrumView } from "./shared";
 
-export function WaitingSection({ flow, jiraUrl }: { flow: V2FlowBlock; jiraUrl: string | null }) {
-  const rows = [...flow.timeInStatus].sort((a, b) => b.avgDays - a.avgDays);
+/** Time per flow status, plus today's WIP when the view has one (Kanban, Sprint actual); the Scrum
+ *  windows of closed sprints pass `wip: null`. */
+export function WaitingSection({
+  timeInStatus,
+  wip,
+  jiraUrl,
+  subtitle = "Días promedio que pasa un issue en cada estado del flujo.",
+}: {
+  timeInStatus: V2TimeInStatusRow[];
+  wip: V2WipBlock | null;
+  jiraUrl: string | null;
+  subtitle?: string;
+}) {
+  const rows = [...timeInStatus].sort((a, b) => b.avgDays - a.avgDays);
   const max = Math.max(0.1, ...rows.map((r) => r.avgDays));
-  const { total, aged } = flow.wip;
   return (
-    <Section id="t-acumula" title="Dónde espera el trabajo" subtitle="Días promedio que pasa un issue en cada estado del flujo.">
+    <Section id="t-acumula" title="Dónde espera el trabajo" subtitle={subtitle}>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         {rows.map((r) => (
           <li key={r.status} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr 64px", gap: 12, alignItems: "center", fontSize: 14 }}>
@@ -26,6 +37,13 @@ export function WaitingSection({ flow, jiraUrl }: { flow: V2FlowBlock; jiraUrl: 
         <span><span aria-hidden="true" style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: V2_WARN, marginRight: 6 }} />Esperando</span>
         <span><span aria-hidden="true" style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: GREY, marginRight: 6 }} />Trabajando</span>
       </div>
+      {wip && <WipNote wip={wip} jiraUrl={jiraUrl} />}
+    </Section>
+  );
+}
+
+function WipNote({ wip: { total, aged }, jiraUrl }: { wip: V2WipBlock; jiraUrl: string | null }) {
+  return (
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 12, borderRadius: 12, background: "rgba(255,179,102,0.10)", fontSize: 14 }}>
         <AlertTriangle size={18} color={V2_WARN} aria-hidden="true" style={{ flex: "0 0 auto", marginTop: 2 }} />
         <span>
@@ -52,7 +70,6 @@ export function WaitingSection({ flow, jiraUrl }: { flow: V2FlowBlock; jiraUrl: 
           )}
         </span>
       </div>
-    </Section>
   );
 }
 

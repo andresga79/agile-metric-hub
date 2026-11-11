@@ -14,7 +14,8 @@ const JIRA_CACHE_NAMESPACE = (() => {
   // Bump CACHE_SCHEMA_VERSION when the SHAPE or completeness of cached Jira data changes, so a
   // deploy doesn't keep serving old entries for up to the 6h TTL. v2: full changelogs
   // (completeTruncatedChangelogs) - older entries hold changelogs truncated to 40 entries.
-  const CACHE_SCHEMA_VERSION = 2;
+  // v3: v2 Scrum team views leave the active sprint out of time-in-status and carry `wip: null`.
+  const CACHE_SCHEMA_VERSION = 3;
   return `tenant:${jiraUrl}|${jiraEmail}|v${CACHE_SCHEMA_VERSION}`;
 })();
 

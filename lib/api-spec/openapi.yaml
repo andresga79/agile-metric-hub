@@ -579,6 +579,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v2/projects/{projectId}/current-sprint:
+    get:
+      operationId: getV2CurrentSprint
+      tags: [metrics]
+      summary: v2 sprint in progress of a Scrum team (the "Sprint actual" tab)
+      description: >
+        The active sprint's facts (Done hoy), its business days as of today, time per flow status
+        of its own issues and today's WIP. The 3/6/12 team windows only hold closed sprints.
+        Kanban/simple boards, or a board with no active sprint, answer with `sprint: null`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Current sprint view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V2CurrentSprintView"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No access to the Sprints or Kanban section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/capacity:
     get:
       operationId: getProjectCapacity
@@ -1714,14 +1753,50 @@ components:
           items:
             $ref: "#/components/schemas/V2TimeInStatusRow"
         wip:
+          description: Today's WIP. Null in Scrum windows (closed sprints only); see V2CurrentSprintView.
+          allOf:
+            - $ref: "#/components/schemas/V2WipBlock"
+          nullable: true
+    V2WipBlock:
+      type: object
+      required: [total, aged]
+      properties:
+        total: { type: integer }
+        aged:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2WipAgingItem"
+    V2CurrentSprintView:
+      type: object
+      required: [projectId, projectKey, projectName, sprint, businessDays, expectedRate, timeInStatus, wip, generatedAt]
+      properties:
+        projectId: { type: string }
+        projectKey: { type: string }
+        projectName: { type: string }
+        sprint:
+          allOf:
+            - $ref: "#/components/schemas/V2SprintFacts"
+          nullable: true
+        businessDays:
           type: object
-          required: [total, aged]
+          nullable: true
+          description: Mon-Fri in the sprint's timezone (holidays not excluded). current = today's day number.
+          required: [total, elapsed, current]
           properties:
             total: { type: integer }
-            aged:
-              type: array
-              items:
-                $ref: "#/components/schemas/V2WipAgingItem"
+            elapsed: { type: integer }
+            current: { type: integer }
+        expectedRate:
+          type: number
+          nullable: true
+          description: Straight-line pace, elapsed / total business days (%).
+        timeInStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/V2TimeInStatusRow"
+        wip:
+          $ref: "#/components/schemas/V2WipBlock"
+        generatedAt: { type: string }
     V2PlanningRecommendation:
       type: object
       description: Capacity for the next sprint from the last 3 closed sprints (real closed numbers).

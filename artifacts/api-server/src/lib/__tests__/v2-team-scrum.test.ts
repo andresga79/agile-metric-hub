@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildScrumTeamView } from "../v2/team-scrum";
 import type { SprintFacts, TrendRow } from "../v2/types";
-import type { WipAgingItem } from "../flow-insights";
 
 const committedSp = [99, 86, 99, 101, 112, 99];
 const doneSp = [63, 42, 57, 72, 85, 53];
@@ -22,9 +21,6 @@ function sprint(i: number): SprintFacts {
   };
 }
 const all = [0, 1, 2, 3, 4, 5].map(sprint);
-const wip = (key: string, alertLevel: WipAgingItem["alertLevel"]): WipAgingItem => ({
-  id: key, key, summary: "", assignee: null, issueType: "Task", priority: "Medium", daysInProgress: 1, alertLevel, enteredDate: "",
-});
 const base = {
   project: { id: "p1", key: "OLI", name: "Olimpo" },
   windowSprints: 6 as const,
@@ -35,7 +31,6 @@ const base = {
     { status: "In Review", category: "indeterminate", totalDays: 1, avgDays: 1, medianDays: 1, issueCount: 1 },
     { status: "Waiting for QA", category: "indeterminate", totalDays: 1, avgDays: 3, medianDays: 1, issueCount: 1 },
   ],
-  wipAging: [wip("A", "critical"), wip("B", "warning"), wip("C", "watch"), wip("D", null)],
   thresholds: {},
 };
 
@@ -70,8 +65,8 @@ describe("buildScrumTeamView", () => {
   it("builds flow block", () => {
     expect(v.flow.timeInStatus.map((r) => r.status)).toEqual(["Waiting for QA", "In Review"]);
     expect(v.flow.timeInStatus[0].waiting).toBe(true);
-    expect(v.flow.wip.total).toBe(4);
-    expect(v.flow.wip.aged.map((a) => a.key)).toEqual(["A", "B"]);
+    // Today's WIP belongs to the sprint in progress (CurrentSprintView), never to a window of closed sprints.
+    expect(v.flow.wip).toBeNull();
     expect(v.flow.flowEfficiencyPct).toBeCloseTo((5.5 / 9.5) * 100, 1);
   });
 

@@ -59,7 +59,7 @@ describe("purgeStaleCacheEntries", () => {
 
     expect(purged).toBe(110);
     const query = new PgDialect().sqlToQuery(execute.mock.calls[0]![0] as SQL);
-    const prefix = "tenant:https://example.atlassian.net/|someone@example.com|v2:";
+    const prefix = "tenant:https://example.atlassian.net/|someone@example.com|v3:";
     // Compares the exact key prefix (not LIKE, whose `_` wildcard would also match look-alikes).
     expect(query.sql).toBe("DELETE FROM jira_cache WHERE left(cache_key, $1) <> $2");
     expect(query.params).toEqual([prefix.length, prefix]);

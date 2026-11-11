@@ -5,8 +5,8 @@
  * Agile Metrics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
-import type { V2FlowBlockWip } from './v2FlowBlockWip';
 import type { V2TimeInStatusRow } from './v2TimeInStatusRow';
+import type { V2WipBlock } from './v2WipBlock';
 
 export interface V2FlowBlock {
   cycleMedian: number | null;
@@ -16,5 +16,6 @@ export interface V2FlowBlock {
   leadP85: number | null;
   flowEfficiencyPct: number | null;
   timeInStatus: V2TimeInStatusRow[];
-  wip: V2FlowBlockWip;
+  /** Today's WIP. Null in Scrum windows (closed sprints only); see V2CurrentSprintView. */
+  wip: V2WipBlock | null;
 }

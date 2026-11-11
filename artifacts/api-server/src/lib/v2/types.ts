@@ -54,7 +54,13 @@ export interface FlowBlock {
   leadP85: number | null;
   flowEfficiencyPct: number | null;
   timeInStatus: TimeInStatusRow[];
-  wip: { total: number; aged: WipAgingItem[] };
+  /** Null in Scrum windows (closed sprints only): today's WIP is in CurrentSprintView. */
+  wip: WipBlock | null;
+}
+
+export interface WipBlock {
+  total: number;
+  aged: WipAgingItem[];
 }
 
 /** Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability). */
@@ -87,6 +93,25 @@ export interface ScrumTeamView {
   trends: TrendRow[];
   attention: string[];
   thresholds: V2Thresholds;
+  generatedAt: string;
+}
+
+/** The sprint in progress of a Scrum team (the "Sprint actual" tab). The 3/6/12 windows only hold
+ *  closed sprints. `businessDays`/`expectedRate` depend on today, so they are derived on every call,
+ *  outside the cache. */
+export interface CurrentSprintView {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  /** Null when the board has no active sprint (or is not Scrum). */
+  sprint: SprintFacts | null;
+  /** Mon-Fri in the sprint's timezone, holidays not excluded. `current` = today's day number. */
+  businessDays: { total: number; elapsed: number; current: number } | null;
+  /** Straight-line pace: % of the sprint's business days already behind (elapsed / total). */
+  expectedRate: number | null;
+  /** Time per flow status of the sprint's own issues. */
+  timeInStatus: TimeInStatusRow[];
+  wip: WipBlock;
   generatedAt: string;
 }
 

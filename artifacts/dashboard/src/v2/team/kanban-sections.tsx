@@ -32,7 +32,7 @@ function Answer({ q, big, unit, delta: d, note, extra }: { q: string; big: React
   );
 }
 
-function JiraKey({ k, jiraUrl }: { k: string; jiraUrl: string | null }) {
+export function JiraKey({ k, jiraUrl }: { k: string; jiraUrl: string | null }) {
   return jiraUrl ? (
     <a href={`${jiraUrl}/browse/${k}`} target="_blank" rel="noopener noreferrer" style={{ color: V2_WARN, fontWeight: 600 }}>
       {k}
@@ -45,7 +45,7 @@ function JiraKey({ k, jiraUrl }: { k: string; jiraUrl: string | null }) {
 export function KanbanQuickAnswers({ v, jiraUrl }: { v: KanbanView; jiraUrl: string | null }) {
   const f = v.flow;
   const waiting = [...f.timeInStatus].filter((r) => r.waiting).sort((a, b) => b.avgDays - a.avgDays)[0];
-  const { total, aged } = f.wip;
+  const { total, aged } = f.wip ?? { total: 0, aged: [] };
   const shown = aged.slice(0, 3);
   const big = { ...BIG, fontSize: 28, lineHeight: "36px" };
   return (
@@ -213,7 +213,7 @@ export function KanbanSections({ v, jiraUrl }: { v: KanbanView; jiraUrl: string 
       <KanbanDeliveredChart v={v} />
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 20 }}>
         <KanbanCycleChart v={v} />
-        <WaitingSection flow={v.flow} jiraUrl={jiraUrl} />
+        <WaitingSection timeInStatus={v.flow.timeInStatus} wip={v.flow.wip} jiraUrl={jiraUrl} />
       </section>
       <KanbanTrends v={v} />
     </>

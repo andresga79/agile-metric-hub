@@ -51,7 +51,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - **"Flow Health Score"** (antes mal llamado "DORA Score"): promedio normalizado de
   throughput + cycle time + CFR sobre datos de Jira. **No son métricas DORA reales** (no
   hay fuente de deploys/CI). Ver `METRICS.md` para la fórmula exacta y el resto de métricas.
-- **v2 convive con la app actual** (`/v2`). Titular por sprint = Rovo (Done hoy) con "% real cerrado" al lado; tendencias, predictibilidad, planning y atención usan solo el real cerrado. Portafolio y Equipo salen del mismo cálculo por equipo (la fila se copia de la vista). Fórmulas en `METRICS.md` §v2.
+- **v2 convive con la app actual** (`/v2`). Titular por sprint = Rovo (Done hoy) con "% real cerrado" al lado; tendencias, predictibilidad, planning y atención usan solo el real cerrado. Portafolio y Equipo salen del mismo cálculo por equipo (la fila se copia de la vista). Las ventanas 3/6/12 de Equipo son solo sprints cerrados; el sprint en curso tiene su pestaña "Sprint actual" (`/v2/projects/:id/current-sprint`). Fórmulas en `METRICS.md` §v2.
 - **Modelo de acceso**: 2 roles activos — `admin` (control total) y `member` (solo
   lectura, ve todas las secciones). `viewer` existe en el enum pero está dormido (sin
   cuentas asignadas). Cuenta `member` compartida entre varias personas a la vez es válido

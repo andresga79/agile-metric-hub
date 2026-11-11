@@ -9,16 +9,35 @@ import { BIG, MUTED, SMALL, comparison, rateColor, sprintLabel, type ScrumView }
 const dateFmt = new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" });
 const closeDate = (iso: string | null) => (iso ? dateFmt.format(new Date(iso)).replace(".", "") : null);
 
-export function TeamHeaderText({ v }: { v: ScrumView }) {
+/** "Sprints 115 a 117 cerrados. Sprint 118 en curso, cierra el 13 nov." The active sprint opens the
+ *  "Sprint actual" tab when `onShowActive` is given. */
+export function TeamHeaderText({ v, onShowActive }: { v: ScrumView; onShowActive?: () => void }) {
   const first = v.sprints[0];
   const last = v.sprints[v.sprints.length - 1];
   const closed = last ? `Sprints ${sprintLabel(first.name).replace(/^Sprint\s+/i, "")} a ${sprintLabel(last.name).replace(/^Sprint\s+/i, "")} cerrados.` : "Sin sprints cerrados.";
-  const end = v.active ? closeDate(v.active.endDate) : null;
-  const act = v.active ? ` ${sprintLabel(v.active.name)} en curso${end ? `, cierra el ${end}` : ""}.` : " Sin sprint en curso.";
-  return <>{closed}{act}</>;
+  if (!v.active) return <>{closed} Sin sprint en curso.</>;
+  const end = closeDate(v.active.endDate);
+  const name = sprintLabel(v.active.name);
+  return (
+    <>
+      {closed}{" "}
+      {onShowActive ? (
+        <button
+          type="button"
+          onClick={onShowActive}
+          style={{ background: "none", border: 0, padding: 0, font: "inherit", color: "var(--nxt-primary-soft)", cursor: "pointer", textDecoration: "underline" }}
+        >
+          {name} en curso
+        </button>
+      ) : (
+        `${name} en curso`
+      )}
+      {end ? `, cierra el ${end}` : ""}.
+    </>
+  );
 }
 
-function Answer({ q, big, unit, delta, note, extra }: { q: string; big: ReactNode; unit?: string; delta?: ReactNode; note: string; extra?: ReactNode }) {
+export function Answer({ q, big, unit, delta, note, extra }: { q: string; big: ReactNode; unit?: string; delta?: ReactNode; note: string; extra?: ReactNode }) {
   return (
     <GlassCard as="article" style={{ gap: 8, padding: 20 }}>
       <span style={{ fontSize: 13, fontWeight: 500, color: MUTED }}>{q}</span>
@@ -146,7 +165,7 @@ export function ScrumSections({ v, jiraUrl }: { v: ScrumView; jiraUrl: string | 
       <StabilityChart v={v} />
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 20 }}>
         <CycleChart v={v} />
-        <WaitingSection flow={v.flow} jiraUrl={jiraUrl} />
+        <WaitingSection timeInStatus={v.flow.timeInStatus} wip={null} jiraUrl={jiraUrl} subtitle="Días promedio que pasa un issue en cada estado del flujo, en los sprints cerrados de la ventana." />
       </section>
       <TrendsTable v={v} />
     </>

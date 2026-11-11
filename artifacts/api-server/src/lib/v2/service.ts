@@ -17,6 +17,7 @@ import {
   isJiraConfigured,
   isNonDeliveryClosure,
   listJiraProjects,
+  SPRINT_TIMEZONE,
   type JiraIssue,
   type JiraSprint,
 } from "../jira";
@@ -31,9 +32,11 @@ import { selectSprintWindow, type SprintWindowSize } from "./window";
 import { computeSprintFacts } from "./sprint-facts";
 import { buildScrumTeamView } from "./team-scrum";
 import { buildKanbanTeamView } from "./team-kanban";
+import { buildCurrentSprintView, withBusinessDays } from "./current-sprint";
 import { buildPortfolioView, errorRow, toPortfolioRow } from "./portfolio";
 import { applyThresholds, v2Thresholds } from "./thresholds";
 import type {
+  CurrentSprintView,
   DeliveredIssue,
   KanbanTeamView,
   PortfolioRow,
@@ -88,13 +91,14 @@ async function buildScrum(project: ProjectRef, windowSprints: SprintWindowSize):
   const active = window.active;
 
   // display ∪ previous (window 3 compares against the 3 closed before it) ∪ active, each once.
+  // The active sprint's facts only feed the header and the sprint selector: every window metric
+  // (time in status included) is over closed sprints; the sprint in progress is getCurrentSprintView.
   const toCompute = new Map<number, JiraSprint>();
   for (const s of [...window.previous, ...window.display, ...(active ? [active] : [])]) toCompute.set(s.id, s);
-  const flowSprintIds = new Set([...window.display.map((s) => s.id), ...(active ? [active.id] : [])]);
+  const flowSprintIds = new Set(window.display.map((s) => s.id));
 
   const facts = new Map<number, SprintFacts>();
   const timeInStatusIssues = new Map<string, JiraIssue>();
-  let wipIssues: JiraIssue[] = [];
   for (const sprint of toCompute.values()) {
     // Sequential on purpose (memory): never Promise.all across sprints.
     const issues = await getSprintIssuesOrThrow(sprint.id);
@@ -102,14 +106,12 @@ async function buildScrum(project: ProjectRef, windowSprints: SprintWindowSize):
     if (flowSprintIds.has(sprint.id)) {
       const scope = await sprintScopeIssues(issues, allowedIssueTypes);
       for (const i of scope) timeInStatusIssues.set(i.key, i);
-      if (sprint.id === active?.id) wipIssues = scope.filter(isIssueInProgress);
     }
   }
 
   const pick = (sprints: JiraSprint[]): SprintFacts[] =>
     sprints.map((s) => facts.get(s.id)).filter((f): f is SprintFacts => f !== undefined);
   const timeInStatus = await computeTimeInStatus([...timeInStatusIssues.values()], await getBoardStatusNames(project.id));
-  const wipAging = await computeWipAging(wipIssues, thresholds.wipAging);
 
   // A sprint started since getJiraSprints was cached must not still read as "next" (capacity.ts).
   const knownIds = new Set(allSprints.map((s) => s.id));
@@ -124,9 +126,44 @@ async function buildScrum(project: ProjectRef, windowSprints: SprintWindowSize):
     active: active ? (facts.get(active.id) ?? null) : null,
     nextSprintName: nextSprint?.name ?? null,
     timeInStatus,
-    wipAging,
     thresholds,
   });
+}
+
+async function buildCurrentSprint(project: ProjectRef): Promise<CurrentSprintView> {
+  const [allSprints, allowedIssueTypes, categoryMap, thresholds] = await Promise.all([
+    getJiraSprintsOrThrow(project.id, 50),
+    getPortfolioAllowedIssueTypes(),
+    getStatusCategoryMap(),
+    getEffectiveThresholds(project.id),
+  ]);
+  const active = allSprints.find((s) => s.state === "active") ?? null;
+  if (!active) return buildCurrentSprintView({ project, sprint: null, timeInStatus: [], wipAging: [] });
+  const issues = await getSprintIssuesOrThrow(active.id);
+  const sprint = await computeSprintFacts(active, issues, allowedIssueTypes, allSprints, categoryMap);
+  const scope = await sprintScopeIssues(issues, allowedIssueTypes);
+  const timeInStatus = await computeTimeInStatus(scope, await getBoardStatusNames(project.id));
+  const wipAging = await computeWipAging(scope.filter(isIssueInProgress), thresholds.wipAging);
+  return buildCurrentSprintView({ project, sprint, timeInStatus, wipAging });
+}
+
+/** The sprint in progress of a Scrum project, cached under `v2:current:<projectId>`; a Kanban/simple
+ *  board comes back with `sprint: null`. Business days are re-derived on every call. Throws
+ *  ProjectNotFoundError. */
+export async function getCurrentSprintView(
+  projectId: string,
+  opts: { forceRefresh?: boolean; project?: ProjectRef; now?: Date } = {},
+): Promise<CurrentSprintView> {
+  const isScrum = (await getProjectBoardTypeOrThrow(projectId)) === "scrum";
+  const view = await withCache<CurrentSprintView>(
+    `v2:current:${projectId}`,
+    async () => {
+      const project = opts.project ?? (await resolveProject(projectId));
+      return isScrum ? buildCurrentSprint(project) : buildCurrentSprintView({ project, sprint: null, timeInStatus: [], wipAging: [] });
+    },
+    { forceRefresh: opts.forceRefresh === true },
+  );
+  return withBusinessDays(view, opts.now ?? new Date(), SPRINT_TIMEZONE);
 }
 
 function deliveredType(issue: JiraIssue): DeliveredIssue["type"] {
@@ -242,7 +279,8 @@ export async function getPortfolioView(windowSprints: SprintWindowSize): Promise
   return buildPortfolioView(rows, windowSprints, v2Thresholds(await getEffectiveThresholds()));
 }
 
-/** Pre-builds the default team views (Scrum 6 sprints, Kanban 90 days) after a sync, serially.
+/** Pre-builds the default team views (Scrum 6 sprints + its current sprint, Kanban 90 days) after
+ *  a sync, serially.
  *  Never throws: a failing project is logged and skipped. */
 export async function warmV2Cache(forceRefresh: boolean): Promise<void> {
   if (!isJiraConfigured()) return;
@@ -251,7 +289,9 @@ export async function warmV2Cache(forceRefresh: boolean): Promise<void> {
     let failed = 0;
     for (const p of projects) {
       try {
-        await getTeamView(p.id, { forceRefresh, project: { id: p.id, key: p.key, name: p.name } });
+        const project = { id: p.id, key: p.key, name: p.name };
+        const view = await getTeamView(p.id, { forceRefresh, project });
+        if (view.boardType === "scrum") await getCurrentSprintView(p.id, { forceRefresh, project });
       } catch (err) {
         failed += 1;
         logger.warn({ err, projectId: p.id }, "v2 warm: team view failed");

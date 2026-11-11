@@ -723,7 +723,7 @@ export const GetV2TeamResponse = zod.union([zod.object({
   "alertLevel": zod.union([zod.literal('critical'),zod.literal('warning'),zod.literal('watch'),zod.literal(null)]).nullable(),
   "enteredDate": zod.string()
 }))
-})
+}).nullable().describe('Today\'s WIP. Null in Scrum windows (closed sprints only); see V2CurrentSprintView.')
 }),
   "planning": zod.object({
   "basedOn": zod.array(zod.string()),
@@ -793,7 +793,7 @@ export const GetV2TeamResponse = zod.union([zod.object({
   "alertLevel": zod.union([zod.literal('critical'),zod.literal('warning'),zod.literal('watch'),zod.literal(null)]).nullable(),
   "enteredDate": zod.string()
 }))
-})
+}).nullable().describe('Today\'s WIP. Null in Scrum windows (closed sprints only); see V2CurrentSprintView.')
 }),
   "trends": zod.array(zod.object({
   "key": zod.enum(['realRate', 'closedSp', 'closedIssues', 'cycleMedian', 'leadMedian', 'addedRate', 'carryoverRate']),
@@ -812,6 +812,77 @@ export const GetV2TeamResponse = zod.union([zod.object({
 }).describe('Admin → Health values behind the v2 colours and copy (sprintCompletionReal, sprintPredictability).'),
   "generatedAt": zod.string()
 })])
+
+
+/**
+ * The active sprint's facts (Done hoy), its business days as of today, time per flow status of its own issues and today's WIP. The 3/6/12 team windows only hold closed sprints. Kanban/simple boards, or a board with no active sprint, answer with `sprint: null`.
+ *
+ * @summary v2 sprint in progress of a Scrum team (the "Sprint actual" tab)
+ */
+export const GetV2CurrentSprintParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetV2CurrentSprintResponse = zod.object({
+  "projectId": zod.string(),
+  "projectKey": zod.string(),
+  "projectName": zod.string(),
+  "sprint": zod.object({
+  "sprintId": zod.number(),
+  "name": zod.string(),
+  "state": zod.enum(['closed', 'active']),
+  "startDate": zod.string().nullable(),
+  "endDate": zod.string().nullable(),
+  "closeDate": zod.string().nullable(),
+  "basis": zod.enum(['storyPoints', 'issueCount']),
+  "committedSp": zod.number(),
+  "committedIssues": zod.number(),
+  "rovoDoneSp": zod.number(),
+  "rovoDoneIssues": zod.number(),
+  "rovoRate": zod.number(),
+  "realDoneSp": zod.number().nullable(),
+  "realDoneIssues": zod.number().nullable(),
+  "realRate": zod.number().nullable(),
+  "addedSp": zod.number(),
+  "addedIssues": zod.number(),
+  "addedRate": zod.number(),
+  "carryoverSp": zod.number(),
+  "carryoverRate": zod.number(),
+  "deliveredByType": zod.object({
+  "historia": zod.number(),
+  "tecnico": zod.number(),
+  "bug": zod.number()
+}),
+  "cycleTimes": zod.array(zod.number()),
+  "leadTimes": zod.array(zod.number())
+}).describe('Per-sprint base every v2 view is computed from. rovo\* = Done hoy (current status); real\* = done at sprint close (null while not closed).').nullable(),
+  "businessDays": zod.object({
+  "total": zod.number(),
+  "elapsed": zod.number(),
+  "current": zod.number()
+}).nullable().describe('Mon-Fri in the sprint\'s timezone (holidays not excluded). current = today\'s day number.'),
+  "expectedRate": zod.number().nullable().describe('Straight-line pace, elapsed \/ total business days (%).'),
+  "timeInStatus": zod.array(zod.object({
+  "status": zod.string(),
+  "avgDays": zod.number(),
+  "waiting": zod.boolean()
+})),
+  "wip": zod.object({
+  "total": zod.number(),
+  "aged": zod.array(zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "summary": zod.string(),
+  "assignee": zod.string().nullable(),
+  "issueType": zod.string(),
+  "priority": zod.string(),
+  "daysInProgress": zod.number(),
+  "alertLevel": zod.union([zod.literal('critical'),zod.literal('warning'),zod.literal('watch'),zod.literal(null)]).nullable(),
+  "enteredDate": zod.string()
+}))
+}),
+  "generatedAt": zod.string()
+})
 
 
 /**

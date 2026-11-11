@@ -1,5 +1,5 @@
 import type { EffectiveThreshold } from "../health-thresholds";
-import type { TimeInStatusEntry, WipAgingItem } from "../flow-insights";
+import type { TimeInStatusEntry } from "../flow-insights";
 import { median } from "../stats";
 import { buildFlowBlock } from "./flow-block";
 import { recommendPlanning } from "./planning";
@@ -15,8 +15,8 @@ export interface ScrumTeamViewInput {
   previous: SprintFacts[];
   active: SprintFacts | null;
   nextSprintName: string | null;
+  /** Of the closed sprints in `display` only: the sprint in progress is in CurrentSprintView. */
   timeInStatus: TimeInStatusEntry[];
-  wipAging: WipAgingItem[];
   thresholds: Record<string, EffectiveThreshold>;
 }
 
@@ -86,7 +86,7 @@ export function buildScrumTeamView(input: ScrumTeamViewInput): ScrumTeamView {
       minRate: rates.length ? Math.min(...rates) : null,
       maxRate: rates.length ? Math.max(...rates) : null,
     },
-    flow: buildFlowBlock(pooled(display, (x) => x.cycleTimes), pooled(display, (x) => x.leadTimes), cycleDelta, input.timeInStatus, input.wipAging),
+    flow: buildFlowBlock(pooled(display, (x) => x.cycleTimes), pooled(display, (x) => x.leadTimes), cycleDelta, input.timeInStatus, null),
     planning: last3.length === 3 ? recommendPlanning(last3) : null,
     trends,
     attention: [],

@@ -430,8 +430,20 @@ Ciclo y lead: mediana y P85 (P85 a 1 decimal). **Flow efficiency = media(ciclo) 
 
 ### Tiempo por estado y WIP envejecido
 - Tiempo por estado: `computeTimeInStatus` filtrado a la categoría **"en curso"** (`indeterminate`) **más** los estados de categoría `new` cuyo nombre es de espera (`isWaitingStatus`: "Ready for DEV", "Ready for QA"; decisión 2026-11-09). El backlog ("To Do", "Backlog", "Por hacer", "Open") queda fuera. Flow efficiency no cambia. Ordenado por promedio de días; `waiting` = `isWaitingStatus` (regex de nombres de espera: ready/aceptad/listo/espera/pending/bloqueado…).
-- WIP: total de en curso y los envejecidos (`computeWipAging`, nivel `warning`/`critical` según umbral `wipAging`). Scrum: en curso del sprint activo; Kanban: abiertos del proyecto.
-(`lib/v2/flow-block.ts`; `lib/flow-insights.ts`)
+- WIP: total de en curso y los envejecidos (`computeWipAging`, nivel `warning`/`critical` según umbral `wipAging`). Scrum: en curso del sprint activo, **solo en "Sprint actual"**; Kanban: abiertos del proyecto.
+- Scrum, ventanas 3/6/12: **solo sprints cerrados** (decisión 2026-11-11). El tiempo por estado sale de los issues de `display`, sin el sprint en curso, y `flow.wip` es `null`. Antes se mezclaban los issues a medio camino del sprint activo con los de los sprints cerrados.
+(`lib/v2/flow-block.ts`, `flowStatusRows`, `wipBlock`; `lib/flow-insights.ts`)
+
+### Sprint actual (pestaña de Equipo, Scrum)
+`GET /api/v2/projects/:id/current-sprint`, con `getCurrentSprintView` en `lib/v2/service.ts` y cálculos puros en `lib/v2/current-sprint.ts`.
+- Hechos del sprint activo con `computeSprintFacts` (avance = `rovoRate`, Done hoy; no hay "real cerrado" mientras está abierto). Tiempo por estado y WIP solo de los issues de ese sprint (`sprintScopeIssues`).
+- **Días hábiles** (`sprintBusinessDays`): lunes a viernes, por día calendario local en `SPRINT_TIMEZONE`, sin feriados. `total` = del día de inicio al de fin; `elapsed` = días ya completos, antes de hoy; `current` = número del día de hoy (sábado y domingo cuentan como el viernes anterior).
+- **Avance esperado** = `elapsed / total × 100` (línea recta). La tarjeta compara `rovoRate` contra ese valor, en pp.
+- **Pendiente** = comprometido − Done hoy, en SP y en issues.
+- **No planificado** (`addedRate`) se compara contra `planning.unplannedPct` de la vista de 6 sprints, que es la media de los últimos 3 cerrados.
+- **Composición** (SP): nuevo planificado = comprometido − agregado − arrastrado (mínimo 0), arrastrado y agregado después de la planning.
+- Por integrante y por tipo: el mismo `sprint-summary` de la vista Sprint.
+- El burnup diario queda pendiente para una segunda entrega.
 
 ### Kanban
 Entregados = resueltos con `isIssueDone`, sin `isNonDeliveryClosure`, tipos permitidos menos los excluidos de Kanban, fecha real de `getResolutionDate`. Se consultan 2× los días de la ventana (actual + anterior). Semanas = ISO (lunes, `isoWeekStart`), con las vacías incluidas, apiladas historia/técnico/bug con ciclo y lead promedio por semana. `deliveredDeltaPct` = % de cambio del conteo.
@@ -455,7 +467,8 @@ Los valores del motivo van con un decimal (es-CL) y nunca se redondean sobre el 
 
 ### Caché y precalentado
 - Clave `v2:team:<projectId>:s<n>` (Scrum) o `:d<días>` (Kanban), vía `withCache` (TTL 6 h). `getTeamView` en `lib/v2/service.ts`.
-- El sync precalienta (`warmV2Cache`, serie, un proyecto a la vez) **solo** `s6` / `d90`; otras ventanas se calculan al pedirlas.
+- El sync precalienta (`warmV2Cache`, serie, un proyecto a la vez) **solo** `s6` / `d90`, más `v2:current:<projectId>` en los Scrum; otras ventanas se calculan al pedirlas.
+- Sprint actual: clave `v2:current:<projectId>`. `businessDays` y `expectedRate` dependen de hoy y **no** se cachean: `withBusinessDays` los recalcula en cada lectura.
 - Jira se lee con los helpers `*OrThrow`: si Jira falla se rechaza y **no se cachea** (si no, un sprint vacío daría 0 % por 6 h).
 - Lo que depende de umbrales (banda de predictibilidad, atención y el objeto `thresholds` que usa el frontend para colores y textos) **no** se cachea: `applyThresholds` lo recalcula en cada lectura con `getEffectiveThresholds(projectId)`, así un cambio en Admin → Health aplica en la siguiente petición. El portafolio agrega `thresholds` globales (sin override) para su pie de página; cada fila trae los de su proyecto. (`lib/v2/thresholds.ts`)
 - **Límites conocidos**: una vista cacheada congela el WIP envejecido (umbral `wipAging`) y el "próximo sprint" hasta 6 h (o hasta el siguiente sync/refresh).

@@ -630,10 +630,10 @@ export interface V2WipAgingItem {
   enteredDate: string;
 }
 
-export type V2FlowBlockWip = {
+export interface V2WipBlock {
   total: number;
   aged: V2WipAgingItem[];
-};
+}
 
 export interface V2FlowBlock {
   cycleMedian: number | null;
@@ -643,7 +643,31 @@ export interface V2FlowBlock {
   leadP85: number | null;
   flowEfficiencyPct: number | null;
   timeInStatus: V2TimeInStatusRow[];
-  wip: V2FlowBlockWip;
+  /** Today's WIP. Null in Scrum windows (closed sprints only); see V2CurrentSprintView. */
+  wip: V2WipBlock | null;
+}
+
+/**
+ * Mon-Fri in the sprint's timezone (holidays not excluded). current = today's day number.
+ */
+export type V2CurrentSprintViewBusinessDays = {
+  total: number;
+  elapsed: number;
+  current: number;
+} | null;
+
+export interface V2CurrentSprintView {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  sprint: V2SprintFacts | null;
+  /** Mon-Fri in the sprint's timezone (holidays not excluded). current = today's day number. */
+  businessDays: V2CurrentSprintViewBusinessDays;
+  /** Straight-line pace, elapsed / total business days (%). */
+  expectedRate: number | null;
+  timeInStatus: V2TimeInStatusRow[];
+  wip: V2WipBlock;
+  generatedAt: string;
 }
 
 /**

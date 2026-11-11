@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getJiraProject } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import { parseDayWindow, parseSprintWindow } from "../lib/v2/window";
-import { getPortfolioView, getTeamView } from "../lib/v2/service";
+import { getCurrentSprintView, getPortfolioView, getTeamView } from "../lib/v2/service";
 
 const router: IRouter = Router();
 
@@ -30,6 +30,23 @@ router.get(
       project: { id: project.id, key: project.key, name: project.name },
     });
     res.json(view);
+  },
+);
+
+// The sprint in progress (the team view's "Sprint actual" tab); the 3/6/12 windows only hold closed
+// sprints. Kanban/simple boards answer with `sprint: null`.
+router.get(
+  "/v2/projects/:projectId/current-sprint",
+  requireAuth,
+  requireSectionView("sprints", "kanban"),
+  async (req, res): Promise<void> => {
+    const projectId = String(req.params.projectId);
+    const project = await getJiraProject(projectId);
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    res.json(await getCurrentSprintView(projectId, { project: { id: project.id, key: project.key, name: project.name } }));
   },
 );
 

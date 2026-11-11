@@ -7,7 +7,7 @@
  */
 import type { V2WipAgingItem } from './v2WipAgingItem';
 
-export type V2FlowBlockWip = {
+export interface V2WipBlock {
   total: number;
   aged: V2WipAgingItem[];
-};
+}

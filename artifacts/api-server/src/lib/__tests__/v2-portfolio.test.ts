@@ -23,7 +23,7 @@ const all = [0, 1, 2, 3, 4, 5].map(sprint);
 const olimpo = buildScrumTeamView({
   project: { id: "p1", key: "OLI", name: "Olimpo" }, windowSprints: 6,
   display: all, recent: all.slice(3), previous: all.slice(0, 3),
-  active: null, nextSprintName: null, timeInStatus: [], wipAging: [], thresholds: {},
+  active: null, nextSprintName: null, timeInStatus: [], thresholds: {},
 });
 
 const mk = (name: string, rate: number | null, over: Partial<PortfolioRow> = {}): PortfolioRow => ({

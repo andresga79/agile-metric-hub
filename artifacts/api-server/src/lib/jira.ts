@@ -838,7 +838,7 @@ export function isCarryoverIssue(issue: JiraIssue, allSprints: JiraSprint[], cur
 
 // Sprint dates are compared as local calendar days in the team's timezone (the same TZ the
 // container runs in). Chile shifts offset during the year, so a fixed -3h would drift.
-const SPRINT_TIMEZONE = process.env.TZ || "America/Santiago";
+export const SPRINT_TIMEZONE = process.env.TZ || "America/Santiago";
 
 /** Offset (ms) of `timeZone` from UTC at instant `utcMs`. */
 function timeZoneOffsetMs(utcMs: number, timeZone: string): number {
