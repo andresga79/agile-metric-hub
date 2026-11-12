@@ -2087,7 +2087,7 @@ components:
 
     CapacityMemberInput:
       type: object
-      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed]
+      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed, role]
       properties:
         accountId: { type: string }
         displayName: { type: string }
@@ -2106,6 +2106,12 @@ components:
         manual:
           type: boolean
           description: Added by hand (no Jira issues yet); omitted manual people are removed.
+        role:
+          type: string
+          enum: [dev, lt, qa, po, sm, other]
+          description: >
+            Team role (persistent, per project). Decides counts (dev and lt count) and the default
+            dedication when nothing was saved for the sprint (lt 50%, others 100%).
         departed:
           type: boolean
           description: >
@@ -2143,9 +2149,41 @@ components:
         completed: { $ref: "#/components/schemas/CapacityUnits" }
         completionPct: { type: number }
 
+    CapacityTeamSummary:
+      type: object
+      required: [people, byRole, effectiveDevs, historyEffectiveDevs, departedWithWork]
+      properties:
+        people: { type: integer, description: People in this sprint's team (not departed). }
+        byRole:
+          type: object
+          required: [dev, lt, qa, po, sm, other]
+          properties:
+            dev: { type: integer }
+            lt: { type: integer }
+            qa: { type: integer }
+            po: { type: integer }
+            sm: { type: integer }
+            other: { type: integer }
+        effectiveDevs:
+          type: number
+          description: Available person-days ÷ sprint working days (full-time devs the team amounts to).
+        historyEffectiveDevs:
+          type: number
+          nullable: true
+          description: Same, averaged over the closed sprints behind the team rate.
+        departedWithWork:
+          type: array
+          items:
+            type: object
+            required: [displayName, sp, issues]
+            properties:
+              displayName: { type: string }
+              sp: { type: number }
+              issues: { type: integer }
+
     CapacityResponse:
       type: object
-      required: [sprint, recommendation, committed, progress, rate, team, unassigned, history, warnings]
+      required: [sprint, recommendation, committed, progress, rate, team, unassigned, teamSummary, history, warnings]
       properties:
         sprint:
           type: object
@@ -2219,6 +2257,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CapacityTeamRow" }
         unassigned: { $ref: "#/components/schemas/CapacityUnits" }
+        teamSummary: { $ref: "#/components/schemas/CapacityTeamSummary" }
         history:
           type: array
           items: { $ref: "#/components/schemas/CapacityHistoryRow" }

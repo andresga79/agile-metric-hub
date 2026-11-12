@@ -22,6 +22,11 @@ import {
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import {
   HISTORY_SPRINTS,
+  ROLE_COUNTS,
+  ROLE_DEFAULT_DEDICATION,
+  isRole,
+  summarizeTeam,
+  workingDays,
   absenceTotal,
   sprintDates,
   validateAbsences,
@@ -158,8 +163,12 @@ router.get(
         counts: r.counts,
         manual: r.manual,
         departed: r.departed,
+        role: isRole(r.role) ? r.role : r.counts ? "dev" : "other",
       }));
       const notCounting = new Set(roster.filter((r) => !r.counts).map((r) => r.accountId));
+      // Role default dedication (LT 50%) also for past sprints' assignees with no saved availability,
+      // so the history's person-days and today's availability measure the same team.
+      const defaultDedication = new Map(roster.map((r) => [r.accountId, ROLE_DEFAULT_DEDICATION[r.role ?? "dev"]]));
 
       const sprintIds = [...closed.map((s) => String(s.id)), ...(next ? [String(next.id)] : [])];
       const savedRows = sprintIds.length
@@ -189,17 +198,24 @@ router.get(
         active && !isActive ? loadSprintIssues(active, project.key, allowedIssueTypes) : Promise.resolve([]),
       ]);
 
-      const samples = closed
-        .map((s, idx) =>
-          sprintSample({
+      const sampleRows = closed
+        .map((s, idx) => {
+          const endDate = s.completeDate ?? s.endDate;
+          const sample = sprintSample({
             startDate: s.startDate,
-            endDate: s.completeDate ?? s.endDate,
+            endDate,
             issues: closedIssues[idx]!,
             saved: savedFor(s.id),
             notCounting,
-          })
-        )
-        .filter((s): s is NonNullable<typeof s> => s !== null);
+            defaultDedication,
+          });
+          return sample && s.startDate && endDate ? { sample, days: workingDays(s.startDate, endDate) } : null;
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      const samples = sampleRows.map((r) => r.sample);
+      const historyEffectiveDevs = sampleRows.length
+        ? sampleRows.reduce((sum, r) => sum + (r.days > 0 ? r.sample.personDays / r.days : 0), 0) / sampleRows.length
+        : null;
       const rate = teamRate(samples);
 
       const warnings: string[] = [];
@@ -308,6 +324,13 @@ router.get(
             : undefined
         ),
         unassigned: assigned.unassigned,
+        teamSummary: summarizeTeam({
+          team,
+          availablePersonDays,
+          sprintWorkingDays: sprintDays,
+          historyEffectiveDevs,
+          assignedByAccount: assigned.byAccount,
+        }),
         history,
         warnings,
       };
@@ -343,8 +366,10 @@ router.put(
       }
       const days = datesOf(sprint, sprints.find((s) => s.state === "active") ?? null);
       // Dated absences decide the total; without them the number typed by hand stays.
+      // The role decides whether someone counts (dev, lt); counts stays stored for older clients.
       const rows: TeamMember[] = parsed.data.map((r) => ({
         ...r,
+        counts: isRole(r.role) ? ROLE_COUNTS[r.role] : r.counts,
         absences: r.absences ?? [],
         absenceDays: r.absences?.length ? absenceTotal(r.absences) : r.absenceDays,
       }));
@@ -402,11 +427,12 @@ router.put(
                 counts: r.counts,
                 manual: r.manual,
                 departed: r.departed ?? false,
+                role: r.role ?? (r.counts ? "dev" : "other"),
                 updatedBy: authReq.user?.userId ?? null,
               })
               .onConflictDoUpdate({
                 target: [capacityRosterTable.projectId, capacityRosterTable.accountId],
-                set: { displayName: r.displayName, counts: r.counts, manual: r.manual, departed: r.departed ?? false, updatedBy: authReq.user?.userId ?? null },
+                set: { displayName: r.displayName, counts: r.counts, manual: r.manual, departed: r.departed ?? false, role: r.role ?? (r.counts ? "dev" : "other"), updatedBy: authReq.user?.userId ?? null },
               });
           }
         }

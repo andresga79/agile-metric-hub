@@ -1015,6 +1015,7 @@ export const GetProjectCapacityResponse = zod.object({
   "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "role": zod.enum(['dev', 'lt', 'qa', 'po', 'sm', 'other']).describe('Team role (persistent, per project). Decides counts (dev and lt count) and the default dedication when nothing was saved for the sprint (lt 50%, others 100%).\n'),
   "departed": zod.boolean().describe('Left the team (persistent, per project). Not part of the current\/next sprint\'s team and adds no availability, but stays in the closed sprints\' history and team rate.\n'),
   "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 }).and(zod.object({
@@ -1037,6 +1038,24 @@ export const GetProjectCapacityResponse = zod.object({
   "unassigned": zod.object({
   "sp": zod.number(),
   "issues": zod.number()
+}),
+  "teamSummary": zod.object({
+  "people": zod.number().describe('People in this sprint\'s team (not departed).'),
+  "byRole": zod.object({
+  "dev": zod.number(),
+  "lt": zod.number(),
+  "qa": zod.number(),
+  "po": zod.number(),
+  "sm": zod.number(),
+  "other": zod.number()
+}),
+  "effectiveDevs": zod.number().describe('Available person-days ÷ sprint working days (full-time devs the team amounts to).'),
+  "historyEffectiveDevs": zod.number().nullable().describe('Same, averaged over the closed sprints behind the team rate.'),
+  "departedWithWork": zod.array(zod.object({
+  "displayName": zod.string(),
+  "sp": zod.number(),
+  "issues": zod.number()
+}))
 }),
   "history": zod.array(zod.object({
   "sprintId": zod.string(),
@@ -1086,6 +1105,7 @@ export const UpdateProjectCapacityBodyItem = zod.object({
   "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "role": zod.enum(['dev', 'lt', 'qa', 'po', 'sm', 'other']).describe('Team role (persistent, per project). Decides counts (dev and lt count) and the default dedication when nothing was saved for the sprint (lt 50%, others 100%).\n'),
   "departed": zod.boolean().describe('Left the team (persistent, per project). Not part of the current\/next sprint\'s team and adds no availability, but stays in the closed sprints\' history and team rate.\n'),
   "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 })

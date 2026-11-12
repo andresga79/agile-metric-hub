@@ -252,6 +252,13 @@ async function initDb() {
     await db.execute(sql`
       ALTER TABLE capacity_roster ADD COLUMN IF NOT EXISTS departed BOOLEAN NOT NULL DEFAULT false;
     `);
+    // Role per person (dev / lt / qa / po / sm / other). Existing rows: counting = dev, else other.
+    await db.execute(sql`
+      ALTER TABLE capacity_roster ADD COLUMN IF NOT EXISTS role TEXT;
+    `);
+    await db.execute(sql`
+      UPDATE capacity_roster SET role = CASE WHEN counts THEN 'dev' ELSE 'other' END WHERE role IS NULL;
+    `);
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS capacity_absence (

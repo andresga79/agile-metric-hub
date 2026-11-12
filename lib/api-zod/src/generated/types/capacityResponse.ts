@@ -12,6 +12,7 @@ import type { CapacityResponseRate } from './capacityResponseRate';
 import type { CapacityResponseRecommendation } from './capacityResponseRecommendation';
 import type { CapacityResponseSprint } from './capacityResponseSprint';
 import type { CapacityTeamRow } from './capacityTeamRow';
+import type { CapacityTeamSummary } from './capacityTeamSummary';
 import type { CapacityUnits } from './capacityUnits';
 
 export interface CapacityResponse {
@@ -23,6 +24,7 @@ export interface CapacityResponse {
   rate: CapacityResponseRate;
   team: CapacityTeamRow[];
   unassigned: CapacityUnits;
+  teamSummary: CapacityTeamSummary;
   history: CapacityHistoryRow[];
   warnings: string[];
 }

@@ -9,6 +9,17 @@ export const MIN_SPRINTS_FOR_RATE = 3;
 
 export type Band = "ok" | "warn" | "over";
 
+/** Team roles in Capacity. Only dev and lt count; an LT codes part of the time. */
+export const ROLES = ["dev", "lt", "qa", "po", "sm", "other"] as const;
+export type Role = (typeof ROLES)[number];
+export const ROLE_COUNTS: Record<Role, boolean> = { dev: true, lt: true, qa: false, po: false, sm: false, other: false };
+/** Dedication when nothing was saved for the sprint. LT at 50%: counting a tech lead as a full-time
+ *  dev (Martin Pizarro on Tablero) overstated availability and "Recomendado". */
+export const ROLE_DEFAULT_DEDICATION: Record<Role, number> = { dev: 100, lt: 50, qa: 100, po: 100, sm: 100, other: 100 };
+export function isRole(v: unknown): v is Role {
+  return typeof v === "string" && (ROLES as readonly string[]).includes(v);
+}
+
 export interface Units {
   sp: number;
   issues: number;
@@ -200,6 +211,7 @@ export interface MemberAvailability {
   manual: boolean;
   /** Left the team (per project, persistent): no availability now, kept in the history. */
   departed?: boolean;
+  role?: Role;
   /** Dated absences in this sprint. When present, absenceDays is their total. */
   absences?: Absence[];
 }
@@ -244,6 +256,7 @@ export interface RosterEntry {
   manual: boolean;
   /** Left the team: out of the current/next sprint's team, kept in the history. */
   departed?: boolean;
+  role?: Role;
 }
 
 export function availableDays(m: MemberAvailability, sprintWorkingDays: number): number {
@@ -262,6 +275,8 @@ export function sprintSample(input: {
   issues: CapacityIssue[];
   saved: MemberAvailability[];
   notCounting: Set<string>;
+  /** Dedication % for assignees with no saved availability (role default, e.g. LT 50). */
+  defaultDedication?: Map<string, number>;
 }): SprintSample | null {
   if (!input.startDate || !input.endDate) return null;
   const days = workingDays(input.startDate, input.endDate);
@@ -274,7 +289,9 @@ export function sprintSample(input: {
       .map((i) => i.accountId)
       .filter((a): a is string => a !== null && !savedIds.has(a) && !input.notCounting.has(a))
   );
-  const personDays = savedDays + unsavedAssignees.size * days;
+  const personDays =
+    savedDays +
+    [...unsavedAssignees].reduce((sum, a) => sum + (days * (input.defaultDedication?.get(a) ?? 100)) / 100, 0);
   if (personDays <= 0) return null;
   const done = input.issues.filter((i) => i.done);
   return {
@@ -350,14 +367,14 @@ export function buildTeam(input: {
     const jiraId = r.manual ? idByName.get(normalizeName(r.displayName)) : undefined;
     if (jiraId) {
       if (!input.roster.some((o) => o.accountId === jiraId)) {
-        people.set(jiraId, { accountId: jiraId, displayName: names.get(jiraId)!, counts: r.counts, manual: false, departed: r.departed ?? false });
+        people.set(jiraId, { accountId: jiraId, displayName: names.get(jiraId)!, counts: r.counts, manual: false, departed: r.departed ?? false, role: r.role });
       }
       continue;
     }
     people.set(r.accountId, { ...r });
   }
   for (const [id, name] of names) {
-    if (!people.has(id)) people.set(id, { accountId: id, displayName: name, counts: true, manual: false, departed: false });
+    if (!people.has(id)) people.set(id, { accountId: id, displayName: name, counts: true, manual: false, departed: false, role: "dev" });
   }
 
   const saved = new Map(input.saved.map((m) => [m.accountId, m]));
@@ -366,10 +383,11 @@ export function buildTeam(input: {
     .map((p) => ({
       ...p,
       departed: p.departed ?? false,
+      role: p.role ?? (p.counts ? "dev" : "other"),
       // Someone who left isn't part of this sprint's team even with issues still assigned in it.
       recent: !p.departed && (p.manual || recentIds.has(p.accountId)),
       absenceDays: saved.get(p.accountId)?.absenceDays ?? 0,
-      dedicationPct: saved.get(p.accountId)?.dedicationPct ?? 100,
+      dedicationPct: saved.get(p.accountId)?.dedicationPct ?? ROLE_DEFAULT_DEDICATION[p.role ?? (p.counts ? "dev" : "other")],
       absences: saved.get(p.accountId)?.absences ?? [],
     }))
     .sort((a, b) => rank(a) - rank(b) || Number(b.counts) - Number(a.counts) || a.displayName.localeCompare(b.displayName, "es"));
@@ -412,9 +430,14 @@ export function buildTeamRows(
   byAccount: Map<string, Units>,
   rate: TeamRate | null,
   sprint: RowsSprint = { workingDays: NEXT_SPRINT_WORKING_DAYS }
-): Array<TeamRow & { recent: boolean; departed: boolean }> {
+): Array<TeamRow & { recent: boolean; departed: boolean; role: Role }> {
   return team.map((member) => {
-    const m = { ...member, absences: member.absences ?? [], departed: member.departed ?? false };
+    const m = {
+      ...member,
+      absences: member.absences ?? [],
+      departed: member.departed ?? false,
+      role: member.role ?? (member.counts ? "dev" : "other") as Role,
+    };
     const recent = m.recent ?? true;
     const days = recent ? availableDays(m, sprint.workingDays) : 0;
     const assigned = byAccount.get(m.accountId) ?? { sp: 0, issues: 0 };
@@ -442,4 +465,38 @@ export function validateCapacityRows(rows: MemberAvailability[]): string | null 
     }
   }
   return null;
+}
+
+export interface TeamSummary {
+  /** People in this sprint's team (not departed), by role. */
+  people: number;
+  byRole: Record<Role, number>;
+  /** Available person-days ÷ sprint working days: how many full-time devs the team amounts to. */
+  effectiveDevs: number;
+  /** Same, averaged over the closed sprints behind the team rate. Null without history. */
+  historyEffectiveDevs: number | null;
+  /** People marked as departed who still have issues assigned in this sprint. */
+  departedWithWork: Array<{ displayName: string; sp: number; issues: number }>;
+}
+
+export function summarizeTeam(input: {
+  team: Array<{ accountId: string; displayName: string; recent: boolean; departed?: boolean; role?: Role; counts: boolean }>;
+  availablePersonDays: number;
+  sprintWorkingDays: number;
+  historyEffectiveDevs: number | null;
+  assignedByAccount: Map<string, Units>;
+}): TeamSummary {
+  const byRole = Object.fromEntries(ROLES.map((r) => [r, 0])) as Record<Role, number>;
+  const inSprint = input.team.filter((m) => m.recent && !m.departed);
+  for (const m of inSprint) byRole[m.role ?? (m.counts ? "dev" : "other")]++;
+  return {
+    people: inSprint.length,
+    byRole,
+    effectiveDevs: input.sprintWorkingDays > 0 ? Math.round((input.availablePersonDays / input.sprintWorkingDays) * 10) / 10 : 0,
+    historyEffectiveDevs: input.historyEffectiveDevs === null ? null : Math.round(input.historyEffectiveDevs * 10) / 10,
+    departedWithWork: input.team
+      .filter((m) => m.departed)
+      .map((m) => ({ displayName: m.displayName, ...(input.assignedByAccount.get(m.accountId) ?? { sp: 0, issues: 0 }) }))
+      .filter((m) => m.issues > 0),
+  };
 }

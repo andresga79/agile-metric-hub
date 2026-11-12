@@ -13,9 +13,10 @@ import {
   type CapacityTeamRow,
   type CapacityMemberInput,
   type CapacityAbsence,
+  type CapacityResponse,
 } from "@workspace/api-client-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { ArrowLeft, Gauge, AlertTriangle, CalendarDays } from "lucide-react";
+import { ArrowLeft, Gauge, AlertTriangle, CalendarDays, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,63 @@ function RangeBar({ range, committed, band }: { range: number[]; committed: numb
   );
 }
 
+type Role = CapacityMemberInput["role"];
+const ROLES: Role[] = ["dev", "lt", "qa", "po", "sm", "other"];
+const ROLE_COUNTS: Record<Role, boolean> = { dev: true, lt: true, qa: false, po: false, sm: false, other: false };
+
+/** "Equipo del sprint": who is in this sprint's team by role, and how many full-time devs that
+ *  amounts to once absences and dedication are taken out, against the history behind the rate. */
+function TeamSummaryCard({ summary, sprintDays }: { summary: CapacityResponse["teamSummary"]; sprintDays: number }) {
+  const { t } = useTranslation();
+  const parts = ROLES.filter((r) => summary.byRole[r] > 0).map((r) => `${summary.byRole[r]} ${t(`page.capacity.roleName.${r}`)}`);
+  const delta = summary.historyEffectiveDevs === null ? null : Math.round((summary.effectiveDevs - summary.historyEffectiveDevs) * 10) / 10;
+  return (
+    <Card className="bg-card/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users size={16} /> {t("page.capacity.teamCardTitle")}
+          <MetricTooltip description={t("page.capacity.teamCardTooltip")} />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-3">
+        <div>
+          <div className="text-2xl font-bold">{t("page.capacity.teamPeople", { count: summary.people })}</div>
+          <div className="text-sm text-muted-foreground">{parts.join(" · ") || "—"}</div>
+        </div>
+        <div>
+          <div className="text-2xl font-bold">{summary.effectiveDevs.toLocaleString("es-CL")}</div>
+          <div className="text-sm text-muted-foreground">
+            {t("page.capacity.effectiveDevs", { days: Math.round(summary.effectiveDevs * sprintDays * 10) / 10, total: sprintDays })}
+          </div>
+        </div>
+        <div>
+          <div className="text-2xl font-bold">
+            {summary.historyEffectiveDevs === null ? "—" : summary.historyEffectiveDevs.toLocaleString("es-CL")}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {t("page.capacity.historyEffectiveDevs")}
+            {delta !== null && delta !== 0 && (
+              <span className={delta < 0 ? "text-amber-600 dark:text-yellow-300" : "text-green-500"}>
+                {" "}· {t(delta < 0 ? "page.capacity.teamLess" : "page.capacity.teamMore", { n: Math.abs(delta).toLocaleString("es-CL") })}
+              </span>
+            )}
+          </div>
+        </div>
+        {summary.departedWithWork.length > 0 && (
+          <div className="md:col-span-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+            <span>
+              {summary.departedWithWork
+                .map((d) => t("page.capacity.departedWithWork", { name: d.displayName, issues: d.issues, sp: d.sp }))
+                .join(" ")}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProjectCapacity() {
   const { t, i18n } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
@@ -112,7 +170,7 @@ export default function ProjectCapacity() {
   useEffect(() => {
     if (!data || dirty) return;
     setDraft(
-      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed }) => ({
+      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed, role }) => ({
         accountId,
         displayName,
         absenceDays,
@@ -122,6 +180,7 @@ export default function ProjectCapacity() {
         recent,
         absences,
         departed,
+        role,
       }))
     );
   }, [data, dirty]);
@@ -140,7 +199,7 @@ export default function ProjectCapacity() {
     if (draft.some((r) => r.accountId === accountId)) return;
     setDirty(true);
     setMessage(null);
-    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true, absences: [], departed: false }]);
+    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true, absences: [], departed: false, role: "dev" }]);
     setNewName("");
   };
 
@@ -253,13 +312,26 @@ export default function ProjectCapacity() {
           )}
         </TableCell>
         <TableCell className="text-center">
-          <input
-            type="checkbox"
-            aria-label={`${t("page.capacity.counts")}: ${m.displayName}`}
-            checked={m.counts}
+          <select
+            aria-label={`${t("page.capacity.role")}: ${m.displayName}`}
+            className="bg-background border border-border rounded px-1 py-0.5 text-xs"
+            value={m.role}
             disabled={!isAdmin}
-            onChange={(e) => updateDraft(m.accountId, { counts: e.target.checked })}
-          />
+            onChange={(e) => {
+              const role = e.target.value as Role;
+              // Only devs and LTs count. Becoming LT at the default 100% drops to the LT default (50%).
+              updateDraft(m.accountId, {
+                role,
+                counts: ROLE_COUNTS[role],
+                ...(role === "lt" && m.dedicationPct === 100 ? { dedicationPct: 50 } : {}),
+                ...(m.role === "lt" && role === "dev" && m.dedicationPct === 50 ? { dedicationPct: 100 } : {}),
+              });
+            }}
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>{t(`page.capacity.roleName.${r}`)}</option>
+            ))}
+          </select>
         </TableCell>
         <TableCell className="text-right whitespace-nowrap">
           <input
@@ -526,6 +598,8 @@ export default function ProjectCapacity() {
         </Card>
       )}
 
+      {data.sprint && <TeamSummaryCard summary={data.teamSummary} sprintDays={data.sprint.workingDays} />}
+
       {data.sprint && (
         <Card className="bg-card/40">
           <CardHeader>
@@ -542,8 +616,8 @@ export default function ProjectCapacity() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead>{t("page.capacity.person")}</TableHead>
                     <TableHead className="text-center">
-                      {t("page.capacity.counts")}
-                      <MetricTooltip description={t("page.capacity.countsTooltip")} />
+                      {t("page.capacity.role")}
+                      <MetricTooltip description={t("page.capacity.roleTooltip")} />
                     </TableHead>
                     <TableHead className="text-right">{t("page.capacity.absence")}</TableHead>
                     <TableHead className="text-right">{t("page.capacity.dedication")}</TableHead>

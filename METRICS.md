@@ -415,6 +415,14 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   planificó ahí. Completado = Done hoy (`isIssueDone`). Solo issues del proyecto (prefijo
   de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
 - **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
+- **Rol por persona** (`capacity_roster.role`: dev / lt / qa / po / sm / other, admin, por proyecto):
+  reemplaza al check "Cuenta". Solo Dev y LT cuentan. Dedicación por defecto (si no se guardó nada
+  para el sprint): LT 50 %, el resto 100 %; aplica también a los asignados de sprints pasados sin
+  disponibilidad guardada, así el histórico y el sprint actual miden el mismo equipo. Las filas
+  existentes se migraron a `dev` (contaban) u `other` (no contaban).
+- **Equipo del sprint** (`teamSummary`): personas del sprint por rol (sin quienes salieron), devs
+  efectivos = persona-días disponibles ÷ días del sprint, promedio histórico de devs efectivos de los
+  sprints que alimentan el ritmo, y aviso si alguien que salió tiene issues asignados.
 - **Salió del equipo** (`capacity_roster.departed`, admin, reversible): la persona deja de ser parte
   del equipo del sprint activo y de los próximos aunque todavía tenga issues asignados, pero sus
   sprints cerrados siguen en el ritmo histórico (días y entrega). No usar "Cuenta" = no para alguien

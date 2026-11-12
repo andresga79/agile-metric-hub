@@ -18,6 +18,7 @@ import {
   sprintDates,
   absenceTotal,
   validateAbsences,
+  summarizeTeam,
   type Absence,
   type SprintSample,
   type TeamRate,
@@ -254,6 +255,25 @@ describe("summarizeAssigned", () => {
 });
 
 describe("buildTeam", () => {
+  it("an LT without saved availability starts at 50% dedication; a dev at 100%", () => {
+    const team = buildTeam({
+      roster: [rosterEntry("martin", { role: "lt" })],
+      recentIssues: [issue("A-1", "martin", 1), issue("A-2", "dev", 1)],
+      saved: [],
+    });
+    expect(team.find((m) => m.accountId === "martin")).toMatchObject({ role: "lt", dedicationPct: 50, counts: true });
+    expect(team.find((m) => m.accountId === "dev")).toMatchObject({ role: "dev", dedicationPct: 100 });
+  });
+
+  it("existing roster rows without a role read as dev when counting, other when not", () => {
+    const team = buildTeam({
+      roster: [rosterEntry("qa", { counts: false })],
+      recentIssues: [issue("A-1", "qa", 1)],
+      saved: [],
+    });
+    expect(team[0]).toMatchObject({ role: "other", counts: false });
+  });
+
   it("someone who left the team isn't part of this sprint even with issues still assigned in it", () => {
     const team = buildTeam({
       roster: [rosterEntry("max", { departed: true })],
@@ -554,5 +574,43 @@ describe("buildTeamRows (active sprint, dated absences)", () => {
     );
     // 5 - 1 = 4 days left -> 2 SP
     expect(rows[0]!.capacity.sp).toBe(2);
+  });
+});
+
+describe("sprintSample with role defaults", () => {
+  it("counts an LT with no saved availability at their default dedication in the history too", () => {
+    const s = sprintSample({
+      startDate: "2026-07-06T09:00:00.000-0300",
+      endDate: "2026-07-17T18:00:00.000-0300",
+      issues: [issue("A-1", "martin", 3, true), issue("A-2", "dev", 5, true)],
+      saved: [],
+      notCounting: new Set(),
+      defaultDedication: new Map([["martin", 50]]),
+    })!;
+    expect(s.personDays).toBe(15);
+  });
+});
+
+describe("summarizeTeam", () => {
+  it("counts this sprint's people by role, effective devs, and warns about departed people with work", () => {
+    const summary = summarizeTeam({
+      team: [
+        { accountId: "a", displayName: "A", recent: true, counts: true, role: "dev" },
+        { accountId: "b", displayName: "B", recent: true, counts: true, role: "dev" },
+        { accountId: "m", displayName: "Martin", recent: true, counts: true, role: "lt" },
+        { accountId: "q", displayName: "Q", recent: true, counts: false, role: "qa" },
+        { accountId: "x", displayName: "Max", recent: false, counts: true, role: "dev", departed: true },
+        { accountId: "o", displayName: "Old", recent: false, counts: true, role: "dev" },
+      ],
+      availablePersonDays: 25,
+      sprintWorkingDays: 10,
+      historyEffectiveDevs: 3.04,
+      assignedByAccount: new Map([["x", { sp: 8, issues: 3 }]]),
+    });
+    expect(summary.people).toBe(4);
+    expect(summary.byRole).toMatchObject({ dev: 2, lt: 1, qa: 1 });
+    expect(summary.effectiveDevs).toBe(2.5);
+    expect(summary.historyEffectiveDevs).toBe(3);
+    expect(summary.departedWithWork).toEqual([{ displayName: "Max", sp: 8, issues: 3 }]);
   });
 });

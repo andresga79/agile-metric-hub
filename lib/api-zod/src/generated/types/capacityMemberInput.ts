@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CapacityAbsence } from './capacityAbsence';
+import type { CapacityMemberInputRole } from './capacityMemberInputRole';
 
 export interface CapacityMemberInput {
   accountId: string;
@@ -26,6 +27,9 @@ export interface CapacityMemberInput {
   counts: boolean;
   /** Added by hand (no Jira issues yet); omitted manual people are removed. */
   manual: boolean;
+  /** Team role (persistent, per project). Decides counts (dev and lt count) and the default dedication when nothing was saved for the sprint (lt 50%, others 100%).
+   *  */
+  role: CapacityMemberInputRole;
   /** Left the team (persistent, per project). Not part of the current/next sprint's team and adds no availability, but stays in the closed sprints' history and team rate.
    *  */
   departed: boolean;

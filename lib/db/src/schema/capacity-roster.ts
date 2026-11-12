@@ -18,6 +18,8 @@ export const capacityRosterTable = pgTable(
     // sprints they worked in (unlike counts = false, which also drops them from the history and
     // would inflate the team rate with their delivered work).
     departed: boolean("departed").notNull().default(false),
+    // dev | lt | qa | po | sm | other. Decides counts (dev, lt) and the default dedication (lt 50%).
+    role: text("role"),
     updatedBy: integer("updated_by").references(() => usersTable.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },

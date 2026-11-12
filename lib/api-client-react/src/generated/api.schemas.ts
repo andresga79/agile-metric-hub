@@ -1043,6 +1043,22 @@ export interface CapacityAbsence {
   note: string | null;
 }
 
+/**
+ * Team role (persistent, per project). Decides counts (dev and lt count) and the default dedication when nothing was saved for the sprint (lt 50%, others 100%).
+ *
+ */
+export type CapacityMemberInputRole = typeof CapacityMemberInputRole[keyof typeof CapacityMemberInputRole];
+
+
+export const CapacityMemberInputRole = {
+  dev: 'dev',
+  lt: 'lt',
+  qa: 'qa',
+  po: 'po',
+  sm: 'sm',
+  other: 'other',
+} as const;
+
 export interface CapacityMemberInput {
   accountId: string;
   displayName: string;
@@ -1062,6 +1078,9 @@ export interface CapacityMemberInput {
   counts: boolean;
   /** Added by hand (no Jira issues yet); omitted manual people are removed. */
   manual: boolean;
+  /** Team role (persistent, per project). Decides counts (dev and lt count) and the default dedication when nothing was saved for the sprint (lt 50%, others 100%).
+   *  */
+  role: CapacityMemberInputRole;
   /** Left the team (persistent, per project). Not part of the current/next sprint's team and adds no availability, but stays in the closed sprints' history and team rate.
    *  */
   departed: boolean;
@@ -1095,6 +1114,32 @@ export interface CapacityHistoryRow {
   committed: CapacityUnits;
   completed: CapacityUnits;
   completionPct: number;
+}
+
+export type CapacityTeamSummaryByRole = {
+  dev: number;
+  lt: number;
+  qa: number;
+  po: number;
+  sm: number;
+  other: number;
+};
+
+export type CapacityTeamSummaryDepartedWithWorkItem = {
+  displayName: string;
+  sp: number;
+  issues: number;
+};
+
+export interface CapacityTeamSummary {
+  /** People in this sprint's team (not departed). */
+  people: number;
+  byRole: CapacityTeamSummaryByRole;
+  /** Available person-days ÷ sprint working days (full-time devs the team amounts to). */
+  effectiveDevs: number;
+  /** Same, averaged over the closed sprints behind the team rate. */
+  historyEffectiveDevs: number | null;
+  departedWithWork: CapacityTeamSummaryDepartedWithWorkItem[];
 }
 
 export type CapacityResponseSprintState = typeof CapacityResponseSprintState[keyof typeof CapacityResponseSprintState];
@@ -1204,6 +1249,7 @@ export interface CapacityResponse {
   rate: CapacityResponseRate;
   team: CapacityTeamRow[];
   unassigned: CapacityUnits;
+  teamSummary: CapacityTeamSummary;
   history: CapacityHistoryRow[];
   warnings: string[];
 }
