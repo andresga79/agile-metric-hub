@@ -18,9 +18,9 @@ describe("qaRateByWeek", () => {
     ]);
   });
 
-  it("a week with rejections but no entries never passes 100 %", () => {
+  it("a week with rejections but no entries has no rate (null), not a misleading 0 %", () => {
     const out = qaRateByWeek([], [{ key: "A", at: mon("2026-11-09") }]);
-    expect(out).toEqual([{ weekStart: "2026-11-09", totalEnteredQa: 0, rejectedCount: 1, rate: 0 }]);
+    expect(out).toEqual([{ weekStart: "2026-11-09", totalEnteredQa: 0, rejectedCount: 1, rate: null }]);
   });
 
   it("no data gives []", () => {

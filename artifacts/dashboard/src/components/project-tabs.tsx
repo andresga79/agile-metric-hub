@@ -157,8 +157,10 @@ export function ProjectSubNav({ projectId, group, active }: { projectId: string;
   if (!def) return null;
   const permitted = new Set(sectionLinks.map((l) => l.section));
   const items = [
-    ...sectionLinks
-      .filter((l) => (def.sections as string[]).includes(l.section))
+    // In the group's own order (Entrega · Capacidad · Pronóstico), like the tab's target.
+    ...def.sections
+      .map((sec) => sectionLinks.find((l) => l.section === sec))
+      .filter((l): l is NonNullable<typeof l> => !!l)
       .map((l) => ({ key: l.section as string, href: l.href, label: t(`nav.sub.${l.section}`) })),
     ...(def.extras ?? [])
       .filter((e) => permitted.has(e.section))

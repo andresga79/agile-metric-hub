@@ -1434,7 +1434,7 @@ components:
               weekStart: { type: string }
               totalEnteredQa: { type: integer }
               rejectedCount: { type: integer }
-              rate: { type: number }
+              rate: { type: number, nullable: true, description: Null when nothing entered QA that week. }
         bySprint:
           type: array
           items:

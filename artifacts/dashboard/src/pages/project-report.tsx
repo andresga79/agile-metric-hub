@@ -84,15 +84,16 @@ export default function ProjectReport() {
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   } = useReportData(projectId, period);
+  // Per-person: what needs attention (in progress, blocked, overdue), same as Equipo. The old top 5
+  // by issues resolved / cycle time / SP read as a ranking and was replaced 2026-11-13. Called before
+  // the early returns below (rules of hooks).
+  const { rows: attentionRows } = useTeamAttention(projectId!, period);
 
   if (loading) return <div>{t("common.loading")}</div>;
   if (!project) return <div>{t("page.team.notFound")}</div>;
   if (error) return <div>{error}</div>;
 
   const sortedTimeInStatus = [...timeInStatus].sort((a: any, b: any) => b.avgDays - a.avgDays);
-  // Per-person: what needs attention (in progress, blocked, overdue), same as Equipo. The old top 5
-  // by issues resolved / cycle time / SP read as a ranking and was replaced 2026-11-13.
-  const { rows: attentionRows } = useTeamAttention(projectId!, period);
   const topAttention = attentionRows.filter((r) => r.assignee !== null).slice(0, 5);
   const closedSprints = [...sprints].filter((s: any) => s.state === "closed");
   const activeSprint = sprints.find((s: any) => s.state === "active");

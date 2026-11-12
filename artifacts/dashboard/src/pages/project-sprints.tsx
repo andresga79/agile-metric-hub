@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { useGetProject, getGetProjectQueryKey, useGetProjectSprintMetrics, getGetProjectSprintMetricsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers, Target } from "lucide-react";
+import { ArrowLeft, Gauge, CheckCircle2, Clock, BarChart3, Layers, Target } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -205,9 +205,6 @@ export default function ProjectSprints() {
 
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
-    
-            <Card className="bg-card/40">
-              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
                   <CheckCircle2 size={14} /> {t('page.sprints.avgRealClosed')}
                 </CardTitle>
@@ -235,7 +232,10 @@ export default function ProjectSprints() {
                 </p>
               </CardContent>
             </Card>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+
+            <Card className="bg-card/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
                   <Gauge size={14} /> {t('page.sprints.avgVelocity')}
                 </CardTitle>
               </CardHeader>

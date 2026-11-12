@@ -384,7 +384,7 @@ export const GetProjectQaRejectedResponse = zod.object({
   "weekStart": zod.string(),
   "totalEnteredQa": zod.number(),
   "rejectedCount": zod.number(),
-  "rate": zod.number()
+  "rate": zod.number().nullable().describe('Null when nothing entered QA that week.')
 })).describe('QA rejection rate per ISO week (distinct issues rejected \/ distinct issues that entered QA), covers Kanban'),
   "bySprint": zod.array(zod.object({
   "sprintName": zod.string(),

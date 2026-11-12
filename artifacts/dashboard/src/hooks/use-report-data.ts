@@ -27,7 +27,6 @@ export interface PeriodTrends {
 
 export function useReportData(projectId: string | undefined, period: "1m" | "3m") {
   const [cfdData, setCfdData] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
   const [timeInStatus, setTimeInStatus] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any | null>(null);
   const [trends, setTrends] = useState<PeriodTrends | null>(null);
@@ -75,7 +74,6 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
 
     Promise.all([
       fetch(`/api/projects/${projectId}/cfd/${period}`, opts).then(jsonOrThrow("CFD")),
-      fetch(`/api/projects/${projectId}/members/${period}`, opts).then(jsonOrThrow("Members")),
       fetch(`/api/projects/${projectId}/metrics/${period}?compareTo=true`, opts).then(jsonOrThrow("Metrics")),
       fetch(`/api/projects/${projectId}/analytics/${period}`, opts).then(jsonOrThrow("Analytics")),
       fetch(`/api/projects/${projectId}/health/${period}`, opts).then(jsonOrThrow("Health")),
@@ -87,10 +85,9 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
       fetch(`/api/projects/${projectId}/release-readiness`, opts).then(jsonOrThrow("Release readiness")),
       fetch(`/api/projects/${projectId}/report-insights`, opts).then(jsonOrThrow("Report insights")),
     ])
-      .then(([cfd, memberRows, metricsData, analytics, health, qaRejected, sprintData, goal, readiness, insightRows]) => {
+      .then(([cfd, metricsData, analytics, health, qaRejected, sprintData, goal, readiness, insightRows]) => {
         if (superseded) return;
         setCfdData(cfd?.dataPoints ?? []);
-        setMembers(Array.isArray(memberRows) ? memberRows : []);
         setMetrics(metricsData ?? null);
         setTrends(metricsData?.trends ?? null);
         setTimeInStatus(analytics?.timeInStatus ?? []);
@@ -128,7 +125,7 @@ export function useReportData(projectId: string | undefined, period: "1m" | "3m"
   }, [projectId, period, token]);
 
   return {
-    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
+    loading, error, cfdData, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   };

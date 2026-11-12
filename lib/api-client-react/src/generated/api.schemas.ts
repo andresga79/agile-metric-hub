@@ -433,7 +433,8 @@ export type QaRejectedResponseByWeekItem = {
   weekStart: string;
   totalEnteredQa: number;
   rejectedCount: number;
-  rate: number;
+  /** Null when nothing entered QA that week. */
+  rate: number | null;
 };
 
 export interface RejectedBySprint {

@@ -130,7 +130,7 @@ export default function ProjectQaRejected() {
         </Card>
       </div>
 
-      {project?.boardType !== "kanban" && (
+      {project?.boardType === "scrum" && (
         <>
       {/* Sprint Breakdown */}
       <Card className="bg-card/40">
@@ -215,7 +215,11 @@ export default function ProjectQaRejected() {
                       <TableCell className="text-right font-mono">{w.totalEnteredQa}</TableCell>
                       <TableCell className="text-right font-mono text-red-400">{w.rejectedCount}</TableCell>
                       <TableCell className="text-right">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${rateBadge(w.rate)}`}>{w.rate}%</span>
+                        {w.rate === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${rateBadge(w.rate)}`}>{w.rate}%</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
