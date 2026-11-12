@@ -119,8 +119,10 @@ Sin cambios de reglas de cálculo. Cada punto debe dejar la app funcionando y ve
 - El Resumen Ejecutivo muestra la fecha por proyecto (hoy hay proyectos con caché de semanas, p. ej.
   EN/DCX del 14-oct).
 - *Decisión del autor (fuentes):*
-  - **Páginas de proyecto:** el `fetched_at` de la entrada de `jira_cache` de issues que usó la página
-    (la más vieja si usa varias). Como ese caché vence a las 6 h y se vuelve a pedir a demanda, casi
+  - **Páginas de proyecto:** el `fetched_at` **más reciente** de las entradas de `jira_cache` de issues
+    del proyecto ("la última vez que llegaron datos de Jira para este proyecto"; aprobado por el usuario
+    2026-11-12 — con la más vieja, una consulta de otro período que nadie pidió pintaba la página en
+    ámbar sin razón). Como ese caché vence a las 6 h y se vuelve a pedir a demanda, casi
     siempre marcará < 6 h; el ámbar (> 24 h) aparece solo si Jira falla y se sirve un dato viejo. Es lo
     correcto: el dato que se ve es así de reciente.
   - **Resumen Ejecutivo / Portafolio:** `portfolio_cache.updated_at` (o `calculated_at`) por proyecto.
