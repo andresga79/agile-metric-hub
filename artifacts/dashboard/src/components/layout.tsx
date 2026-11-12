@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetCurrentUser, getGetCurrentUserQueryKey, ApiError } from "@workspace/api-client-react";
@@ -11,22 +11,70 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ lastSyncedAt: string | null; isSyncing: boolean } | null>(null);
+  const [syncStarting, setSyncStarting] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    if (!token) return;
-    fetch("/api/sync/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(setSyncStatus)
-      .catch(() => {});
-  }, []);
-  useEffect(() => setMounted(true), []);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const fetchSyncStatus = useCallback(async (): Promise<{ lastSyncedAt: string | null; isSyncing: boolean } | null> => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return null;
+    try {
+      const r = await fetch("/api/sync/status", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) return null;
+      const next = await r.json();
+      setSyncStatus(next);
+      return next;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Poll while a sync runs; when it ends every screen's data is stale, so refetch all queries.
+  const pollUntilDone = useCallback(() => {
+    pollRef.current = window.setTimeout(async () => {
+      const next = await fetchSyncStatus();
+      if (next?.isSyncing) return pollUntilDone();
+      pollRef.current = null;
+      void queryClient.invalidateQueries();
+    }, 5000);
+  }, [fetchSyncStatus, queryClient]);
+
+  useEffect(() => {
+    void fetchSyncStatus().then((s) => {
+      if (s?.isSyncing) pollUntilDone();
+    });
+    return () => {
+      if (pollRef.current) window.clearTimeout(pollRef.current);
+    };
+  }, [fetchSyncStatus, pollUntilDone]);
+  useEffect(() => setMounted(true), []);
+
+  // Admin-only manual Jira sync (POST /api/sync/run: 202 started, 409 one is already running).
+  const runSync = async () => {
+    const token = localStorage.getItem("auth_token");
+    if (!token || syncStarting || syncStatus?.isSyncing) return;
+    setSyncError(null);
+    setSyncStarting(true);
+    try {
+      const r = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok && r.status !== 409) {
+        const body = await r.json().catch(() => null);
+        throw new Error(body?.message ?? body?.error ?? `HTTP ${r.status}`);
+      }
+      const next = await fetchSyncStatus();
+      if (next?.isSyncing) pollUntilDone();
+      else void queryClient.invalidateQueries();
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncStarting(false);
+    }
+  };
+  const syncBusy = syncStarting || !!syncStatus?.isSyncing;
   const { data: user, isLoading, isError, error } = useGetCurrentUser({
     query: {
       queryKey: getGetCurrentUserQueryKey(),
@@ -115,6 +163,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const userFooter = (
     <div className="p-4 border-t border-border">
+      {user?.role === "admin" && (
+        <div className="mb-3 px-2">
+          <button
+            type="button"
+            onClick={runSync}
+            disabled={syncBusy}
+            className="w-full inline-flex items-center justify-center gap-2 text-xs font-medium rounded-md border border-border px-2 py-1.5 hover:bg-accent disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw size={12} className={syncBusy ? "animate-spin" : ""} />
+            {syncBusy ? t('page.dashboard.syncing') : t('page.dashboard.syncNow')}
+          </button>
+          {syncError && <p className="mt-1 text-[11px] text-red-400">{t('page.dashboard.syncFailed', { error: syncError })}</p>}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3 px-2">
         {syncStatus && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
