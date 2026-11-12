@@ -314,7 +314,7 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
   const cfg = statusConfig[status];
 
   return (
-    <Link href={`/projects/${projectId}/health`}>
+    <Link href={`/projects/${projectId}/flow`}>
       <Card className={`bg-card/40 border ${cfg.border} transition-opacity hover:opacity-80 cursor-pointer h-full flex flex-col`}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">

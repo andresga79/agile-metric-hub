@@ -672,7 +672,7 @@ export default function Dashboard() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/projects/${p.id}/health?period=${ninetyDayWindow(boardTypeMap.get(p.id))}`} className="cursor-pointer">Health</Link>
+                                  <Link href={`/projects/${p.id}/metrics?period=${ninetyDayWindow(boardTypeMap.get(p.id))}`} className="cursor-pointer">Métricas</Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem asChild>
                                   <Link href={`/projects/${p.id}/forecast`} className="cursor-pointer">Forecast</Link>

@@ -328,6 +328,15 @@ Objetivos configurables en Admin, mapeados por prioridad:
 
 ---
 
+## Frescura de datos (2026-11-12)
+
+- **Páginas de proyecto** ("Datos de Jira: hace X", junto a las pestañas): `GET /projects/:id/freshness`
+  → `getProjectDataFetchedAt` = `MAX(fetched_at)` de las filas de `jira_cache` de issues del proyecto
+  (`getLatestCacheTimestamp`). MAX y no MIN: una fila vieja de un período que nadie pidió no debe pintar
+  la página. Ámbar si > 24 h (`lib/freshness.ts`). Como el caché vence a las 6 h y se pide a demanda,
+  el ámbar aparece solo si Jira falla.
+- **Resumen Ejecutivo**: edad de `portfolio_cache` por proyecto, siempre visible, ámbar si > 24 h.
+
 ## Trabajo en curso / WIP (pestaña Flujo, pensado para Scrumban)
 
 `GET /projects/:id/wip` (`routes/wip.ts`, lógica pura en `lib/wip.ts`), permiso de Flujo.
