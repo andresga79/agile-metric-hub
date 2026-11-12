@@ -6,7 +6,7 @@ import { ArrowLeft, Gauge, CheckCircle2, RotateCcw, Clock, BarChart3, Layers, Ta
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 import { SprintSummarySection } from "@/components/sprint-summary-section";
 import { useThresholds } from "@/hooks/use-thresholds";
 import { EmptyState } from "@/components/empty-state";
@@ -177,6 +177,7 @@ export default function ProjectSprints() {
       </div>
 
       <ProjectTabs projectId={project.id} active="sprints" />
+      <ProjectSubNav projectId={project.id} group="delivery" active="sprints" />
 
       {sprints.length === 0 ? (
         <EmptyState icon={Gauge} title={t('page.sprints.noSprints')} />

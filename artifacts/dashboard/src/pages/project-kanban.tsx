@@ -6,7 +6,7 @@ import { ArrowLeft, TrendingUp, Clock, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
@@ -79,6 +79,7 @@ export default function ProjectKanban() {
       </div>
 
       <ProjectTabs projectId={project.id} active="kanban" />
+      <ProjectSubNav projectId={project.id} group="delivery" active="kanban" />
 
       {weeks.length === 0 ? (
         <EmptyState icon={BarChart3} title={t('page.kanban.noData')} />

@@ -1,4 +1,9 @@
 {
+  "nav.delivery": "Entrega y Planning",
+  "nav.sub.sprints": "Entrega",
+  "nav.sub.kanban": "Entrega",
+  "nav.sub.capacity": "Capacidad",
+  "nav.sub.forecast": "Pronóstico",
   "nav.quality": "Calidad",
   "nav.sla": "SLA",
   "nav.sub.qa-rejected": "Rechazos QA",

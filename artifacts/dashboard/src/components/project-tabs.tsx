@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ChevronDown, BarChart3, GitPullRequest, Activity, Users, FileText, ShieldCheck, Gauge, Timer } from "lucide-react";
+import { ChevronDown, BarChart3, GitPullRequest, Users, FileText, ShieldCheck, Timer } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
 import { DataFreshness } from "@/components/data-freshness";
 import {
@@ -30,23 +30,26 @@ export const TAB_GROUPS: TabGroup[] = [
     sections: ["qa-rejected", "qa-work"],
     extras: [{ key: "sla", labelKey: "nav.sla", path: "sla", section: "qa-rejected" }],
   },
+  {
+    key: "delivery",
+    labelKey: "nav.delivery",
+    icon: <BarChart3 size={16} />,
+    // getSectionLinks only returns sprints (Scrum) or kanban (Kanban), and capacity only for Scrum.
+    sections: ["sprints", "kanban", "capacity", "forecast"],
+  },
 ];
 
 /** Primary order. Group keys stand for their whole group. */
-const PRIMARY_ORDER: string[] = ["health", "flow", "team", "sprints", "capacity", "kanban", "forecast", "delivery", "quality"];
-const SECONDARY_TAB_SECTIONS: string[] = ["forecast", "analytics", "report"];
+const PRIMARY_ORDER: string[] = ["health", "flow", "team", "delivery", "quality"];
+const SECONDARY_TAB_SECTIONS: string[] = ["analytics", "report"];
 
 const TAB_ICON_MAP: Record<string, React.ReactNode> = {
-  sprints: <BarChart3 size={16} />,
-  kanban: <BarChart3 size={16} />,
   flow: <GitPullRequest size={16} />,
   health: <Timer size={16} />,
   team: <Users size={16} />,
-  capacity: <Gauge size={16} />,
 };
 
 const DROPDOWN_ICON_MAP: Record<string, React.ReactNode> = {
-  forecast: <Activity size={14} />,
   analytics: <BarChart3 size={14} />,
   report: <FileText size={14} />,
 };
@@ -85,10 +88,12 @@ export function ProjectTabs({ projectId, active }: { projectId: string; active: 
     if (group) {
       if (seenGroups.has(group.key)) continue;
       seenGroups.add(group.key);
-      // The group tab opens its first permitted sub-view.
+      // The group tab opens its first permitted sub-view, in the group's own order (Entrega before
+      // Pronóstico), not in getSectionLinks' order.
+      const first = group.sections.map((sec) => sectionLinks.find((l) => l.section === sec)).find(Boolean) ?? link;
       tabs.push({
         key: group.key,
-        href: link.href,
+        href: first.href,
         label: t(group.labelKey),
         icon: group.icon,
         isActive: active !== "summary" && (group.sections as string[]).includes(active),

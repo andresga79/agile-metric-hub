@@ -5,7 +5,7 @@ import { useGetProject, getGetProjectQueryKey, postProjectForecast, type Forecas
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ForecastChart } from "@/components/forecast-chart";
 import { ArrowLeft, Calendar } from "lucide-react";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 
 export default function ProjectForecast() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -76,6 +76,7 @@ export default function ProjectForecast() {
       <p className="text-sm text-muted-foreground">{t('page.forecast.subtitle')}</p>
 
       <ProjectTabs projectId={projectId!} active="forecast" />
+      <ProjectSubNav projectId={projectId!} group="delivery" active="forecast" />
 
       <Card className="bg-card/40">
         <CardHeader>

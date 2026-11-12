@@ -22,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MetricTooltip } from "@/components/metric-tooltip";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
 type Band = "ok" | "warn" | "over";
@@ -495,6 +495,7 @@ export default function ProjectCapacity() {
         <p className="text-sm text-muted-foreground">{t("page.capacity.subtitle")}</p>
       </div>
       <ProjectTabs projectId={projectId!} active="capacity" />
+      <ProjectSubNav projectId={projectId!} group="delivery" active="capacity" />
       <div className="inline-flex bg-background border border-border rounded-md p-1" role="group" aria-label={t("page.capacity.title")}>
         {(["active", "next"] as View[]).map((v) => (
           <button
