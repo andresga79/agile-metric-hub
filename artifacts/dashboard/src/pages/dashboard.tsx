@@ -12,7 +12,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useState, useEffect, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -141,7 +140,6 @@ export default function Dashboard() {
     processedProjects?: number;
     totalProjects?: number;
   } | null>(null);
-  const [syncingNow, setSyncingNow] = useState(false);
   const [methodologyFilter, setMethodologyFilter] = useState<string>("all");
   // Global effective thresholds (Admin -> Health). Previously read from the admin-only endpoint, so
   // for members it 403'd and the table fell back to judging projects against the portfolio average.
@@ -208,30 +206,6 @@ export default function Dashboard() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const triggerManualSync = async () => {
-    const token = localStorage.getItem("auth_token");
-    if (!token || syncingNow || syncStatus?.isSyncing) return;
-
-    setSyncingNow(true);
-    try {
-      const response = await fetch("/api/sync/run", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok || response.status === 202) {
-        const nextStatus = await fetch("/api/sync/status", {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(async (r) => {
-          if (!r.ok) return null;
-          const text = await r.text();
-          return text ? JSON.parse(text) : null;
-        });
-        setSyncStatus(nextStatus);
-      }
-    } finally {
-      setSyncingNow(false);
-    }
-  };
 
   const isLoading = loadingSummary || loadingProjects || portfolioLoading;
 
@@ -396,16 +370,6 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-1">{t('page.dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={triggerManualSync}
-            disabled={syncingNow || syncStatus?.isSyncing}
-            className="h-8"
-          >
-            <RefreshCw size={14} className={(syncingNow || syncStatus?.isSyncing) ? "animate-spin mr-2" : "mr-2"} />
-            Sincronizar ahora
-          </Button>
           <RefreshCw size={14} className={syncStatus?.isSyncing ? "animate-spin" : ""} />
           <span>
             {syncStatus ? `${t('page.dashboard.synced')} ${formatLastSynced(syncStatus.lastSyncedAt)}` : t('page.dashboard.loading')}

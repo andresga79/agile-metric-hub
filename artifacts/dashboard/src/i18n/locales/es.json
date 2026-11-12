@@ -157,6 +157,7 @@
   "page.detail.thresholdMicrocopyCritical": "Riesgo alto: supera el umbral de alerta ({{warning}}d).",
   "page.detail.thresholdHealthyTarget": "Objetivo saludable <= {{good}}d",
   "page.detail.target": "Objetivo:",
+  "page.detail.blocked.unavailable": "No se pudo cargar",
   "page.detail.blocked.title": "Bloqueos Activos",
   "page.detail.blocked.subtitle": "Issues bloqueados actualmente",
   "page.detail.blocked.ofWip": "del WIP bloqueado",

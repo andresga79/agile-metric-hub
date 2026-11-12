@@ -57,7 +57,8 @@ export function useMemberReportData(
       fetch(`/api/projects/${projectId}/health/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("Health")),
       fetch(`/api/projects/${projectId}/qa-rejected/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("QA rejected")),
       fetch(`/api/projects/${projectId}/issues/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("Issues")),
-      fetch(`/api/projects/${projectId}/wip`, opts).then(jsonOrThrow("WIP")),
+      // Optional: only feeds "días en curso"; a failed /wip leaves those blank instead of failing the report.
+      fetch(`/api/projects/${projectId}/wip`, opts).then(jsonOrThrow("WIP")).catch(() => null),
     ])
       .then(([memberRows, metricsData, analytics, health, qaRejected, issues, wip]) => {
         if (superseded) return;

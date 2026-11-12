@@ -157,6 +157,7 @@
   "page.detail.thresholdMicrocopyCritical": "High risk: exceeds alert threshold ({{warning}}d).",
   "page.detail.thresholdHealthyTarget": "Healthy target <= {{good}}d",
   "page.detail.target": "Target:",
+  "page.detail.blocked.unavailable": "Could not load",
   "page.detail.blocked.title": "Active Blockers",
   "page.detail.blocked.subtitle": "Currently blocked issues",
   "page.detail.blocked.ofWip": "of WIP blocked",

@@ -274,27 +274,41 @@ export default function ProjectDetail() {
 function BlockedKpiCard({ projectId, period }: { projectId: string; period: string }) {
   const { t } = useTranslation();
   const [data, setData] = useState<{ activeBlocked: number; avgDays: number; wipPercent: number | null } | null>(null);
+  // A failed /wip or /analytics must not read as "0 blocked · Bien".
+  const [failed, setFailed] = useState(false);
   const token = localStorage.getItem("auth_token");
 
   useEffect(() => {
     if (!projectId || !token) return;
     const headers = { Authorization: `Bearer ${token}` };
-    // Blocked count and its share of WIP come from /wip (blocked items within work in progress, so
-    // the % never passes 100); the average blocked days still come from /analytics' blocked list.
+    // Count, share of WIP and average blocked days all over the SAME issues: the ones /wip marks as
+    // blocked (blocked within work in progress, so the % never passes 100). /analytics only supplies
+    // each of those issues' blocked days.
+    const json = (label: string) => (r: Response) => {
+      if (!r.ok) throw new Error(`${label} ${r.status}`);
+      return r.json();
+    };
+    setFailed(false);
     Promise.all([
-      fetch(`/api/projects/${projectId}/wip`, { headers }).then((r) => r.json()),
-      fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then((r) => r.json()),
+      fetch(`/api/projects/${projectId}/wip`, { headers }).then(json("wip")),
+      fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then(json("analytics")),
     ])
-      .then(([wip, json]) => {
-        const blocked: { isCurrentlyBlocked: boolean; totalDays: number }[] = Array.isArray(json.blockedIssues) ? json.blockedIssues : [];
-        const active = blocked.filter((b) => b.isCurrentlyBlocked);
-        const avgDays = active.length > 0 ? active.reduce((s, b) => s + b.totalDays, 0) / active.length : 0;
-        const activeBlocked: number = typeof wip?.blockedNow === "number" ? wip.blockedNow : 0;
+      .then(([wip, analytics]) => {
+        const blockedKeys = new Set<string>(
+          (Array.isArray(wip?.items) ? wip.items : []).filter((i: { blocked: boolean }) => i.blocked).map((i: { key: string }) => i.key)
+        );
+        const blockedList: { key: string; totalDays: number }[] = Array.isArray(analytics?.blockedIssues) ? analytics.blockedIssues : [];
+        const days = blockedList.filter((b) => blockedKeys.has(b.key)).map((b) => b.totalDays);
+        const avgDays = days.length > 0 ? days.reduce((s, d) => s + d, 0) / days.length : 0;
+        const activeBlocked = blockedKeys.size;
         const total: number = typeof wip?.total === "number" ? wip.total : 0;
         const wipPercent = total > 0 ? Math.round((activeBlocked / total) * 100) : null;
         setData({ activeBlocked, avgDays, wipPercent });
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setFailed(true);
+      });
   }, [projectId, period, token]);
 
   const status: "good" | "warning" | "critical" =
@@ -325,7 +339,9 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
           </div>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col">
-          {data === null ? (
+          {failed ? (
+            <div className="text-2xl font-bold text-muted-foreground" title={t("page.detail.blocked.unavailable")}>—</div>
+          ) : data === null ? (
             <div className="h-8 w-12 bg-muted animate-pulse rounded mb-2" />
           ) : (
             <>
