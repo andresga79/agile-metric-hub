@@ -11,7 +11,6 @@ vi.mock("../jira", () => ({
 }));
 
 vi.mock("../portfolio-cache", () => ({ calculateAndCachePortfolio: vi.fn() }));
-vi.mock("../metric-snapshots", () => ({ storeWeeklySnapshots: vi.fn() }));
 vi.mock("../release-sync", () => ({ syncReleaseEpics: vi.fn() }));
 
 describe("withCache", () => {

@@ -22,7 +22,7 @@ export interface SprintDeliveryTimes {
 
 /** Lead/cycle time per sprint by DELIVERY date: each issue counts once, in the sprint whose
  *  [start, close) window it was delivered in — the same buckets as the Resumen chart and the
- *  Métricas tab (buildSprintVelocityBuckets), so Sprints, Evolution and Métricas show the same
+ *  Métricas tab (buildSprintVelocityBuckets), so Sprints and Métricas show the same
  *  number for a sprint. Sprint membership would credit an issue to every sprint it passed through
  *  (OLP-3330, 427 d, in both 116 and 117). */
 export async function sprintDeliveryTimes(projectId: string, sprints: JiraSprint[]): Promise<SprintDeliveryTimes> {

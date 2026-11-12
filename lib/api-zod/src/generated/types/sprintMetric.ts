@@ -31,7 +31,7 @@ export interface SprintMetric {
   /** @nullable */
   avgCycleTimeDays: number | null;
   /**
-     * Median cycle time of the issues delivered in this sprint's window (same as Evolution and Métricas)
+     * Median cycle time of the issues delivered in this sprint's window (same as Métricas)
      * @nullable
      */
   medianCycleTimeDays: number | null;

@@ -46,7 +46,7 @@ export interface SprintMetric {
   reopenedCount: number;
   avgCycleTimeDays: number | null;
   /** Median cycle time of the issues DELIVERED in this sprint's window (sprintDeliveryTimes):
-   *  same number as Evolution and the Métricas tab. avgCycleTimeDays (mean over the sprint's own
+   *  same number as the Métricas tab. avgCycleTimeDays (mean over the sprint's own
    *  issues) stays for compatibility. Null until the route fills it in. */
   medianCycleTimeDays: number | null;
   breakdown: {

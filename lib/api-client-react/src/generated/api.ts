@@ -29,7 +29,6 @@ import type {
   CfdResponse,
   DashboardSummary,
   ErrorResponse,
-  EvolutionResponse,
   ForecastRequest,
   ForecastResponse,
   GetProjectCapacityParams,
@@ -1721,85 +1720,6 @@ export const useUpdateProjectCapacity = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getUpdateProjectCapacityMutationOptions(options));
     }
-
-export const getGetProjectEvolutionUrl = (projectId: string,) => {
-
-
-
-
-  return `/api/projects/${projectId}/evolution`
-}
-
-/**
- * For Scrum projects, returns one row per sprint (computed live from Jira, mirroring the Sprints tab) so the evolution lines up with actual sprint boundaries instead of arbitrary calendar weeks. For Kanban projects, returns one row per ISO week from the project's accumulated metric_snapshots table, written by the daily background sync - this can cover more history than a single live Jira query (capped at 90 days) would allow.
- *
- * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
- */
-export const getProjectEvolution = async (projectId: string, options?: RequestInit): Promise<EvolutionResponse> => {
-
-  return customFetch<EvolutionResponse>(getGetProjectEvolutionUrl(projectId),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetProjectEvolutionQueryKey = (projectId: string,) => {
-    return [
-    `/api/projects/${projectId}/evolution`
-    ] as const;
-    }
-
-
-export const getGetProjectEvolutionQueryOptions = <TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetProjectEvolutionQueryKey(projectId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectEvolution>>> = ({ signal }) => getProjectEvolution(projectId, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetProjectEvolutionQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectEvolution>>>
-export type GetProjectEvolutionQueryError = ErrorType<ErrorResponse>
-
-
-/**
- * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
- */
-
-export function useGetProjectEvolution<TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(
- projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetProjectEvolutionQueryOptions(projectId,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
 
 export const getListAdminUsersUrl = () => {
 

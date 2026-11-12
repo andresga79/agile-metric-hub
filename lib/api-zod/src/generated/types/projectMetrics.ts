@@ -8,6 +8,7 @@
 import type { CycleTimeDataPoint } from './cycleTimeDataPoint';
 import type { Percentiles } from './percentiles';
 import type { ProjectMetricsBoardType } from './projectMetricsBoardType';
+import type { ProjectMetricsTimeTargets } from './projectMetricsTimeTargets';
 import type { SlowIssue } from './slowIssue';
 import type { WeeklyDataPoint } from './weeklyDataPoint';
 
@@ -41,6 +42,8 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
+  /** Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none. */
+  timeTargets?: ProjectMetricsTimeTargets;
   /** Issues resolved in the period whose lead or cycle time is above the period's P95, slowest lead time first */
   slowestIssues: SlowIssue[];
 }

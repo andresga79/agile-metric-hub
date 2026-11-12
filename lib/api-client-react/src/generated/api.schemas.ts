@@ -196,6 +196,14 @@ export const ProjectMetricsBoardType = {
   simple: 'simple',
 } as const;
 
+/**
+ * Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none.
+ */
+export type ProjectMetricsTimeTargets = {
+  leadTime: number | null;
+  cycleTime: number | null;
+};
+
 export interface WeeklyDataPoint {
   /** Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window) */
   label: string;
@@ -270,6 +278,8 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
+  /** Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none. */
+  timeTargets?: ProjectMetricsTimeTargets;
   /** Issues resolved in the period whose lead or cycle time is above the period's P95, slowest lead time first */
   slowestIssues: SlowIssue[];
 }
@@ -586,7 +596,7 @@ export interface SprintMetric {
   /** @nullable */
   avgCycleTimeDays: number | null;
   /**
-     * Median cycle time of the issues delivered in this sprint's window (same as Evolution and Métricas)
+     * Median cycle time of the issues delivered in this sprint's window (same as Métricas)
      * @nullable
      */
   medianCycleTimeDays: number | null;
@@ -973,66 +983,6 @@ export interface KanbanMetricsSummary {
 export interface KanbanMetricsResponse {
   weeks: WeekMetric[];
   summary: KanbanMetricsSummary;
-}
-
-/**
- * How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban
- */
-export type EvolutionResponseGranularity = typeof EvolutionResponseGranularity[keyof typeof EvolutionResponseGranularity];
-
-
-export const EvolutionResponseGranularity = {
-  sprint: 'sprint',
-  week: 'week',
-} as const;
-
-export interface EvolutionPeriod {
-  /** Display label - short sprint label (e.g. "SP106") or ISO week number (e.g. "S22") */
-  label: string;
-  /**
-     * Full date range for weekly (Kanban) rows, e.g. "Ago 10 - Ago 16" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name/dates aren't a fixed calendar range.
-     * @nullable
-     */
-  rangeLabel: string | null;
-  /** ISO date this period starts (sprint start date, or the Monday of the week) */
-  start: string;
-  /** True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final */
-  isActive: boolean;
-  /**
-     * Median lead time (days) of issues delivered in this period (by delivery date, each issue counted once)
-     * @nullable
-     */
-  leadTimeMedian: number | null;
-  /**
-     * Median cycle time (days) of issues delivered in this period
-     * @nullable
-     */
-  cycleTimeMedian: number | null;
-  throughput: number;
-  /**
-     * Percentage of issues entering QA that were rejected back, or null if none entered QA in this period
-     * @nullable
-     */
-  qaRejectionRate: number | null;
-}
-
-export interface EvolutionTargets {
-  /** @nullable */
-  leadTime: number | null;
-  /** @nullable */
-  cycleTime: number | null;
-  /** @nullable */
-  throughput: number | null;
-  /** @nullable */
-  qaRejectionRate: number | null;
-}
-
-export interface EvolutionResponse {
-  projectId: string;
-  /** How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban */
-  granularity: EvolutionResponseGranularity;
-  periods: EvolutionPeriod[];
-  targets: EvolutionTargets;
 }
 
 export type GetProjectCapacityParams = {

@@ -99,7 +99,7 @@ export default function ProjectDetail() {
 
   const metricInfo = (metric: string) => {
     const isDurationMetric = metric === "leadTime" || metric === "cycleTime";
-    // Lead/cycle time headline = P50, like the semaphore, Evolution and Métricas: one old ticket
+    // Lead/cycle time headline = P50, like the semaphore and Métricas: one old ticket
     // moved the mean by weeks while the typical issue's time didn't change. Mean shown below it.
     const rawActual = metric === "leadTime" ? metrics?.leadTimePercentiles?.p50
       : metric === "cycleTime" ? metrics?.cycleTimePercentiles?.p50

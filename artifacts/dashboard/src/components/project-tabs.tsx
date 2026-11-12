@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ChevronDown, BarChart3, GitPullRequest, Activity, Users, FileText, ShieldAlert, TrendingUp, FlaskConical, Gauge, Timer } from "lucide-react";
+import { ChevronDown, BarChart3, GitPullRequest, Activity, Users, FileText, ShieldAlert, FlaskConical, Gauge, Timer } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
 import {
   DropdownMenu,
@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const ORDERED_SECTIONS = [
-  'health', 'evolution', 'flow', 'team', 'sprints', 'capacity', 'kanban',
+  'health', 'flow', 'team', 'sprints', 'capacity', 'kanban',
   'qa-rejected', 'qa-work', 'forecast', 'analytics', 'report',
 ] as const;
-const PRIMARY_TAB_SECTIONS = ['health', 'flow', 'team', 'sprints', 'capacity', 'kanban', 'evolution'];
+const PRIMARY_TAB_SECTIONS = ['health', 'flow', 'team', 'sprints', 'capacity', 'kanban'];
 const SECONDARY_TAB_SECTIONS = ['forecast', 'qa-rejected', 'qa-work', 'analytics', 'report'];
 
 const TAB_ICON_MAP: Record<string, React.ReactNode> = {
@@ -23,7 +23,6 @@ const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   flow: <GitPullRequest size={16} />,
   health: <Timer size={16} />,
   team: <Users size={16} />,
-  evolution: <TrendingUp size={16} />,
   capacity: <Gauge size={16} />,
 };
 

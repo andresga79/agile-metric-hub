@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@workspace/db", () => ({ db: { execute: vi.fn().mockResolvedValue({ rows: [] }) } }));
 vi.mock("../portfolio-cache", () => ({ calculateAndCachePortfolio: vi.fn() }));
-vi.mock("../metric-snapshots", () => ({ storeWeeklySnapshots: vi.fn() }));
 vi.mock("../release-sync", () => ({ syncReleaseEpics: vi.fn() }));
 
 function jsonResponse(body: unknown): Response {

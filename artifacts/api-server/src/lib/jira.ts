@@ -1648,7 +1648,7 @@ export async function getJiraSprintsOrThrow(
 /** Upcoming sprints of the project's board, in Jira's board order (the order the team planned
  *  them; future sprints usually have no dates). Not cached: it is one cheap call, and a sprint
  *  created or started during planning must show up right away — a 6 h cache kept showing the old
- *  "next sprint". Separate from getJiraSprints on purpose: Sprints, Evolution and the 2s/6s windows
+ *  "next sprint". Separate from getJiraSprints on purpose: Sprints and the 2s/6s windows
  *  assume closed + active only. */
 export async function getFutureJiraSprints(projectId: string): Promise<JiraSprint[]> {
   try {

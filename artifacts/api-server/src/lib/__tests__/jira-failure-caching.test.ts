@@ -7,7 +7,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const execute = vi.fn();
 vi.mock("@workspace/db", () => ({ db: { execute: (...args: unknown[]) => execute(...args) } }));
 vi.mock("../portfolio-cache", () => ({ calculateAndCachePortfolio: vi.fn() }));
-vi.mock("../metric-snapshots", () => ({ storeWeeklySnapshots: vi.fn() }));
 vi.mock("../release-sync", () => ({ syncReleaseEpics: vi.fn() }));
 
 /** Number of cache writes (INSERT INTO jira_cache ...) issued so far. */

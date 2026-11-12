@@ -5,7 +5,7 @@ import {
   useGetProjectMetrics, getGetProjectMetricsQueryKey,
   type Percentiles, type WeeklyDataPoint, type SlowIssue,
 } from "@workspace/api-client-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
@@ -39,12 +39,15 @@ function TimeRow({ label, avg, p }: { label: string; avg: number; p: Percentiles
 }
 
 function PercentileChart({
-  title, data, keys,
+  title, data, keys, target,
 }: {
   title: string;
   data: WeeklyDataPoint[];
   keys: { p50: keyof WeeklyDataPoint; p85: keyof WeeklyDataPoint; p95: keyof WeeklyDataPoint };
+  /** Lead/cycle time target (compared with P50); no line when null. */
+  target: number | null;
 }) {
+  const { t } = useTranslation();
   return (
     <Card className="bg-card/40">
       <CardHeader className="pb-2">
@@ -62,6 +65,14 @@ function PercentileChart({
               formatter={(v: number) => days(v)}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
+            {target !== null && (
+              <ReferenceLine
+                y={target}
+                stroke="hsl(var(--muted-foreground))"
+                strokeDasharray="4 4"
+                label={{ value: `${t("page.metrics.target")} ${days(target)}`, fontSize: 10, fill: "hsl(var(--muted-foreground))", position: "insideTopLeft" }}
+              />
+            )}
             <Line type="monotone" dataKey={keys.p50} name="P50" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
             <Line type="monotone" dataKey={keys.p85} name="P85" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} connectNulls />
             <Line type="monotone" dataKey={keys.p95} name="P95" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
@@ -174,11 +185,13 @@ export default function ProjectMetrics() {
               title={`${t("page.metrics.leadTime")} ${bucketLabel}`}
               data={buckets}
               keys={{ p50: "medianLeadTime", p85: "leadTimeP85", p95: "leadTimeP95" }}
+              target={metrics.timeTargets?.leadTime ?? null}
             />
             <PercentileChart
               title={`${t("page.metrics.cycleTime")} ${bucketLabel}`}
               data={buckets}
               keys={{ p50: "medianCycleTime", p85: "cycleTimeP85", p95: "cycleTimeP95" }}
+              target={metrics.timeTargets?.cycleTime ?? null}
             />
           </div>
 

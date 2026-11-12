@@ -97,7 +97,6 @@ export function getSectionLinks(
     ...(boardType === "scrum"
       ? [{ href: `/projects/${projectId}/capacity`, label: "Capacity", section: "capacity" as ProjectSection }]
       : []),
-    { href: `/projects/${projectId}/evolution`, label: "Evolucion", section: "evolution" as ProjectSection },
     { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/qa-rejected`, label: "QA Rejected", section: "qa-rejected" as ProjectSection },
     { href: `/projects/${projectId}/qa-work`, label: "QA", section: "qa-work" as ProjectSection },

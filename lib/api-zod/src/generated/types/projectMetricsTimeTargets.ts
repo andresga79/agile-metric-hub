@@ -6,13 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface EvolutionTargets {
-  /** @nullable */
+/**
+ * Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none.
+ */
+export type ProjectMetricsTimeTargets = {
   leadTime: number | null;
-  /** @nullable */
   cycleTime: number | null;
-  /** @nullable */
-  throughput: number | null;
-  /** @nullable */
-  qaRejectionRate: number | null;
-}
+};

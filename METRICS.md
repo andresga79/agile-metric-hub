@@ -74,7 +74,7 @@ en 2025/2026 (el 1/1/2026 salía "W00").
 ## Métricas de flujo
 
 ### Qué cuenta como "resuelto" (cierres que no son entrega)
-Throughput, lead/cycle time, SLA, forecast, portfolio y snapshots de Evolution cuentan solo trabajo
+Throughput, lead/cycle time, SLA, forecast y portfolio cuentan solo trabajo
 **entregado** (`getDeliveryDate` / `isNonDeliveryClosure`, `lib/jira.ts`). Quedan afuera los issues
 de categoría done que son:
 - **Cancelados**: estado `Cancelado` (o *cancel/descartad/anulad/won't do*), que Jira pone en
@@ -87,7 +87,7 @@ Un issue **asignado** que se cierra directo desde TO DO (bugs rápidos) sí cuen
 hay evidencia de limpieza y cuenta (por eso toda consulta que alimenta estas métricas pide el
 changelog, incluidos SLA y Forecast). El CFD sigue usando `getResolutionDate`: ahí el cierre es una
 transición real.
-**Sprints, Evolution por sprint y Capacity**: un cierre sin entrega que **ya estaba cerrado al
+**Sprints y Capacity**: un cierre sin entrega que **ya estaba cerrado al
 terminar el sprint** queda fuera del sprint (ni alcance ni completado). Si se limpió después, sigue
 contando como alcance no completado en los sprints donde estuvo. Caso real: el board de OLI no toma
 "Cancelado" como terminado, así que Jira arrastraba cada cancelado al sprint siguiente y la app lo
@@ -147,7 +147,7 @@ tarjetas del Resumen).
 ### Qué estadística se muestra (regla de todo el sitio, 2026-11-12)
 - **P50 (mediana)** es el número principal de lead/cycle time en todas las pantallas y lo que se
   compara contra la meta: tarjetas del Resumen, Reporte y Reporte por persona (con la tendencia
-  "vs período anterior" también en P50), Sprints, Kanban semanal, Equipo, Analíticas, Evolución,
+  "vs período anterior" también en P50), Sprints, Kanban semanal, Equipo, Analíticas,
   semáforo, Health y Resumen Ejecutivo.
 - **P85** es el número para comprometer plazos ("85% ≤ X" en las tarjetas y en Métricas).
 - **Promedio** queda como dato secundario: si se separa mucho del P50 hay casos extremos
@@ -155,7 +155,7 @@ tarjetas del Resumen).
   compatibilidad; los nuevos `median*` son los que muestra el frontend.
 - **Por sprint**, lead/cycle time se calculan por fecha de entrega (`sprintDeliveryTimes`,
   `lib/sprint-delivery-times.ts`): cada issue en el sprint en que se entregó. Sprints
-  (`medianCycleTimeDays`), Evolución y Métricas muestran el mismo número para un sprint.
+  (`medianCycleTimeDays`) y Métricas muestran el mismo número para un sprint.
 
 ### Pestaña Métricas (reemplaza a Health en las pestañas)
 `/projects/:id/metrics`, mismo permiso que Health (Health sigue accesible por URL). Todo sale de
@@ -223,8 +223,7 @@ cerrados y activos — la misma regla de los resúmenes de sprint de Rovo (2026-
 con Rovo: Tablero Sprint 117 = 99 SP comprometidos, 86 SP / 33 issues completados, 86.9%).
 Consecuencia aceptada: lo arrastrado y terminado en sprints siguientes se acredita a cada sprint
 por el que pasó, así que los sprints viejos tienden al ~100%. Hasta esa fecha se usaba "done al
-cierre" (`wasIssueDoneAt`, reconstruido desde el changelog). El throughput de Evolution usa la
-misma regla. **Capacidad no**: su histórico y el ritmo de "Recomendado" usan "done al cierre"
+cierre" (`wasIssueDoneAt`, reconstruido desde el changelog). **Capacidad no**: su histórico y el ritmo de "Recomendado" usan "done al cierre"
 (ver Capacity). Tipos incluidos según Admin (Tablero/global: Story, Task, Bug, Spike, Tech Debt); Rovo
 además cuenta Epics, que acá no entran.
 
@@ -345,25 +344,13 @@ Objetivos configurables en Admin, mapeados por prioridad:
   **promedio** de lo entregado en ellas (Little usa promedios, no medianas). Referencia para acordar
   límites de WIP, que en esta etapa los equipos manejan de palabra (no se leen de Jira).
 
-## Evolution (histórico)
+## Evolution (retirada 2026-11-12)
 
-- **Kanban (por semana):** filas de `metric_snapshots`, una por proyecto y semana ISO, escritas
-  en cada sync. Solo se guardan semanas **completamente dentro** de la ventana de 90 días
-  (`snapshotsFullyInWindow`): la semana del borde está parcialmente cubierta, y reescribirla cada
-  día dejaba "congelado" el valor más truncado. Las filas dañadas antes del 2026-09-23 (p. ej.
-  OLP 2026-06-01/08/15 con throughput 0) se reparan con `POST /api/admin/snapshots/backfill`
-  (`backfillWeeklySnapshots`: recalcula lead/cycle time y throughput de semanas completas; la
-  tasa de rechazo QA se conserva porque necesita también los issues no resueltos).
-- **Scrum (por sprint):** throughput y rechazo QA salen de `computeSprintSnapshot` sobre los
-  issues del sprint, con la regla de "completado = Done hoy" (igual que la pestaña Sprints).
-- **Lead/Cycle Time = mediana** (desde 2026-11-12), para comparar contra la meta igual que el
-  semáforo y Health. En Scrum se calcula **por fecha de entrega** (`sprintTimeMedians`, mismos
-  buckets que el gráfico del Resumen y la pestaña Métricas): cada issue cuenta una sola vez, en el
-  sprint en que se entregó. Antes era el promedio de los issues *del* sprint en Done hoy, y un
-  issue que pasó por varios sprints sumaba en cada uno (OLP-3330, 427 d, en 116 y 117: el 117
-  marcaba ~32 d con una mediana de 8 d). En Kanban las filas de `metric_snapshots` guardan la
-  mediana en las columnas `lead_time_avg`/`cycle_time_avg` (nombre heredado); las semanas
-  escritas antes se pasan a mediana re-corriendo el backfill.
+La pestaña Evolución se quitó: repetía Métricas (P50 por sprint) y Sprints (throughput). Su línea
+de meta pasó a los gráficos de Métricas (`timeTargets` en `/metrics/:period`, `pickTimeTarget` en
+`lib/time-targets.ts`: meta del proyecto 3m, si no cualquier meta del proyecto, si no el umbral
+"good" de Admin). El sync ya no escribe `metric_snapshots`; la tabla y sus filas se conservan. El
+endpoint admin de backfill de snapshots se eliminó.
 
 ---
 

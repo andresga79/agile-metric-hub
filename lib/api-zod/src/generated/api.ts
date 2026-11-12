@@ -156,6 +156,10 @@ export const GetProjectMetricsResponse = zod.object({
   "p85": zod.number().describe('85th percentile'),
   "p95": zod.number().describe('95th percentile')
 }).describe('P50\/P75\/P85\/P95 lead time percentiles'),
+  "timeTargets": zod.object({
+  "leadTime": zod.number().nullable(),
+  "cycleTime": zod.number().nullable()
+}).optional().describe('Lead\/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none.'),
   "slowestIssues": zod.array(zod.object({
   "key": zod.string(),
   "summary": zod.string(),
@@ -458,7 +462,7 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "velocity": zod.number().describe('Story points completed in this sprint'),
   "reopenedCount": zod.number().describe('Number of issues reopened after being marked done'),
   "avgCycleTimeDays": zod.number().nullable(),
-  "medianCycleTimeDays": zod.number().nullable().describe('Median cycle time of the issues delivered in this sprint\'s window (same as Evolution and Métricas)'),
+  "medianCycleTimeDays": zod.number().nullable().describe('Median cycle time of the issues delivered in this sprint\'s window (same as Métricas)'),
   "breakdown": zod.object({
   "Story": zod.number(),
   "Bug": zod.number(),
@@ -778,37 +782,6 @@ export const UpdateProjectCapacityBody = zod.array(UpdateProjectCapacityBodyItem
 
 export const UpdateProjectCapacityResponse = zod.object({
   "message": zod.string()
-})
-
-
-/**
- * For Scrum projects, returns one row per sprint (computed live from Jira, mirroring the Sprints tab) so the evolution lines up with actual sprint boundaries instead of arbitrary calendar weeks. For Kanban projects, returns one row per ISO week from the project's accumulated metric_snapshots table, written by the daily background sync - this can cover more history than a single live Jira query (capped at 90 days) would allow.
- *
- * @summary Get metric history (Lead Time, Cycle Time, Throughput, QA rejection rate) for a project
- */
-export const GetProjectEvolutionParams = zod.object({
-  "projectId": zod.coerce.string()
-})
-
-export const GetProjectEvolutionResponse = zod.object({
-  "projectId": zod.string(),
-  "granularity": zod.enum(['sprint', 'week']).describe('How `periods` is bucketed - by sprint for Scrum projects, by ISO week for Kanban'),
-  "periods": zod.array(zod.object({
-  "label": zod.string().describe('Display label - short sprint label (e.g. \"SP106\") or ISO week number (e.g. \"S22\")'),
-  "rangeLabel": zod.string().nullable().describe('Full date range for weekly (Kanban) rows, e.g. \"Ago 10 - Ago 16\" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name\/dates aren\'t a fixed calendar range.'),
-  "start": zod.coerce.date().describe('ISO date this period starts (sprint start date, or the Monday of the week)'),
-  "isActive": zod.boolean().describe('True for the currently in-progress sprint (always false for weekly\/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final'),
-  "leadTimeMedian": zod.number().nullable().describe('Median lead time (days) of issues delivered in this period (by delivery date, each issue counted once)'),
-  "cycleTimeMedian": zod.number().nullable().describe('Median cycle time (days) of issues delivered in this period'),
-  "throughput": zod.number(),
-  "qaRejectionRate": zod.number().nullable().describe('Percentage of issues entering QA that were rejected back, or null if none entered QA in this period')
-})),
-  "targets": zod.object({
-  "leadTime": zod.number().nullable(),
-  "cycleTime": zod.number().nullable(),
-  "throughput": zod.number().nullable(),
-  "qaRejectionRate": zod.number().nullable()
-})
 })
 
 

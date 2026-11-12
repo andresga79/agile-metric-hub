@@ -33,7 +33,9 @@ import { requireAuth, requireSectionView } from "../middleware/auth";
 import { median, percentile } from "../lib/stats";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
-import { db, portfolioCacheTable } from "@workspace/db";
+import { db, portfolioCacheTable, metricTargetsTable } from "@workspace/db";
+import { getEffectiveThresholds } from "../lib/health-thresholds";
+import { pickTimeTarget } from "../lib/time-targets";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -508,7 +510,17 @@ router.get(
       };
     }
 
-    res.json({ ...metrics, previousPeriod, trends });
+    // Target line for the Métricas charts (moved from Evolution, same rule).
+    const [targetRows, thresholds] = await Promise.all([
+      db.select().from(metricTargetsTable).where(eq(metricTargetsTable.projectId, projectId)),
+      getEffectiveThresholds(projectId),
+    ]);
+    const timeTargets = {
+      leadTime: pickTimeTarget(targetRows, thresholds, "leadTime"),
+      cycleTime: pickTimeTarget(targetRows, thresholds, "cycleTime"),
+    };
+
+    res.json({ ...metrics, previousPeriod, trends, timeTargets });
   }
 );
 

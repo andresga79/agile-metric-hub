@@ -16,9 +16,6 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - `pnpm --filter @workspace/api-server test` — vitest, 270 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
-- Reparar snapshots semanales de Evolution anteriores a la ventana de 90 días (admin):
-  `curl -X POST "localhost:8000/api/admin/snapshots/backfill?days=180" -H "Authorization: Bearer <token>"`
-  (opcional `&projectId=`). Correrlo una vez en cada DB con filas escritas antes del 2026-09-23.
 - Backups: servicio `backup` del compose, `pg_dump` diario con rotación 7 diarios + 4 semanales
   en `$BACKUP_DIR` (default `./backups`, ignorado por git). Restaurar con
   `docker/backup/restore.sh <dump> [base destino]` — ver `DEPLOY.md` §5.
@@ -65,7 +62,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   sprint de Rovo (decidido 2026-11-06 para cuadrar con Rovo). Costo aceptado: lo arrastrado y
   terminado después se acredita a cada sprint por el que pasó (sprints viejos cerca del 100%).
   Antes era "done al cierre" (`wasIssueDoneAt`, sigue en `lib/jira.ts` por si se vuelve atrás).
-  Aplica a Sprints y al throughput de Evolution. **Excepción: Capacidad** — el ritmo que alimenta
+  Aplica a Sprints. **Excepción: Capacidad** — el ritmo que alimenta
   "Recomendado" usa "done al cierre" en los sprints cerrados (2026-11-12): con "Done hoy" el 117 de
   OLP sumaba ~86 SP contra 53 realmente cerrados y la recomendación pedía comprometer de más. La pestaña Sprints muestra además
   "% Real cerrado" (`closedAtSprintEndRate`, = `wasIssueDoneAt` al cierre) en columna aparte.
