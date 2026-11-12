@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "wouter";
 import {
@@ -5,7 +6,8 @@ import {
   useGetProjectMetrics, getGetProjectMetricsQueryKey,
   type Percentiles, type WeeklyDataPoint, type SlowIssue,
 } from "@workspace/api-client-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { DrillDownModal } from "@/components/drill-down-modal";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DetailSkeleton } from "@/components/page-skeleton";
@@ -83,9 +85,38 @@ function PercentileChart({
   );
 }
 
+function BucketChart({ title, data }: { title: string; data: { range: string; count: number }[] }) {
+  const { t } = useTranslation();
+  const empty = data.every((d) => d.count === 0);
+  return (
+    <Card className="bg-card/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="h-[220px]">
+        {empty ? (
+          <p className="text-sm text-muted-foreground">{t("page.metrics.noData")}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="range" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))" }} itemStyle={{ color: "hsl(var(--foreground))" }} />
+              <Bar dataKey="count" name={t("page.metrics.issues")} fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProjectMetrics() {
   const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
+  // Week opened in the drill-down (issues delivered that week), as Analytics' run chart did.
+  const [drillWeek, setDrillWeek] = useState<string | null>(null);
   const token = localStorage.getItem("auth_token");
 
   const { data: project, isLoading: loadingProject } = useGetProject(projectId!, {
@@ -194,6 +225,44 @@ export default function ProjectMetrics() {
               target={metrics.timeTargets?.cycleTime ?? null}
             />
           </div>
+
+          <Card className="bg-card/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{t("page.metrics.deliveredByWeek")}</CardTitle>
+              <CardDescription>{t("page.metrics.deliveredByWeekDesc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[240px]">
+              {(metrics.deliveredByWeek ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("page.metrics.noData")}</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={metrics.deliveredByWeek}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="week" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))" }} itemStyle={{ color: "hsl(var(--foreground))" }} />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      name={t("page.metrics.issues")}
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      onClick={(point: unknown) => setDrillWeek((point as { payload?: { week?: string } } | undefined)?.payload?.week ?? null)}
+                      style={{ cursor: "pointer" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <BucketChart title={t("page.metrics.leadDistribution")} data={metrics.leadTimeBuckets ?? []} />
+            <BucketChart title={t("page.metrics.cycleDistribution")} data={metrics.cycleTimeBuckets ?? []} />
+          </div>
+
+          <DrillDownModal open={!!drillWeek} onClose={() => setDrillWeek(null)} projectId={projectId!} week={drillWeek ?? ""} period={period} />
 
           <Card className="bg-card/40">
             <CardHeader>
