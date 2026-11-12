@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LinkedBug } from './linkedBug';
+import type { QaRejectedResponseByWeekItem } from './qaRejectedResponseByWeekItem';
 import type { RejectedBySprint } from './rejectedBySprint';
 import type { RejectedIssue } from './rejectedIssue';
 
@@ -32,6 +33,8 @@ export interface QaRejectedResponse {
   overallBugRate: number;
   /** Combined rejection + bug impact rate */
   overallQaImpactRate: number;
+  /** QA rejection rate per ISO week (distinct issues rejected / distinct issues that entered QA), covers Kanban */
+  byWeek: QaRejectedResponseByWeekItem[];
   bySprint: RejectedBySprint[];
   rejectedIssues: RejectedIssue[];
   linkedBugs: LinkedBug[];

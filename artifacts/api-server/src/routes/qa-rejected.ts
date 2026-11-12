@@ -19,6 +19,7 @@ import {
   type QaRejection,
   type LinkedBug,
 } from "../lib/jira";
+import { qaRateByWeek, type QaWeek } from "../lib/qa-rate";
 
 const router: IRouter = Router();
 
@@ -84,6 +85,8 @@ function getMockQaQuality(): {
   totalStandaloneBugs: number;
   overallBugRate: number;
   overallQaImpactRate: number;
+  /** Same rate per ISO week (covers Kanban, where every sprint bucket is "Unknown"). */
+  byWeek: QaWeek[];
   bySprint: {
     sprintName: string;
     rejectedCount: number;
@@ -123,6 +126,7 @@ function getMockQaQuality(): {
     totalStandaloneBugs: 1,
     overallBugRate: 50,
     overallQaImpactRate: 62.5,
+    byWeek: [],
     bySprint: [
       { sprintName: "Sprint 10", rejectedCount: 2, totalEnteredQa: 5, rate: 40, bugsCount: 3, bugRate: 60, qaImpactRate: 80 },
       { sprintName: "Sprint 11", rejectedCount: 1, totalEnteredQa: 3, rate: 33.3, bugsCount: 1, bugRate: 33.3, qaImpactRate: 66.7 },
@@ -258,6 +262,9 @@ router.get(
       { rejectedKeys: Set<string>; enteredKeys: Set<string>; bugsCount: number }
     >();
 
+    // QA entries in the period, also bucketed by ISO week (qaRateByWeek) for Kanban coverage.
+    const weeklyQaEntries: { key: string; at: Date }[] = [];
+
     function getSprintBucket(name: string) {
       let bucket = sprintMap.get(name);
       if (!bucket) {
@@ -278,6 +285,7 @@ router.get(
             const sprint = findSprintForDate(new Date(h.created), sprints);
             const name = sprint?.name ?? "Unknown";
             getSprintBucket(name).enteredKeys.add(issue.key);
+            weeklyQaEntries.push({ key: issue.key, at: new Date(h.created) });
           }
         }
       }
@@ -342,6 +350,7 @@ router.get(
       totalStandaloneBugs,
       overallBugRate,
       overallQaImpactRate,
+      byWeek: qaRateByWeek(weeklyQaEntries, allRejections.map((r) => ({ key: r.issueKey, at: r.transitionedAt }))),
       bySprint,
       rejectedIssues: allRejections.map((r) => ({
         key: r.issueKey,

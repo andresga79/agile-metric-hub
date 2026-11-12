@@ -380,6 +380,12 @@ export const GetProjectQaRejectedResponse = zod.object({
   "totalStandaloneBugs": zod.number().describe('Bug issues not linked to any story'),
   "overallBugRate": zod.number().describe('Bugs per issue that entered QA'),
   "overallQaImpactRate": zod.number().describe('Combined rejection + bug impact rate'),
+  "byWeek": zod.array(zod.object({
+  "weekStart": zod.string(),
+  "totalEnteredQa": zod.number(),
+  "rejectedCount": zod.number(),
+  "rate": zod.number()
+})).describe('QA rejection rate per ISO week (distinct issues rejected \/ distinct issues that entered QA), covers Kanban'),
   "bySprint": zod.array(zod.object({
   "sprintName": zod.string(),
   "rejectedCount": zod.number().describe('QA→Dev reversions in this sprint'),

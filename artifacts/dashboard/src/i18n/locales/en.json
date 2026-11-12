@@ -404,6 +404,9 @@
 
   "page.qa.loading": "Loading QA Quality data...",
   "page.qa.notFound": "Project not found",
+  "page.qa.byWeekTitle": "QA rejection per week",
+  "page.qa.byWeekDesc": "Distinct issues rejected ÷ distinct issues that entered QA that week (same formula as the sprint table).",
+  "page.qa.week": "Week (Monday)",
   "page.qa.title": "QA Quality Dashboard",
   "page.qa.subtitle": "Rejections + bugs generated during QA — combined quality impact",
   "page.qa.rejections": "QA Rejections",

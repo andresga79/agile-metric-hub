@@ -404,6 +404,9 @@
 
   "page.qa.loading": "Cargando datos de calidad QA...",
   "page.qa.notFound": "Proyecto no encontrado",
+  "page.qa.byWeekTitle": "Rechazo QA por semana",
+  "page.qa.byWeekDesc": "Issues distintos rechazados ÷ issues distintos que entraron a QA en la semana (misma fórmula que la tabla por sprint).",
+  "page.qa.week": "Semana (lunes)",
   "page.qa.title": "Panel de Calidad QA",
   "page.qa.subtitle": "Rechazos + bugs generados durante QA — impacto de calidad combinado",
   "page.qa.rejections": "Rechazos de QA",

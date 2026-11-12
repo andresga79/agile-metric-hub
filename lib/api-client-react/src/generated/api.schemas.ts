@@ -429,6 +429,13 @@ export interface HealthResponse {
   dimensions: HealthDimension[];
 }
 
+export type QaRejectedResponseByWeekItem = {
+  weekStart: string;
+  totalEnteredQa: number;
+  rejectedCount: number;
+  rate: number;
+};
+
 export interface RejectedBySprint {
   sprintName: string;
   /** QA→Dev reversions in this sprint */
@@ -490,6 +497,8 @@ export interface QaRejectedResponse {
   overallBugRate: number;
   /** Combined rejection + bug impact rate */
   overallQaImpactRate: number;
+  /** QA rejection rate per ISO week (distinct issues rejected / distinct issues that entered QA), covers Kanban */
+  byWeek: QaRejectedResponseByWeekItem[];
   bySprint: RejectedBySprint[];
   rejectedIssues: RejectedIssue[];
   linkedBugs: LinkedBug[];

@@ -74,6 +74,7 @@ export * from './projectVisibilityUpdate';
 export * from './projectWithVisibility';
 export * from './projectWithVisibilityBoardType';
 export * from './qaRejectedResponse';
+export * from './qaRejectedResponseByWeekItem';
 export * from './rejectedBySprint';
 export * from './rejectedIssue';
 export * from './slowIssue';

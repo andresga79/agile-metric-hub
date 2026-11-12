@@ -1382,6 +1382,7 @@ components:
         - overallBugRate
         - overallQaImpactRate
         - bySprint
+        - byWeek
         - rejectedIssues
         - linkedBugs
       properties:
@@ -1423,6 +1424,17 @@ components:
         overallQaImpactRate:
           type: number
           description: Combined rejection + bug impact rate
+        byWeek:
+          type: array
+          description: QA rejection rate per ISO week (distinct issues rejected / distinct issues that entered QA), covers Kanban
+          items:
+            type: object
+            required: [weekStart, totalEnteredQa, rejectedCount, rate]
+            properties:
+              weekStart: { type: string }
+              totalEnteredQa: { type: integer }
+              rejectedCount: { type: integer }
+              rate: { type: number }
         bySprint:
           type: array
           items:

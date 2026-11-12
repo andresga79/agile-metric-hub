@@ -130,6 +130,8 @@ export default function ProjectQaRejected() {
         </Card>
       </div>
 
+      {project?.boardType !== "kanban" && (
+        <>
       {/* Sprint Breakdown */}
       <Card className="bg-card/40">
         <CardHeader>
@@ -171,6 +173,49 @@ export default function ProjectQaRejected() {
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${rateBadge(s.qaImpactRate)}`}>{s.qaImpactRate}%</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+        </>
+      )}
+
+      {/* Weekly rate: same formula as the sprint table; the only breakdown for Kanban boards. */}
+      <Card className="bg-card/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle size={18} />
+            {t('page.qa.byWeekTitle')}
+          </CardTitle>
+          <CardDescription>{t('page.qa.byWeekDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!data?.byWeek || data.byWeek.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('page.qa.noSprintData')}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead>{t('page.qa.week')}</TableHead>
+                    <TableHead className="text-right">{t('page.qa.inQa')}</TableHead>
+                    <TableHead className="text-right">{t('page.qa.rejected')}</TableHead>
+                    <TableHead className="text-right">{t('page.qa.pctReject')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.byWeek.map((w) => (
+                    <TableRow key={w.weekStart} className="border-border hover:bg-accent/50">
+                      <TableCell className="font-medium">{w.weekStart.slice(8, 10)}/{w.weekStart.slice(5, 7)}</TableCell>
+                      <TableCell className="text-right font-mono">{w.totalEnteredQa}</TableCell>
+                      <TableCell className="text-right font-mono text-red-400">{w.rejectedCount}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${rateBadge(w.rate)}`}>{w.rate}%</span>
                       </TableCell>
                     </TableRow>
                   ))}
