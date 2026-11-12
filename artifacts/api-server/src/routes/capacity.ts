@@ -232,7 +232,7 @@ router.get(
 
       const assigned = summarizeAssigned(nextIssues);
       if (assigned.unestimated > 0) {
-        warnings.push(`${assigned.unestimated} issues sin estimar en el ${isActive ? "sprint activo" : "próximo sprint"}.`);
+        warnings.push(`${assigned.unestimated} issues sin estimar en el ${isActive ? "sprint activo" : "próximo sprint"} (solo afecta la referencia en SP; la recomendación en issues no cambia).`);
       }
       // A sprint in progress is measured with its real dates; one not started yet with the team's 10 days.
       const clock = isActive ? sprintClock(next!.startDate, next!.endDate, new Date()) : null;

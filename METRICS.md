@@ -431,6 +431,10 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   planificó ahí. Completado = Done hoy (`isIssueDone`). Solo issues del proyecto (prefijo
   de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
 - **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
+- **Issues como base (Scrumban, 2026-11-12)**: la recomendación, el histórico y la tabla muestran
+  issues primero y SP como referencia; la **carga por persona** se mide en issues (antes tomaba la
+  peor entre SP e issues, y alguien con pocas historias grandes salía sobrecargado solo por puntos);
+  SP solo si no hay ritmo en issues. Issues sin estimar ya no afectan la recomendación en issues.
 - **Rol por persona** (`capacity_roster.role`: dev / lt / qa / po / sm / other, admin, por proyecto):
   reemplaza al check "Cuenta". Solo Dev y LT cuentan. Dedicación por defecto (si no se guardó nada
   para el sprint): LT 50 %, el resto 100 %; aplica también a los asignados de sprints pasados sin

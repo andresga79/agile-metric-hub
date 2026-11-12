@@ -150,7 +150,8 @@ export default function ProjectCapacity() {
 
   const [draft, setDraft] = useState<CapacityMemberInput[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [unit, setUnit] = useState<Unit>("sp");
+  // Scrumban: teams plan by throughput (issues); story points are a secondary reference.
+  const [unit, setUnit] = useState<Unit>("issues");
   const [message, setMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [showNotCounting, setShowNotCounting] = useState(false);
@@ -375,18 +376,18 @@ export default function ProjectCapacity() {
           %
         </TableCell>
         <TableCell className="text-right font-mono text-xs">
-          {row && m.counts && m.recent ? `${fmt(row.capacity.sp)} SP · ${fmt(row.capacity.issues)}` : "—"}
+          {row && m.counts && m.recent ? `${fmt(row.capacity.issues)} · ${fmt(row.capacity.sp)} SP` : "—"}
         </TableCell>
         <TableCell className="text-right font-mono text-xs">
-          {row ? `${fmt(row.assigned.sp)} SP · ${row.assigned.issues}` : "—"}
+          {row ? `${row.assigned.issues} · ${fmt(row.assigned.sp)} SP` : "—"}
         </TableCell>
         {inProgress && (
           <>
             <TableCell className="text-right font-mono text-xs">
-              {row ? `${fmt(row.done.sp)} SP · ${row.done.issues}` : "—"}
+              {row ? `${row.done.issues} · ${fmt(row.done.sp)} SP` : "—"}
             </TableCell>
             <TableCell className="text-right font-mono text-xs">
-              {row ? `${fmt(row.assigned.sp - row.done.sp)} SP · ${row.assigned.issues - row.done.issues}` : "—"}
+              {row ? `${row.assigned.issues - row.done.issues} · ${fmt(row.assigned.sp - row.done.sp)} SP` : "—"}
             </TableCell>
           </>
         )}
@@ -566,10 +567,10 @@ export default function ProjectCapacity() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-2">
-            {(["sp", "issues"] as Unit[]).map((u) => (
-              <div key={u}>
-                <div className="text-xs text-muted-foreground">{u === "sp" ? t("page.capacity.unitSp") : t("page.capacity.unitIssues")}</div>
-                <div className="text-2xl font-bold">
+            {(["issues", "sp"] as Unit[]).map((u) => (
+              <div key={u} className={u === "sp" ? "opacity-80" : ""}>
+                <div className="text-xs text-muted-foreground">{u === "sp" ? t("page.capacity.unitSpSecondary") : t("page.capacity.unitIssuesPrimary")}</div>
+                <div className={u === "sp" ? "text-xl font-semibold" : "text-3xl font-bold"}>
                   {rec ? `${rec.range[u][0]}–${rec.range[u][1]}` : "—"}
                   <span className="text-sm font-normal text-muted-foreground"> {t("page.capacity.recommended").toLowerCase()}</span>
                 </div>
@@ -642,7 +643,7 @@ export default function ProjectCapacity() {
                         {t("page.capacity.unassigned")}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-amber-600 dark:text-yellow-300">
-                        {fmt(data.unassigned.sp)} SP · {data.unassigned.issues}
+                        {data.unassigned.issues} · {fmt(data.unassigned.sp)} SP
                       </TableCell>
                       <TableCell colSpan={columns - 6} />
                     </TableRow>
@@ -694,7 +695,7 @@ export default function ProjectCapacity() {
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle>{t("page.capacity.history")}</CardTitle>
             <div className="flex bg-background border border-border rounded-md p-1">
-              {(["sp", "issues"] as Unit[]).map((u) => (
+              {(["issues", "sp"] as Unit[]).map((u) => (
                 <button
                   key={u}
                   onClick={() => setUnit(u)}

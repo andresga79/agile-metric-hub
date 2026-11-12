@@ -174,11 +174,14 @@ export function personLoad(
   if (!hasWork) return { capacity, loadPct: 0, band: "ok" };
   if (days === 0) return { capacity, loadPct: null, band: "over" };
 
-  const ratios: number[] = [];
-  if (days * rate.sp.p50 > 0) ratios.push(assigned.sp / (days * rate.sp.p50));
-  if (days * rate.issues.p50 > 0) ratios.push(assigned.issues / (days * rate.issues.p50));
-  if (ratios.length === 0) return { capacity, loadPct: null, band: "over" };
-  const loadPct = Math.round(Math.max(...ratios) * 100);
+  // Scrumban: load is measured in issues (what the teams plan by). It used to take the worse of SP
+  // and issues, so someone with a few large stories read as overloaded by points alone. SP only
+  // when there is no issue rate to measure against.
+  const issueCapacity = days * rate.issues.p50;
+  const spCapacity = days * rate.sp.p50;
+  const ratio = issueCapacity > 0 ? assigned.issues / issueCapacity : spCapacity > 0 ? assigned.sp / spCapacity : null;
+  if (ratio === null) return { capacity, loadPct: null, band: "over" };
+  const loadPct = Math.round(ratio * 100);
   return { capacity, loadPct, band: loadBand(loadPct) };
 }
 

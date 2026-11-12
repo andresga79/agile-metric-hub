@@ -111,17 +111,22 @@ describe("personLoad", () => {
     expect(personLoad(8, rate, { sp: 0, issues: 0 }).capacity).toEqual({ sp: 4, issues: 2 });
   });
 
-  it("load is the worse of SP load and issue load", () => {
-    // capacity 4 SP / 2 issues; assigned 4 SP (100%) and 3 issues (150%) → 150%, over
-    const r = personLoad(8, rate, { sp: 4, issues: 3 });
-    expect(r.loadPct).toBe(150);
-    expect(r.band).toBe("over");
+  it("load is measured in issues (Scrumban), not the worse of SP and issues", () => {
+    // capacity 4 SP / 2 issues; assigned 8 SP (200%) but 2 issues (100%) → 100%
+    const r = personLoad(8, rate, { sp: 8, issues: 2 });
+    expect(r.loadPct).toBe(100);
+    expect(r.band).toBe("warn");
+  });
+
+  it("falls back to SP only when there is no issue rate", () => {
+    const spOnly: TeamRate = { ...rate, issues: { p25: 0, p50: 0, p75: 0 } };
+    expect(personLoad(8, spOnly, { sp: 4, issues: 3 }).loadPct).toBe(100);
   });
 
   it("bands: <=85 ok, <=110 warn, >110 over", () => {
-    expect(personLoad(8, rate, { sp: 3.4, issues: 0 }).band).toBe("ok"); // 85%
-    expect(personLoad(8, rate, { sp: 4.4, issues: 0 }).band).toBe("warn"); // 110%
-    expect(personLoad(8, rate, { sp: 4.5, issues: 0 }).band).toBe("over");
+    expect(personLoad(8, rate, { sp: 0, issues: 1.7 }).band).toBe("ok"); // 85%
+    expect(personLoad(8, rate, { sp: 0, issues: 2.2 }).band).toBe("warn"); // 110%
+    expect(personLoad(8, rate, { sp: 0, issues: 2.3 }).band).toBe("over");
   });
 
   it("zero availability with assigned work is over with null %, no division by zero", () => {
