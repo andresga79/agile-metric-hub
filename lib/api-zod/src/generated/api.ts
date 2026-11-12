@@ -133,8 +133,8 @@ export const GetProjectMetricsResponse = zod.object({
   "velocityByWeek": zod.array(zod.object({
   "label": zod.string().describe('Bucket label — calendar week (kanban \/ non-sprint window) or sprint name (scrum sprint window)'),
   "value": zod.number(),
-  "avgCycleTime": zod.number().nullish().describe('Average cycle time (days) of issues resolved in this bucket, null if none resolved'),
-  "avgLeadTime": zod.number().nullish().describe('Average lead time (days) of issues resolved in this bucket, null if none resolved')
+  "medianCycleTime": zod.number().nullish().describe('Median cycle time (days) of issues resolved in this bucket, null if none resolved'),
+  "medianLeadTime": zod.number().nullish().describe('Median lead time (days) of issues resolved in this bucket, null if none resolved')
 })),
   "cycleTimeDistribution": zod.array(zod.object({
   "range": zod.string(),

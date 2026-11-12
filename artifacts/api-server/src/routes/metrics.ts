@@ -28,6 +28,7 @@ import {
   type ProjectBoardType,
 } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
+import { median } from "../lib/stats";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { db, portfolioCacheTable } from "@workspace/db";
@@ -179,7 +180,7 @@ async function computeMetrics(
   );
 
   // Per-issue lead/cycle time, keyed by id — reused by both bucketing functions below so
-  // each velocityByWeek/sprint bucket can report its own avgCycleTime/avgLeadTime without
+  // each velocityByWeek/sprint bucket can report its own median cycle/lead time without
   // recomputing getLeadTimeDays/getCycleTimeDays (already computed once for leadTimes/cycleTimes above).
   const leadCycleByIssueId = new Map<string, { lead: number | null; cycle: number | null }>(
     await Promise.all(
@@ -303,22 +304,16 @@ async function computePreviousPeriodSummary(
   };
 }
 
-function avgOf(values: number[]): number | null {
-  return values.length > 0
-    ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
-    : null;
-}
-
 function buildWeeklyVelocity(
   resolved: JiraIssue[],
   resolvedMap: Map<string, Date>,
   periodDays: number,
   isScrum: boolean,
   leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
-): { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] {
+): { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] {
   const weeks = Math.min(Math.ceil(periodDays / 7), 24);
   const now = new Date();
-  const result: { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] = [];
+  const result: { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] = [];
 
   for (let w = weeks - 1; w >= 0; w--) {
     const weekEnd = new Date(now);
@@ -335,15 +330,15 @@ function buildWeeklyVelocity(
       ? weekIssues.reduce((sum, i) => sum + getStoryPoints(i), 0)
       : weekIssues.length;
 
-    const avgCycleTime = avgOf(
+    const medianCycleTime = median(
       weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
     );
-    const avgLeadTime = avgOf(
+    const medianLeadTime = median(
       weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
     );
 
     const label = weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    result.push({ label, value: sp, avgCycleTime, avgLeadTime });
+    result.push({ label, value: sp, medianCycleTime, medianLeadTime });
   }
 
   return result;

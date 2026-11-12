@@ -1179,14 +1179,14 @@ components:
           description: "Bucket label — calendar week (kanban / non-sprint window) or sprint name (scrum sprint window)"
         value:
           type: number
-        avgCycleTime:
+        medianCycleTime:
           type: number
           nullable: true
-          description: "Average cycle time (days) of issues resolved in this bucket, null if none resolved"
-        avgLeadTime:
+          description: "Median cycle time (days) of issues resolved in this bucket, null if none resolved"
+        medianLeadTime:
           type: number
           nullable: true
-          description: "Average lead time (days) of issues resolved in this bucket, null if none resolved"
+          description: "Median lead time (days) of issues resolved in this bucket, null if none resolved"
 
     CycleTimeDataPoint:
       type: object

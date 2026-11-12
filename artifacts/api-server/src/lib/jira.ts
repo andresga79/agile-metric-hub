@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { median } from "./stats";
 import {
   withCache,
   projectsCacheKey,
@@ -1009,16 +1010,16 @@ export function buildSprintVelocityBuckets(
   resolvedMap: Map<string, Date>,
   closedSprints: JiraSprint[],
   leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
-): { label: string; value: number; avgCycleTime: number | null; avgLeadTime: number | null }[] {
+): { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] {
   const chronological = [...closedSprints].sort((a, b) => {
     const aStart = a.startDate ? new Date(a.startDate).getTime() : 0;
     const bStart = b.startDate ? new Date(b.startDate).getTime() : 0;
     return aStart - bStart;
   });
 
-  const avgOf = (values: number[]): number | null =>
-    values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
-
+  // Median, not mean: one sprint that closes a couple of year-old tickets (OLP Sprint 117:
+  // OLP-3330 at 427 d, OLP-3764 at 156 d) tripled the mean lead time while the team's pace
+  // didn't change (median 8 d, best cycle time of the window).
   return chronological.map((sprint) => {
     const start = sprint.startDate ? new Date(sprint.startDate).getTime() : -Infinity;
     const endRaw = sprint.completeDate ?? sprint.endDate ?? null;
@@ -1032,14 +1033,14 @@ export function buildSprintVelocityBuckets(
     });
 
     const value = sprintIssues.reduce((sum, issue) => sum + getStoryPoints(issue), 0);
-    const avgCycleTime = avgOf(
+    const medianCycleTime = median(
       sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
     );
-    const avgLeadTime = avgOf(
+    const medianLeadTime = median(
       sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
     );
 
-    return { label: sprint.name, value, avgCycleTime, avgLeadTime };
+    return { label: sprint.name, value, medianCycleTime, medianLeadTime };
   });
 }
 

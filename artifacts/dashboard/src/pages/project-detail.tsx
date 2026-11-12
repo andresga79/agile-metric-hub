@@ -256,8 +256,8 @@ export default function ProjectDetail() {
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="throughput" dataKey="value" name={t('metric.throughput')} fill="hsl(var(--primary))" fillOpacity={0.5} radius={[3, 3, 0, 0]} />
-                <Line yAxisId="days" type="monotone" dataKey="avgCycleTime" name={t('metric.cycleTime')} stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
-                <Line yAxisId="days" type="monotone" dataKey="avgLeadTime" name={t('metric.leadTime')} stroke="#8b5cf6" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="days" type="monotone" dataKey="medianCycleTime" name={t('page.detail.cycleTimeMedian')} stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="days" type="monotone" dataKey="medianLeadTime" name={t('page.detail.leadTimeMedian')} stroke="#8b5cf6" strokeWidth={2} dot={false} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
