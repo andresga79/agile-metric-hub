@@ -2087,7 +2087,7 @@ components:
 
     CapacityMemberInput:
       type: object
-      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences]
+      required: [accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed]
       properties:
         accountId: { type: string }
         displayName: { type: string }
@@ -2106,6 +2106,11 @@ components:
         manual:
           type: boolean
           description: Added by hand (no Jira issues yet); omitted manual people are removed.
+        departed:
+          type: boolean
+          description: >
+            Left the team (persistent, per project). Not part of the current/next sprint's team and
+            adds no availability, but stays in the closed sprints' history and team rate.
         recent:
           type: boolean
           description: >

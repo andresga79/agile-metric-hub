@@ -112,7 +112,7 @@ export default function ProjectCapacity() {
   useEffect(() => {
     if (!data || dirty) return;
     setDraft(
-      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences }) => ({
+      data.team.map(({ accountId, displayName, absenceDays, dedicationPct, counts, manual, recent, absences, departed }) => ({
         accountId,
         displayName,
         absenceDays,
@@ -121,6 +121,7 @@ export default function ProjectCapacity() {
         manual,
         recent,
         absences,
+        departed,
       }))
     );
   }, [data, dirty]);
@@ -139,7 +140,7 @@ export default function ProjectCapacity() {
     if (draft.some((r) => r.accountId === accountId)) return;
     setDirty(true);
     setMessage(null);
-    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true, absences: [] }]);
+    setDraft((rows) => [...rows, { accountId, displayName: name, absenceDays: 0, dedicationPct: 100, counts: true, manual: true, recent: true, absences: [], departed: false }]);
     setNewName("");
   };
 
@@ -224,8 +225,22 @@ export default function ProjectCapacity() {
           {m.manual && (
             <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.manual")}</span>
           )}
-          {!m.recent && (
+          {m.departed ? (
+            <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.departedBadge")}</span>
+          ) : !m.recent && (
             <span className="ml-2 text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground">{t("page.capacity.historyOnly")}</span>
+          )}
+          {!m.manual && isAdmin && (
+            <button
+              type="button"
+              className={`ml-2 text-xs hover:underline ${m.departed ? "text-sky-400" : "text-red-400"}`}
+              title={m.departed ? undefined : t("page.capacity.departTooltip")}
+              // Leaving keeps their past sprints in the team rate; rejoining puts them back in this
+              // sprint's team (the server recomputes "recent" from Jira on the next load).
+              onClick={() => updateDraft(m.accountId, m.departed ? { departed: false, recent: true } : { departed: true, recent: false })}
+            >
+              {m.departed ? t("page.capacity.rejoin") : t("page.capacity.depart")}
+            </button>
           )}
           {m.manual && isAdmin && (
             <button

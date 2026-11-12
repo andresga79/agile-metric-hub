@@ -248,6 +248,10 @@ async function initDb() {
         UNIQUE(project_id, account_id)
       );
     `);
+    // "Salió del equipo": out of the current/next sprint's team, kept in past sprints' history.
+    await db.execute(sql`
+      ALTER TABLE capacity_roster ADD COLUMN IF NOT EXISTS departed BOOLEAN NOT NULL DEFAULT false;
+    `);
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS capacity_absence (

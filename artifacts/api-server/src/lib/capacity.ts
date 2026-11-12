@@ -198,6 +198,8 @@ export interface MemberAvailability {
   counts: boolean;
   /** Added by hand in Capacity — no Jira issues yet, synthetic `manual:` accountId. */
   manual: boolean;
+  /** Left the team (per project, persistent): no availability now, kept in the history. */
+  departed?: boolean;
   /** Dated absences in this sprint. When present, absenceDays is their total. */
   absences?: Absence[];
 }
@@ -240,6 +242,8 @@ export interface RosterEntry {
   displayName: string;
   counts: boolean;
   manual: boolean;
+  /** Left the team: out of the current/next sprint's team, kept in the history. */
+  departed?: boolean;
 }
 
 export function availableDays(m: MemberAvailability, sprintWorkingDays: number): number {
@@ -346,14 +350,14 @@ export function buildTeam(input: {
     const jiraId = r.manual ? idByName.get(normalizeName(r.displayName)) : undefined;
     if (jiraId) {
       if (!input.roster.some((o) => o.accountId === jiraId)) {
-        people.set(jiraId, { accountId: jiraId, displayName: names.get(jiraId)!, counts: r.counts, manual: false });
+        people.set(jiraId, { accountId: jiraId, displayName: names.get(jiraId)!, counts: r.counts, manual: false, departed: r.departed ?? false });
       }
       continue;
     }
     people.set(r.accountId, { ...r });
   }
   for (const [id, name] of names) {
-    if (!people.has(id)) people.set(id, { accountId: id, displayName: name, counts: true, manual: false });
+    if (!people.has(id)) people.set(id, { accountId: id, displayName: name, counts: true, manual: false, departed: false });
   }
 
   const saved = new Map(input.saved.map((m) => [m.accountId, m]));
@@ -361,7 +365,9 @@ export function buildTeam(input: {
   return [...people.values()]
     .map((p) => ({
       ...p,
-      recent: p.manual || recentIds.has(p.accountId),
+      departed: p.departed ?? false,
+      // Someone who left isn't part of this sprint's team even with issues still assigned in it.
+      recent: !p.departed && (p.manual || recentIds.has(p.accountId)),
       absenceDays: saved.get(p.accountId)?.absenceDays ?? 0,
       dedicationPct: saved.get(p.accountId)?.dedicationPct ?? 100,
       absences: saved.get(p.accountId)?.absences ?? [],
@@ -406,9 +412,9 @@ export function buildTeamRows(
   byAccount: Map<string, Units>,
   rate: TeamRate | null,
   sprint: RowsSprint = { workingDays: NEXT_SPRINT_WORKING_DAYS }
-): Array<TeamRow & { recent: boolean }> {
+): Array<TeamRow & { recent: boolean; departed: boolean }> {
   return team.map((member) => {
-    const m = { ...member, absences: member.absences ?? [] };
+    const m = { ...member, absences: member.absences ?? [], departed: member.departed ?? false };
     const recent = m.recent ?? true;
     const days = recent ? availableDays(m, sprint.workingDays) : 0;
     const assigned = byAccount.get(m.accountId) ?? { sp: 0, issues: 0 };

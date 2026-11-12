@@ -1015,6 +1015,7 @@ export const GetProjectCapacityResponse = zod.object({
   "dedicationPct": zod.number().min(getProjectCapacityResponseTeamItemOneDedicationPctMin).max(getProjectCapacityResponseTeamItemOneDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "departed": zod.boolean().describe('Left the team (persistent, per project). Not part of the current\/next sprint\'s team and adds no availability, but stays in the closed sprints\' history and team rate.\n'),
   "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 }).and(zod.object({
   "availableDays": zod.number(),
@@ -1085,6 +1086,7 @@ export const UpdateProjectCapacityBodyItem = zod.object({
   "dedicationPct": zod.number().min(updateProjectCapacityBodyDedicationPctMin).max(updateProjectCapacityBodyDedicationPctMax),
   "counts": zod.boolean().describe('Counts for capacity in this project (persistent, all sprints). Only devs do.'),
   "manual": zod.boolean().describe('Added by hand (no Jira issues yet); omitted manual people are removed.'),
+  "departed": zod.boolean().describe('Left the team (persistent, per project). Not part of the current\/next sprint\'s team and adds no availability, but stays in the closed sprints\' history and team rate.\n'),
   "recent": zod.boolean().describe('Part of the sprint\'s team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.\n')
 })
 export const UpdateProjectCapacityBody = zod.array(UpdateProjectCapacityBodyItem)

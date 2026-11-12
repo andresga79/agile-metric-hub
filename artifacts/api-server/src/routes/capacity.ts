@@ -157,6 +157,7 @@ router.get(
         displayName: r.displayName,
         counts: r.counts,
         manual: r.manual,
+        departed: r.departed,
       }));
       const notCounting = new Set(roster.filter((r) => !r.counts).map((r) => r.accountId));
 
@@ -400,11 +401,12 @@ router.put(
                 displayName: r.displayName,
                 counts: r.counts,
                 manual: r.manual,
+                departed: r.departed ?? false,
                 updatedBy: authReq.user?.userId ?? null,
               })
               .onConflictDoUpdate({
                 target: [capacityRosterTable.projectId, capacityRosterTable.accountId],
-                set: { displayName: r.displayName, counts: r.counts, manual: r.manual, updatedBy: authReq.user?.userId ?? null },
+                set: { displayName: r.displayName, counts: r.counts, manual: r.manual, departed: r.departed ?? false, updatedBy: authReq.user?.userId ?? null },
               });
           }
         }

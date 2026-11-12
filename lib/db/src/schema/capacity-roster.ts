@@ -14,6 +14,10 @@ export const capacityRosterTable = pgTable(
     displayName: text("display_name").notNull(),
     counts: boolean("counts").notNull().default(true),
     manual: boolean("manual").notNull().default(false),
+    // Left the team: not part of the current/next sprint's team, but still counted in the closed
+    // sprints they worked in (unlike counts = false, which also drops them from the history and
+    // would inflate the team rate with their delivered work).
+    departed: boolean("departed").notNull().default(false),
     updatedBy: integer("updated_by").references(() => usersTable.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },

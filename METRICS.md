@@ -415,6 +415,10 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
   planificó ahí. Completado = Done hoy (`isIssueDone`). Solo issues del proyecto (prefijo
   de clave) y tipos permitidos. P25/P50/P75; con < 3 sprints utilizables no hay recomendación.
 - **Recomendación**: `días-persona disponibles × [P25, P75]`, en SP y en issues.
+- **Salió del equipo** (`capacity_roster.departed`, admin, reversible): la persona deja de ser parte
+  del equipo del sprint activo y de los próximos aunque todavía tenga issues asignados, pero sus
+  sprints cerrados siguen en el ritmo histórico (días y entrega). No usar "Cuenta" = no para alguien
+  que se fue: eso quita sus días del histórico pero deja su entrega, e infla el ritmo por persona-día.
 - **Quién cuenta**: solo los devs. Admin marca una vez por proyecto quién cuenta (`capacity_roster`);
   aplica a todos los sprints, también al histórico: quien no cuenta no suma días-persona (lo que
   completó sí suma a lo hecho por el equipo). En un sprint cerrado, los días-persona son la

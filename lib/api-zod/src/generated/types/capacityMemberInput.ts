@@ -26,6 +26,9 @@ export interface CapacityMemberInput {
   counts: boolean;
   /** Added by hand (no Jira issues yet); omitted manual people are removed. */
   manual: boolean;
+  /** Left the team (persistent, per project). Not part of the current/next sprint's team and adds no availability, but stays in the closed sprints' history and team rate.
+   *  */
+  departed: boolean;
   /** Part of the sprint's team. false = only seen in older sprints: listed so an admin can mark whether they count for the historical rate, but adds no availability.
    *  */
   recent: boolean;

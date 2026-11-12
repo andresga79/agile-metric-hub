@@ -254,6 +254,31 @@ describe("summarizeAssigned", () => {
 });
 
 describe("buildTeam", () => {
+  it("someone who left the team isn't part of this sprint even with issues still assigned in it", () => {
+    const team = buildTeam({
+      roster: [rosterEntry("max", { departed: true })],
+      recentIssues: [issue("A-1", "max", 3), issue("A-2", "dev", 2)],
+      saved: [],
+    });
+    expect(team.find((m) => m.accountId === "max")).toMatchObject({ departed: true, recent: false, counts: true });
+    expect(team.find((m) => m.accountId === "dev")).toMatchObject({ departed: false, recent: true });
+    // Out of this sprint's availability...
+    const rows = buildTeamRows(team, new Map(), null);
+    expect(rows.find((r) => r.accountId === "max")!.availableDays).toBe(0);
+  });
+
+  it("leaving keeps the person in past sprints' rate (unlike counts = false)", () => {
+    const start = "2026-07-06T09:00:00.000-0300";
+    const end = "2026-07-17T18:00:00.000-0300";
+    const issues = [issue("A-1", "max", 5, true), issue("A-2", "dev", 5, true)];
+    // departed people are not in notCounting, so their days and delivery both stay in the sample
+    const kept = sprintSample({ startDate: start, endDate: end, issues, saved: [], notCounting: new Set() })!;
+    expect(kept).toEqual({ personDays: 20, completedSp: 10, completedIssues: 2 });
+    // counts = false drops their days but not their delivery: the rate per person-day doubles
+    const dropped = sprintSample({ startDate: start, endDate: end, issues, saved: [], notCounting: new Set(["max"]) })!;
+    expect(dropped.personDays).toBe(10);
+  });
+
   it("roster members (counting or not) plus new assignees, who count by default; counting first", () => {
     const team = buildTeam({
       roster: [rosterEntry("b", { counts: false })],
