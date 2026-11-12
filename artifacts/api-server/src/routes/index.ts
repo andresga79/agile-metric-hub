@@ -28,7 +28,6 @@ import reportInsightsRouter from "./report-insights";
 import releaseReadinessRouter from "./release-readiness";
 import qaWorkRouter from "./qa-work";
 import thresholdsRouter from "./thresholds";
-import v2Router from "./v2";
 import wipRouter from "./wip";
 
 const router: IRouter = Router();
@@ -63,6 +62,5 @@ router.use(reportInsightsRouter);
 router.use(releaseReadinessRouter);
 router.use(qaWorkRouter);
 router.use(wipRouter);
-router.use(v2Router);
 
 export default router;

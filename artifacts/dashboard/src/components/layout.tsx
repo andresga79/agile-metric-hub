@@ -236,9 +236,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="text-xl font-bold tracking-tight text-primary">
             Agile<span className="text-foreground">Metrics</span>
           </h1>
-          <Link href="/v2" className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-            Probar v2
-          </Link>
           <button
             className="md:hidden text-muted-foreground hover:text-foreground"
             onClick={() => setSidebarOpen(false)}
@@ -264,9 +261,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-bold tracking-tight text-primary">
             Agile<span className="text-foreground">Metrics</span>
           </h1>
-          <Link href="/v2" className="text-xs ml-auto text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-            Probar v2
-          </Link>
         </header>
 
         <div className="flex-1 p-4 md:p-6 overflow-auto">
