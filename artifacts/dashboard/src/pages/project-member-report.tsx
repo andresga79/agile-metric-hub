@@ -99,10 +99,15 @@ export default function ProjectMemberReport() {
   // color de alerta ni el dato de días-desde-creado en Pendientes (no aplica: todavía no arrancó).
   const wipAgingByKey = new Map(wipAging.map((w: any) => [w.key, w]));
 
-  // --- Desglose por tipo (Historia/Tarea/Bug/Epic/...), con lead/cycle time promedio por tipo ---
-  const avgOf = (values: (number | null)[]) => {
-    const valid = values.filter((v): v is number => v !== null);
-    return valid.length > 0 ? Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10 : null;
+  // --- Desglose por tipo (Historia/Tarea/Bug/Epic/...), con lead/cycle time mediano (P50) por tipo ---
+  const medianOf = (values: (number | null)[]) => {
+    const valid = values.filter((v): v is number => v !== null).sort((a, b) => a - b);
+    if (valid.length === 0) return null;
+    const idx = (valid.length - 1) * 0.5;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    const v = valid[lo]! * (hi - idx) + valid[hi]! * (idx - lo);
+    return Math.round((lo === hi ? valid[lo]! : v) * 10) / 10;
   };
   const typeBreakdown = Object.entries(
     memberIssues.reduce((acc: Record<string, any[]>, i: any) => {
@@ -114,8 +119,8 @@ export default function ProjectMemberReport() {
       type,
       count: items.length,
       storyPoints: items.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0),
-      avgCycleTime: avgOf(items.map((i) => i.cycleTimeDays)),
-      avgLeadTime: avgOf(items.map((i) => i.leadTimeDays)),
+      medianCycleTime: medianOf(items.map((i) => i.cycleTimeDays)),
+      medianLeadTime: medianOf(items.map((i) => i.leadTimeDays)),
     }))
     .sort((a, b) => b.count - a.count);
 
@@ -174,7 +179,7 @@ export default function ProjectMemberReport() {
           <Kpi label={t("page.report.throughput")} value={`${throughputPerWeek?.toFixed(1) ?? "—"} /wk`} dimensionValue={dimensionValue("Throughput")} />
           <Kpi
             label={t("page.report.cycleTime")}
-            value={`${metrics?.cycleTime?.toFixed(1) ?? "—"}d`}
+            value={`${metrics?.cycleTimePercentiles?.p50?.toFixed(1) ?? "—"}d`}
             dimensionValue={dimensionValue("Cycle Time")}
             trendPct={trends?.cycleTime}
             trendLowerBetter
@@ -182,7 +187,7 @@ export default function ProjectMemberReport() {
           />
           <Kpi
             label={t("page.report.leadTime")}
-            value={`${metrics?.leadTime?.toFixed(1) ?? "—"}d`}
+            value={`${metrics?.leadTimePercentiles?.p50?.toFixed(1) ?? "—"}d`}
             dimensionValue={dimensionValue("Lead Time")}
             trendPct={trends?.leadTime}
             trendLowerBetter
@@ -262,8 +267,8 @@ export default function ProjectMemberReport() {
                     <td className="py-1 font-medium">{row.type}</td>
                     <td className="py-1 text-right">{row.count}</td>
                     <td className="py-1 text-right">{row.storyPoints || "—"}</td>
-                    <td className="py-1 text-right">{row.avgCycleTime !== null ? `${row.avgCycleTime}d` : "—"}</td>
-                    <td className="py-1 text-right">{row.avgLeadTime !== null ? `${row.avgLeadTime}d` : "—"}</td>
+                    <td className="py-1 text-right">{row.medianCycleTime !== null ? `${row.medianCycleTime}d` : "—"}</td>
+                    <td className="py-1 text-right">{row.medianLeadTime !== null ? `${row.medianLeadTime}d` : "—"}</td>
                   </tr>
                 ))}
               </tbody>

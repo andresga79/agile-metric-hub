@@ -188,6 +188,8 @@ export const GetProjectMembersResponseItem = zod.object({
   "storyPoints": zod.number(),
   "avgCycleTime": zod.number().describe('Mean time from first \"in progress\" transition to resolution (not from creation — that\'s avgLeadTime).'),
   "avgLeadTime": zod.number().describe('Mean time from creation to resolution, including backlog wait time.'),
+  "medianCycleTime": zod.number().nullable().describe('Median cycle time (days) of the member\'s resolved issues — the headline value.'),
+  "medianLeadTime": zod.number().nullable().describe('Median lead time (days) of the member\'s resolved issues.'),
   "issuesInProgress": zod.number().describe('Currently open issues assigned to this member, regardless of when they were created.'),
   "issuesBlocked": zod.number().describe('Of issuesInProgress, how many are blocked right now (status or Flagged field).')
 })
@@ -409,6 +411,7 @@ export const GetProjectKanbanMetricsResponse = zod.object({
   "totalIssues": zod.number().describe('Issues completed this week (throughput)'),
   "totalStoryPoints": zod.number(),
   "avgCycleTimeDays": zod.number().nullable(),
+  "medianCycleTimeDays": zod.number().nullable(),
   "reopenedCount": zod.number(),
   "breakdown": zod.object({
   "Story": zod.number(),
@@ -422,6 +425,7 @@ export const GetProjectKanbanMetricsResponse = zod.object({
   "totalWeeks": zod.number(),
   "avgThroughput": zod.number(),
   "avgCycleTimeDays": zod.number().nullable(),
+  "medianCycleTimeDays": zod.number().nullable(),
   "totalCompletedIssues": zod.number(),
   "totalCompletedStoryPoints": zod.number()
 })
@@ -454,6 +458,7 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "velocity": zod.number().describe('Story points completed in this sprint'),
   "reopenedCount": zod.number().describe('Number of issues reopened after being marked done'),
   "avgCycleTimeDays": zod.number().nullable(),
+  "medianCycleTimeDays": zod.number().nullable().describe('Median cycle time of the issues delivered in this sprint\'s window (same as Evolution and Métricas)'),
   "breakdown": zod.object({
   "Story": zod.number(),
   "Bug": zod.number(),
@@ -477,6 +482,7 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "avgVelocity": zod.number(),
   "avgCompletionRate": zod.number(),
   "avgCycleTimeDays": zod.number().nullable(),
+  "medianCycleTimeDays": zod.number().nullable().describe('Median cycle time over every issue delivered inside the closed sprints of the window'),
   "totalCompletedStoryPoints": zod.number(),
   "totalSprintsInPeriod": zod.number().describe('How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off.')
 })

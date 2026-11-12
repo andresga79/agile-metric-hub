@@ -187,8 +187,8 @@ export default function ProjectTeam() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono">{member.avgCycleTime.toFixed(1)}d</TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">{member.avgLeadTime.toFixed(1)}d</TableCell>
+                    <TableCell className="text-right font-mono">{member.medianCycleTime?.toFixed(1) ?? "—"}d</TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">{member.medianLeadTime?.toFixed(1) ?? "—"}d</TableCell>
                     <TableCell className={`text-right font-mono ${wipColorClass(member.issuesInProgress)}`}>{member.issuesInProgress}</TableCell>
                     <TableCell className="text-right font-mono">
                       {member.issuesBlocked > 0 ? (

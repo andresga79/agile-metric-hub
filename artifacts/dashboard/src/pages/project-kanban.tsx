@@ -42,7 +42,7 @@ export default function ProjectKanban() {
   const chartData = weeks.map((w) => ({
     label: w.weekLabel.split(" - ")[0] ?? w.weekLabel,
     throughput: w.totalIssues,
-    cycleTime: w.avgCycleTimeDays ? Number(w.avgCycleTimeDays.toFixed(1)) : null,
+    cycleTime: w.medianCycleTimeDays ? Number(w.medianCycleTimeDays.toFixed(1)) : null,
   }));
 
   return (
@@ -115,7 +115,7 @@ export default function ProjectKanban() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{formatDurationDays(summary?.avgCycleTimeDays ?? null)}</div>
+                <div className="text-3xl font-bold">{formatDurationDays(summary?.medianCycleTimeDays ?? null)}</div>
                 <p className="text-xs text-muted-foreground mt-1">{t('page.kanban.daysStartToDone')}</p>
               </CardContent>
             </Card>
@@ -187,7 +187,7 @@ export default function ProjectKanban() {
                       <TableRow key={w.weekStart} className="border-border hover:bg-accent/50">
                         <TableCell className="font-medium">{w.weekLabel}</TableCell>
                         <TableCell className="text-right font-mono font-bold">{w.totalIssues}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatDurationDays(w.avgCycleTimeDays)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatDurationDays(w.medianCycleTimeDays)}</TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {w.reopenedCount > 0 ? (
                             <span className="text-red-400">{w.reopenedCount}</span>

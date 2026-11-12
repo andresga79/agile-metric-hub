@@ -2,12 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, metricTargetsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireSectionView } from "../middleware/auth";
-import {
-  getJiraProject, getProjectBoardType, getJiraSprints, getSprintIssues, getJiraIssuesForWindow,
-  getEffectiveIssueType, isIssueDone, getDeliveryDate, getLeadTimeDays, getCycleTimeDays,
-  buildSprintVelocityBuckets, type JiraIssue, type JiraSprint,
-} from "../lib/jira";
-import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
+import { getJiraProject, getProjectBoardType, getJiraSprints, getSprintIssues } from "../lib/jira";
+import { sprintDeliveryTimes } from "../lib/sprint-delivery-times";
 import { getProjectSnapshots, computeSprintSnapshot } from "../lib/metric-snapshots";
 import { getEffectiveThresholds, type EffectiveThreshold } from "../lib/health-thresholds";
 import { isoWeek } from "../lib/iso-week";
@@ -22,44 +18,6 @@ interface EvolutionPeriod {
   cycleTimeMedian: number | null;
   throughput: number;
   qaRejectionRate: number | null;
-}
-
-/** Median lead/cycle time per sprint, by delivery date: each issue counts once, in the sprint
- *  whose [start, close) window it was delivered in — the same buckets as the Resumen chart and the
- *  Métricas tab, so Evolution's value for a sprint is that tab's P50. Keyed by sprint id. */
-async function sprintTimeMedians(
-  projectId: string,
-  sprints: JiraSprint[]
-): Promise<Map<number, { lead: number | null; cycle: number | null }>> {
-  const result = new Map<number, { lead: number | null; cycle: number | null }>();
-  if (sprints.length === 0) return result;
-  const oldestStart = Math.min(...sprints.map((s) => new Date(s.startDate!).getTime()));
-  const days = Math.ceil((Date.now() - oldestStart) / 86_400_000) + 1;
-
-  const [issues, allowedIssueTypes] = await Promise.all([
-    getJiraIssuesForWindow(projectId, days, { includeChangelog: true }),
-    getPortfolioAllowedIssueTypes(),
-  ]);
-  const unique = Array.from(new Map(issues.map((i) => [i.key, i])).values()).filter(
-    (i) => allowedIssueTypes.includes(getEffectiveIssueType(i)) && isIssueDone(i)
-  );
-  const withDates = await Promise.all(unique.map(async (i) => ({ issue: i, at: await getDeliveryDate(i) })));
-  const delivered = withDates.filter((r): r is { issue: JiraIssue; at: Date } => r.at !== null);
-  const resolvedMap = new Map(delivered.map((r) => [r.issue.id, r.at]));
-  const resolved = delivered.map((r) => r.issue);
-  const leadCycle = new Map(
-    await Promise.all(
-      resolved.map(async (i) => [i.id, { lead: await getLeadTimeDays(i), cycle: await getCycleTimeDays(i) }] as const)
-    )
-  );
-
-  const buckets = buildSprintVelocityBuckets(resolved, resolvedMap, sprints, leadCycle);
-  const byName = new Map(buckets.map((b) => [b.label, b]));
-  for (const s of sprints) {
-    const b = byName.get(s.name);
-    result.set(s.id, { lead: b?.medianLeadTime ?? null, cycle: b?.medianCycleTime ?? null });
-  }
-  return result;
 }
 
 // How many recent sprints the evolution chart shows, for Scrum projects only. getJiraSprints
@@ -84,7 +42,7 @@ async function buildSprintPeriods(projectId: string): Promise<EvolutionPeriod[]>
     .slice(0, MAX_EVOLUTION_SPRINTS)
     .reverse();
 
-  const times = await sprintTimeMedians(projectId, ordered);
+  const { perSprint: times } = await sprintDeliveryTimes(projectId, ordered);
   return Promise.all(
     ordered.map(async (sprint) => {
       const issues = await getSprintIssues(sprint.id);

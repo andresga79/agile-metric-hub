@@ -11,6 +11,8 @@ export interface KanbanMetricsSummary {
   avgThroughput: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /** @nullable */
+  medianCycleTimeDays: number | null;
   totalCompletedIssues: number;
   totalCompletedStoryPoints: number;
 }

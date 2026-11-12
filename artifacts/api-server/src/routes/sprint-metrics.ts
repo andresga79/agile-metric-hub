@@ -23,6 +23,7 @@ import {
 } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
+import { sprintDeliveryTimes } from "../lib/sprint-delivery-times";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,10 @@ export interface SprintMetric {
   velocity: number;
   reopenedCount: number;
   avgCycleTimeDays: number | null;
+  /** Median cycle time of the issues DELIVERED in this sprint's window (sprintDeliveryTimes):
+   *  same number as Evolution and the Métricas tab. avgCycleTimeDays (mean over the sprint's own
+   *  issues) stays for compatibility. Null until the route fills it in. */
+  medianCycleTimeDays: number | null;
   breakdown: {
     Story: number;
     Bug: number;
@@ -80,6 +85,8 @@ interface SprintMetricsResponse {
     avgVelocity: number;
     avgCompletionRate: number;
     avgCycleTimeDays: number | null;
+    /** Median cycle time over every issue delivered inside the closed sprints of the window. */
+    medianCycleTimeDays: number | null;
     totalCompletedStoryPoints: number;
     // How many sprints actually fell inside the period, before capping to maxSprints below —
     // lets the UI say "showing N of M" instead of silently dropping older sprints.
@@ -178,6 +185,7 @@ export async function computeSprintMetrics(
     velocity: doneSp,
     reopenedCount,
     avgCycleTimeDays,
+    medianCycleTimeDays: null,
     breakdown,
     carryoverCount,
     carryoverStoryPoints,
@@ -240,19 +248,26 @@ router.get(
 
     if (filteredSprints.length === 0) {
       res.json({ sprints: [], summary: {
-        totalSprints: 0, avgVelocity: 0, avgCompletionRate: 0, avgCycleTimeDays: null,
+        totalSprints: 0, avgVelocity: 0, avgCompletionRate: 0, avgCycleTimeDays: null, medianCycleTimeDays: null,
         totalCompletedStoryPoints: 0, totalSprintsInPeriod: sprintsInPeriod.length,
       } });
       return;
     }
 
     const allowedIssueTypes = await getPortfolioAllowedIssueTypes();
-    const sprintMetrics = await Promise.all(
-      filteredSprints.map(async (s) => {
-        const issues = await getSprintIssues(s.id);
-        return computeSprintMetrics(s, issues, allowedIssueTypes, sprints);
-      })
-    );
+    const [scopeMetrics, deliveryTimes] = await Promise.all([
+      Promise.all(
+        filteredSprints.map(async (s) => {
+          const issues = await getSprintIssues(s.id);
+          return computeSprintMetrics(s, issues, allowedIssueTypes, sprints);
+        })
+      ),
+      sprintDeliveryTimes(projectId, filteredSprints),
+    ]);
+    const sprintMetrics = scopeMetrics.map((m) => ({
+      ...m,
+      medianCycleTimeDays: deliveryTimes.perSprint.get(m.sprintId)?.cycle ?? null,
+    }));
 
     // Averages only reflect CLOSED sprints — an active sprint is partway through its timebox by
     // definition, so its still-climbing completion/velocity numbers would otherwise drag the
@@ -276,6 +291,7 @@ router.get(
           ? completionRates.reduce((a, b) => a + b, 0) / completionRates.length
           : 0,
         avgCycleTimeDays,
+        medianCycleTimeDays: deliveryTimes.closedPooled.cycle,
         totalCompletedStoryPoints: closedMetrics.reduce((sum, s) => sum + s.completedStoryPoints, 0),
         totalSprintsInPeriod: sprintsInPeriod.length,
       },

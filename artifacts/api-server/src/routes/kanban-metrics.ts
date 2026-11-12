@@ -19,6 +19,7 @@ import {
 } from "../lib/portfolio-metric-settings";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import { isoWeekStart } from "../lib/iso-week";
+import { median } from "../lib/stats";
 
 const router: IRouter = Router();
 const KANBAN_EXCLUDED_ISSUE_TYPES_SET: Set<string> = new Set(KANBAN_EXCLUDED_ISSUE_TYPES);
@@ -29,6 +30,8 @@ interface WeekMetric {
   totalIssues: number;
   totalStoryPoints: number;
   avgCycleTimeDays: number | null;
+  /** Median cycle time of the week's delivered issues (headline value; mean kept for compatibility). */
+  medianCycleTimeDays: number | null;
   reopenedCount: number;
   breakdown: {
     Story: number;
@@ -45,6 +48,7 @@ interface KanbanMetricsResponse {
     totalWeeks: number;
     avgThroughput: number;
     avgCycleTimeDays: number | null;
+    medianCycleTimeDays: number | null;
     totalCompletedIssues: number;
     totalCompletedStoryPoints: number;
   };
@@ -109,6 +113,7 @@ router.get(
         totalIssues: 0,
         totalStoryPoints: 0,
         avgCycleTimeDays: null,
+        medianCycleTimeDays: null,
         reopenedCount: 0,
         breakdown: { Story: 0, Bug: 0, Task: 0, Epic: 0, Other: 0 },
       });
@@ -122,6 +127,7 @@ router.get(
           totalWeeks: emptyWeeks.length,
           avgThroughput: 0,
           avgCycleTimeDays: null,
+          medianCycleTimeDays: null,
           totalCompletedIssues: 0,
           totalCompletedStoryPoints: 0,
         },
@@ -191,6 +197,7 @@ router.get(
           totalIssues: weekIssues.length,
           totalStoryPoints: totalSp,
           avgCycleTimeDays,
+          medianCycleTimeDays: median(validCycleTimes),
           reopenedCount,
           breakdown,
         };
@@ -201,6 +208,7 @@ router.get(
           totalIssues: weekIssues.length,
           totalStoryPoints: totalSp,
           avgCycleTimeDays,
+          medianCycleTimeDays: median(validCycleTimes),
           reopenedCount,
           breakdown,
         });
@@ -225,6 +233,7 @@ router.get(
           ? throughputs.reduce((a, b) => a + b, 0) / throughputs.length
           : 0,
         avgCycleTimeDays,
+        medianCycleTimeDays: median(allCycleTimes),
         totalCompletedIssues: recent.reduce((sum, w) => sum + w.totalIssues, 0),
         totalCompletedStoryPoints: recent.reduce((sum, w) => sum + w.totalStoryPoints, 0),
       },

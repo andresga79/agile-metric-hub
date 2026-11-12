@@ -30,6 +30,11 @@ export interface SprintMetric {
   reopenedCount: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /**
+     * Median cycle time of the issues delivered in this sprint's window (same as Evolution and Métricas)
+     * @nullable
+     */
+  medianCycleTimeDays: number | null;
   breakdown: IssueTypeBreakdown;
   /** Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one. */
   carryoverCount: number;

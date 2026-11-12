@@ -19,6 +19,16 @@ export interface MemberStats {
   avgCycleTime: number;
   /** Mean time from creation to resolution, including backlog wait time. */
   avgLeadTime: number;
+  /**
+     * Median cycle time (days) of the member's resolved issues — the headline value.
+     * @nullable
+     */
+  medianCycleTime: number | null;
+  /**
+     * Median lead time (days) of the member's resolved issues.
+     * @nullable
+     */
+  medianLeadTime: number | null;
   /** Currently open issues assigned to this member, regardless of when they were created. */
   issuesInProgress: number;
   /** Of issuesInProgress, how many are blocked right now (status or Flagged field). */

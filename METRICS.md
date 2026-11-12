@@ -145,6 +145,19 @@ Población: issues de los tipos habilitados entregados dentro de la ventana (la 
 tarjetas del Resumen). El v2 en Scrum usa otra población (issues del sprint cerrados al cierre),
 así que sus números pueden no coincidir con los de esta pestaña.
 
+### Qué estadística se muestra (regla de todo el sitio, 2026-11-12)
+- **P50 (mediana)** es el número principal de lead/cycle time en todas las pantallas y lo que se
+  compara contra la meta: tarjetas del Resumen, Reporte y Reporte por persona (con la tendencia
+  "vs período anterior" también en P50), Sprints, Kanban semanal, Equipo, Analíticas, Evolución,
+  semáforo, Health y Resumen Ejecutivo.
+- **P85** es el número para comprometer plazos ("85% ≤ X" en las tarjetas y en Métricas).
+- **Promedio** queda como dato secundario: si se separa mucho del P50 hay casos extremos
+  (tabla de issues por encima del P95 en Métricas). Los campos `avg*` de la API se mantienen por
+  compatibilidad; los nuevos `median*` son los que muestra el frontend.
+- **Por sprint**, lead/cycle time se calculan por fecha de entrega (`sprintDeliveryTimes`,
+  `lib/sprint-delivery-times.ts`): cada issue en el sprint en que se entregó. Sprints
+  (`medianCycleTimeDays`), Evolución y Métricas muestran el mismo número para un sprint.
+
 ### Pestaña Métricas (reemplaza a Health en las pestañas)
 `/projects/:id/metrics`, mismo permiso que Health (Health sigue accesible por URL). Todo sale de
 `GET /projects/:id/metrics/:period`: promedio + P50/P85/P95 de lead y cycle time del período;

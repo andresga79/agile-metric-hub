@@ -287,6 +287,16 @@ export interface MemberStats {
   avgCycleTime: number;
   /** Mean time from creation to resolution, including backlog wait time. */
   avgLeadTime: number;
+  /**
+     * Median cycle time (days) of the member's resolved issues — the headline value.
+     * @nullable
+     */
+  medianCycleTime: number | null;
+  /**
+     * Median lead time (days) of the member's resolved issues.
+     * @nullable
+     */
+  medianLeadTime: number | null;
   /** Currently open issues assigned to this member, regardless of when they were created. */
   issuesInProgress: number;
   /** Of issuesInProgress, how many are blocked right now (status or Flagged field). */
@@ -926,6 +936,11 @@ export interface SprintMetric {
   reopenedCount: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /**
+     * Median cycle time of the issues delivered in this sprint's window (same as Evolution and Métricas)
+     * @nullable
+     */
+  medianCycleTimeDays: number | null;
   breakdown: IssueTypeBreakdown;
   /** Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one. */
   carryoverCount: number;
@@ -959,6 +974,11 @@ export interface SprintMetricsSummary {
   avgCompletionRate: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /**
+     * Median cycle time over every issue delivered inside the closed sprints of the window
+     * @nullable
+     */
+  medianCycleTimeDays: number | null;
   totalCompletedStoryPoints: number;
   /** How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off. */
   totalSprintsInPeriod: number;
@@ -1195,6 +1215,8 @@ export interface WeekMetric {
   totalStoryPoints: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /** @nullable */
+  medianCycleTimeDays: number | null;
   reopenedCount: number;
   breakdown: IssueTypeBreakdown;
 }
@@ -1204,6 +1226,8 @@ export interface KanbanMetricsSummary {
   avgThroughput: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /** @nullable */
+  medianCycleTimeDays: number | null;
   totalCompletedIssues: number;
   totalCompletedStoryPoints: number;
 }

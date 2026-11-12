@@ -1246,7 +1246,7 @@ components:
 
     MemberStats:
       type: object
-      required: [accountId, displayName, issuesResolved, issuesResolvedWithPoints, storyPoints, avgCycleTime, avgLeadTime, issuesInProgress, issuesBlocked]
+      required: [accountId, displayName, issuesResolved, issuesResolvedWithPoints, storyPoints, avgCycleTime, avgLeadTime, medianCycleTime, medianLeadTime, issuesInProgress, issuesBlocked]
       properties:
         accountId:
           type: string
@@ -1267,6 +1267,12 @@ components:
         avgLeadTime:
           type: number
           description: Mean time from creation to resolution, including backlog wait time.
+        medianCycleTime:
+          type: ["number", "null"]
+          description: Median cycle time (days) of the member's resolved issues — the headline value.
+        medianLeadTime:
+          type: ["number", "null"]
+          description: Median lead time (days) of the member's resolved issues.
         issuesInProgress:
           type: integer
           description: Currently open issues assigned to this member, regardless of when they were created.
@@ -2220,7 +2226,7 @@ components:
       required:
         [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
          completedIssues, completedStoryPoints, completionRate, completionBasis, velocity,
-         reopenedCount, avgCycleTimeDays, breakdown, carryoverCount, carryoverStoryPoints,
+         reopenedCount, avgCycleTimeDays, medianCycleTimeDays, breakdown, carryoverCount, carryoverStoryPoints,
          carryoverRate, addedAfterPlanningCount, addedAfterPlanningStoryPoints, addedAfterPlanningKeys,
          closedAtSprintEndIssues, closedAtSprintEndStoryPoints, closedAtSprintEndRate]
       properties:
@@ -2257,6 +2263,9 @@ components:
           description: Number of issues reopened after being marked done
         avgCycleTimeDays:
           type: ["number", "null"]
+        medianCycleTimeDays:
+          type: ["number", "null"]
+          description: Median cycle time of the issues delivered in this sprint's window (same as Evolution and Métricas)
         breakdown:
           $ref: "#/components/schemas/IssueTypeBreakdown"
         carryoverCount:
@@ -2312,7 +2321,7 @@ components:
 
     SprintMetricsSummary:
       type: object
-      required: [totalSprints, avgVelocity, avgCompletionRate, avgCycleTimeDays, totalCompletedStoryPoints, totalSprintsInPeriod]
+      required: [totalSprints, avgVelocity, avgCompletionRate, avgCycleTimeDays, medianCycleTimeDays, totalCompletedStoryPoints, totalSprintsInPeriod]
       properties:
         totalSprints:
           type: integer
@@ -2323,6 +2332,9 @@ components:
           type: number
         avgCycleTimeDays:
           type: ["number", "null"]
+        medianCycleTimeDays:
+          type: ["number", "null"]
+          description: Median cycle time over every issue delivered inside the closed sprints of the window
         totalCompletedStoryPoints:
           type: number
         totalSprintsInPeriod:
@@ -2343,7 +2355,7 @@ components:
     WeekMetric:
       type: object
       required:
-        [weekStart, weekLabel, totalIssues, totalStoryPoints, avgCycleTimeDays,
+        [weekStart, weekLabel, totalIssues, totalStoryPoints, avgCycleTimeDays, medianCycleTimeDays,
          reopenedCount, breakdown]
       properties:
         weekStart:
@@ -2360,6 +2372,8 @@ components:
           type: number
         avgCycleTimeDays:
           type: ["number", "null"]
+        medianCycleTimeDays:
+          type: ["number", "null"]
         reopenedCount:
           type: integer
         breakdown:
@@ -2368,13 +2382,15 @@ components:
     KanbanMetricsSummary:
       type: object
       required:
-        [totalWeeks, avgThroughput, avgCycleTimeDays, totalCompletedIssues, totalCompletedStoryPoints]
+        [totalWeeks, avgThroughput, avgCycleTimeDays, medianCycleTimeDays, totalCompletedIssues, totalCompletedStoryPoints]
       properties:
         totalWeeks:
           type: integer
         avgThroughput:
           type: number
         avgCycleTimeDays:
+          type: ["number", "null"]
+        medianCycleTimeDays:
           type: ["number", "null"]
         totalCompletedIssues:
           type: integer

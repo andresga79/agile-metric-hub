@@ -13,6 +13,11 @@ export interface SprintMetricsSummary {
   avgCompletionRate: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /**
+     * Median cycle time over every issue delivered inside the closed sprints of the window
+     * @nullable
+     */
+  medianCycleTimeDays: number | null;
   totalCompletedStoryPoints: number;
   /** How many sprints actually fall within the selected period, before capping to the display limit. Higher than `sprints.length` means older sprints were cut off. */
   totalSprintsInPeriod: number;

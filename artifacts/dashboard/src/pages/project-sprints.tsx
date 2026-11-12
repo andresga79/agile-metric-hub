@@ -251,7 +251,7 @@ export default function ProjectSprints() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{days(summary?.avgCycleTimeDays ?? null)}</div>
+                <div className="text-3xl font-bold">{days(summary?.medianCycleTimeDays ?? null)}</div>
                 <p className="text-xs text-muted-foreground mt-1">{t('page.sprints.daysStartToDone')}</p>
               </CardContent>
             </Card>
@@ -478,7 +478,7 @@ export default function ProjectSprints() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs">{days(s.avgCycleTimeDays)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{days(s.medianCycleTimeDays)}</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
                           <span className="text-blue-400">{s.breakdown.Story}</span>S /
                           <span className="text-red-400">{s.breakdown.Bug}</span>B /

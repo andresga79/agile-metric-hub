@@ -157,7 +157,7 @@ export default function ProjectReport() {
           <Kpi label={t("page.report.throughput")} value={`${throughputPerWeek?.toFixed(1) ?? "—"} /wk`} dimensionValue={dimensionValue("Throughput")} />
           <Kpi
             label={t("page.report.cycleTime")}
-            value={`${metrics?.cycleTime?.toFixed(1) ?? "—"}d`}
+            value={`${metrics?.cycleTimePercentiles?.p50?.toFixed(1) ?? "—"}d`}
             dimensionValue={dimensionValue("Cycle Time")}
             trendPct={trends?.cycleTime}
             trendLowerBetter
@@ -165,7 +165,7 @@ export default function ProjectReport() {
           />
           <Kpi
             label={t("page.report.leadTime")}
-            value={`${metrics?.leadTime?.toFixed(1) ?? "—"}d`}
+            value={`${metrics?.leadTimePercentiles?.p50?.toFixed(1) ?? "—"}d`}
             dimensionValue={dimensionValue("Lead Time")}
             trendPct={trends?.leadTime}
             trendLowerBetter
@@ -192,7 +192,7 @@ export default function ProjectReport() {
               </h3>
               {s.state === "closed" ? (
                 <p className="text-sm text-muted-foreground">
-                  {s.completedStoryPoints} de {s.totalStoryPoints} SP completados ({s.completionRate.toFixed(1)}%), cycle time {s.avgCycleTimeDays?.toFixed(1) ?? "—"}d
+                  {s.completedStoryPoints} de {s.totalStoryPoints} SP completados ({s.completionRate.toFixed(1)}%), cycle time P50 {s.medianCycleTimeDays?.toFixed(1) ?? "—"}d
                   {s.reopenedCount > 0 ? `, ${s.reopenedCount} reabierto(s)` : ""}
                   {s.carryoverCount > 0 ? `, carryover de ${s.carryoverCount} issues (${s.carryoverStoryPoints} SP) al sprint siguiente` : ""}.
                 </p>
@@ -331,7 +331,7 @@ export default function ProjectReport() {
                     <td className="py-1 font-medium">{s.sprintName}</td>
                     <td className="py-1 text-right">{s.completedStoryPoints}/{s.totalStoryPoints}</td>
                     <td className="py-1 text-right">{s.completionRate.toFixed(1)}%</td>
-                    <td className="py-1 text-right">{s.avgCycleTimeDays?.toFixed(1) ?? "—"}d</td>
+                    <td className="py-1 text-right">{s.medianCycleTimeDays?.toFixed(1) ?? "—"}d</td>
                     <td className="py-1 text-right">{s.reopenedCount}</td>
                     <td className="py-1 text-right">{s.carryoverCount}</td>
                   </tr>
@@ -369,7 +369,7 @@ export default function ProjectReport() {
                   <tr key={m.accountId} className="border-b border-border/50">
                     <td className="py-1 font-medium">{m.displayName}</td>
                     <td className="py-1 text-right">{m.issuesResolved}</td>
-                    <td className="py-1 text-right">{m.avgCycleTime?.toFixed(1) ?? "—"}d</td>
+                    <td className="py-1 text-right">{m.medianCycleTime?.toFixed(1) ?? "—"}d</td>
                     <td className="py-1 text-right">{m.storyPoints ?? "—"}</td>
                   </tr>
                 ))}

@@ -99,8 +99,10 @@ export default function ProjectDetail() {
 
   const metricInfo = (metric: string) => {
     const isDurationMetric = metric === "leadTime" || metric === "cycleTime";
-    const rawActual = metric === "leadTime" ? metrics?.leadTime
-      : metric === "cycleTime" ? metrics?.cycleTime
+    // Lead/cycle time headline = P50, like the semaphore, Evolution and Métricas: one old ticket
+    // moved the mean by weeks while the typical issue's time didn't change. Mean shown below it.
+    const rawActual = metric === "leadTime" ? metrics?.leadTimePercentiles?.p50
+      : metric === "cycleTime" ? metrics?.cycleTimePercentiles?.p50
       : metric === "throughput" ? metrics?.throughput
       : metrics?.velocity;
     const actual = isDurationMetric && noCompletedWork ? null : rawActual;
@@ -117,8 +119,8 @@ export default function ProjectDetail() {
         ? (actual <= threshold.good ? "good" : actual <= threshold.warning ? "warning" : "critical")
         : (actual >= threshold.good ? "good" : actual >= threshold.warning ? "warning" : "critical")
       : null;
-    const label = metric === "leadTime" ? t('page.detail.leadTime')
-      : metric === "cycleTime" ? t('page.detail.cycleTime')
+    const label = metric === "leadTime" ? t('page.detail.leadTimeP50')
+      : metric === "cycleTime" ? t('page.detail.cycleTimeP50')
       : metric === "throughput" ? t('page.detail.throughput')
       : t('page.detail.velocity');
     const unit = metric === "leadTime" || metric === "cycleTime" ? "d" : "";
@@ -196,6 +198,7 @@ export default function ProjectDetail() {
           trend={null}
           thresholdValue={getThresholdValue("leadTime")}
           percentiles={noCompletedWork ? null : metrics?.leadTimePercentiles ?? null}
+          mean={noCompletedWork ? null : metrics?.leadTime ?? null}
         />
 
         <MetricCard
@@ -204,6 +207,7 @@ export default function ProjectDetail() {
           trend={null}
           thresholdValue={getThresholdValue("cycleTime")}
           percentiles={noCompletedWork ? null : metrics?.cycleTimePercentiles ?? null}
+          mean={noCompletedWork ? null : metrics?.cycleTime ?? null}
         />
 
         <MetricCard
@@ -348,6 +352,7 @@ function MetricCard({
   percentiles,
   sparklineData,
   thresholdValue,
+  mean,
 }: {
   metricKey: string;
   info: { actual: number | undefined | null; targetVal: number | null; onTrack: boolean | null; thresholdStatus: ThresholdStatus; label: string; unit: string };
@@ -355,6 +360,7 @@ function MetricCard({
   percentiles: { p50: number; p75: number; p85: number; p95: number } | null;
   sparklineData?: { label: string; value: number }[];
   thresholdValue?: number | null;
+  mean?: number | null;
 }) {
   const { t } = useTranslation();
 
@@ -390,7 +396,7 @@ function MetricCard({
         {trend && <div className="mt-1">{trend}</div>}
         {(metricKey === "leadTime" || metricKey === "cycleTime") && percentiles && thresholdValue && (
           <div className="mt-2 text-xs text-muted-foreground">
-            P50 <strong className="text-foreground">{formatDurationDays(percentiles.p50)}</strong> · P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong> ·{" "}
+            {t('page.detail.p85Commit')} <strong className="text-foreground">{formatDurationDays(percentiles.p85)}</strong> · {t('page.detail.meanShort')} <strong className="text-foreground">{formatDurationDays(mean ?? null)}</strong> · P95 <strong className="text-foreground">{formatDurationDays(percentiles.p95)}</strong> ·{" "}
             <span className="inline-flex items-center gap-1 text-sky-400">
               <Target size={11} /> Meta <strong>{thresholdValue}d</strong>
             </span>

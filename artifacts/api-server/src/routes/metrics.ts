@@ -30,7 +30,7 @@ import {
   type ProjectBoardType,
 } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
-import { percentile } from "../lib/stats";
+import { median, percentile } from "../lib/stats";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { db, portfolioCacheTable } from "@workspace/db";
@@ -285,6 +285,14 @@ async function computeMetrics(
   };
 }
 
+interface PreviousPeriodSummary {
+  resolvedCount: number;
+  avgCycleTime: number;
+  avgLeadTime: number;
+  medianCycleTime: number;
+  medianLeadTime: number;
+}
+
 // Summary for the previous period of equal length (e.g. the prior 30 days for "1m"), used to
 // show "vs previous period" trend badges on the report's KPI strip. Deliberately narrower than
 // computeMetrics() — no velocity (sprint-count-relative, not a report KPI), no velocityByWeek/
@@ -294,7 +302,7 @@ async function computePreviousPeriodSummary(
   periodDays: number,
   allowedIssueTypes: string[],
   assigneeAccountId: string | null
-): Promise<{ resolvedCount: number; avgCycleTime: number; avgLeadTime: number }> {
+): Promise<PreviousPeriodSummary> {
   const prevIssues = await getResolvedJiraIssuesInRange(projectId, periodDays * 2, periodDays, {
     includeChangelog: true,
   }).catch(() => [] as JiraIssue[]);
@@ -327,6 +335,8 @@ async function computePreviousPeriodSummary(
     resolvedCount: filtered.length,
     avgCycleTime: avg(cycleTimes),
     avgLeadTime: avg(leadTimes),
+    medianCycleTime: percentile(cycleTimes, 0.5) ?? 0,
+    medianLeadTime: percentile(leadTimes, 0.5) ?? 0,
   };
 }
 
@@ -485,14 +495,16 @@ router.get(
     // fixed-length 1m/3m periods, not "Ns sprints" windows (whose previous window has no fixed
     // day-length to mirror).
     const compareTo = req.query.compareTo === "true";
-    let previousPeriod: { resolvedCount: number; avgCycleTime: number; avgLeadTime: number } | null = null;
+    let previousPeriod: PreviousPeriodSummary | null = null;
     let trends: { resolvedCount: number; cycleTime: number; leadTime: number } | null = null;
     if (compareTo && sprintWindowCount === null) {
       previousPeriod = await computePreviousPeriodSummary(projectId, periodDays, allowedIssueTypes, assigneeAccountId);
       trends = {
         resolvedCount: calculateTrend(metrics.resolvedCount, previousPeriod.resolvedCount),
-        cycleTime: calculateTrend(metrics.cycleTime, previousPeriod.avgCycleTime),
-        leadTime: calculateTrend(metrics.leadTime, previousPeriod.avgLeadTime),
+        // P50 vs P50: the KPI strip headlines the median (one extreme ticket moved the mean's
+        // trend by tens of percent while the typical issue's time didn't change).
+        cycleTime: calculateTrend(metrics.cycleTimePercentiles.p50, previousPeriod.medianCycleTime),
+        leadTime: calculateTrend(metrics.leadTimePercentiles.p50, previousPeriod.medianLeadTime),
       };
     }
 
@@ -661,6 +673,8 @@ router.get(
       storyPoints: Math.round(m.storyPoints * 10) / 10,
       avgCycleTime: avg(m.cycleTimes),
       avgLeadTime: avg(m.leadTimes),
+      medianCycleTime: median(m.cycleTimes),
+      medianLeadTime: median(m.leadTimes),
       issuesInProgress: m.inProgress,
       issuesBlocked: m.blocked,
     }));

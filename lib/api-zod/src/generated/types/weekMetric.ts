@@ -17,6 +17,8 @@ export interface WeekMetric {
   totalStoryPoints: number;
   /** @nullable */
   avgCycleTimeDays: number | null;
+  /** @nullable */
+  medianCycleTimeDays: number | null;
   reopenedCount: number;
   breakdown: IssueTypeBreakdown;
 }

@@ -238,8 +238,8 @@ export default function ProjectAnalytics() {
                 <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold">{data.flowEfficiency}%</span>
               </div>
               <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                <span>{t('page.analytics.avgCycle')} <strong className="text-foreground">{formatDurationDays(data.avgCycleTime)}</strong></span>
-                <span>{t('page.analytics.avgLead')} <strong className="text-foreground">{formatDurationDays(data.avgLeadTime)}</strong></span>
+                <span>{t('page.analytics.avgCycle')} <strong className="text-foreground">{formatDurationDays(data.cycleTimeP50)}</strong></span>
+                <span>{t('page.analytics.avgLead')} <strong className="text-foreground">{formatDurationDays(data.leadTimeP50)}</strong></span>
               </div>
             </div>
           ) : (
