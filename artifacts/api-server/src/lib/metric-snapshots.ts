@@ -19,6 +19,7 @@ import {
 } from "./jira";
 import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { isoWeekStart } from "./iso-week";
+import { median } from "./stats";
 
 interface WeekAccumulator {
   leadTimes: number[];
@@ -32,10 +33,10 @@ function emptyAccumulator(): WeekAccumulator {
   return { leadTimes: [], cycleTimes: [], throughput: 0, qaEntries: 0, qaRejections: 0 };
 }
 
-function avg(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
+// Weekly lead/cycle time is the MEDIAN (stored in the lead_time_avg / cycle_time_avg columns, kept
+// for compatibility): Evolution compares it with the Health "good" threshold, which the semaphore
+// and Health judge against the median, and a mean jumped on any week that closed old tickets.
+// Rows written before 2026-11-12 hold means until the snapshot backfill is re-run.
 
 /** Computes one snapshot row per ISO week represented in `issues`, covering
  *  Lead Time, Cycle Time, Throughput (all filtered to the portfolio's allowed
@@ -114,8 +115,8 @@ export async function computeWeeklySnapshots(
   return Array.from(weeks.entries())
     .map(([weekStart, acc]) => ({
       weekStart,
-      leadTimeAvg: avg(acc.leadTimes),
-      cycleTimeAvg: avg(acc.cycleTimes),
+      leadTimeAvg: median(acc.leadTimes),
+      cycleTimeAvg: median(acc.cycleTimes),
       throughput: acc.throughput,
       // Entries and rejections can land in different weeks near the window edge
       // (a rejection whose original QA entry fell just outside the 90-day cutoff),
@@ -247,7 +248,7 @@ export async function backfillWeeklySnapshots(
   return { weeksUpdated };
 }
 
-/** Computes Lead Time, Cycle Time, Throughput and QA rejection rate for a single sprint's
+/** Computes Throughput and QA rejection rate for a single sprint's
  *  issue set - the sprint-bucketed sibling of computeWeeklySnapshots' per-week accumulator.
  *  No date-window bucketing needed here: `issues` already comes scoped to one sprint (via
  *  `sprint = {sprintId}` JQL), so every issue's full history counts toward this one row. */
@@ -255,7 +256,7 @@ export async function computeSprintSnapshot(
   projectId: string,
   issues: JiraIssue[],
   sprint: JiraSprint
-): Promise<{ leadTimeAvg: number | null; cycleTimeAvg: number | null; throughput: number; qaRejectionRate: number | null }> {
+): Promise<{ throughput: number; qaRejectionRate: number | null }> {
   const [allowedIssueTypes, qaStatusSet, devStatusSet] = await Promise.all([
     getPortfolioAllowedIssueTypes(),
     getQaStatusSet(),
@@ -267,26 +268,18 @@ export async function computeSprintSnapshot(
   );
   // Same "done in Jira now" rule as computeSprintMetrics, so Evolution's per-sprint throughput
   // matches the Sprints tab. Cancellations / backlog cleanups aren't delivery: same rule as every
-  // other throughput (isNonDeliveryClosure), and their lead/cycle time is already null.
+  // other throughput (isNonDeliveryClosure).
+  // Lead/cycle time are NOT computed here: sprint membership credits an issue to every sprint it
+  // passed through (OLP-3330, 427 d, counted in both 116 and 117). Evolution takes them from the
+  // delivery-date buckets instead (buildSprintVelocityBuckets), same as Resumen and Métricas.
   const doneIssues = await withoutNonDeliveryClosures(
     filteredIssues.filter((issue) => isIssueDone(issue))
-  );
-
-  const resolvedIssues = await Promise.all(
-    doneIssues.map(async (issue) => ({
-      leadTime: await getLeadTimeDays(issue),
-      cycleTime: await getCycleTimeDays(issue),
-    }))
   );
 
   const acc = emptyAccumulator();
   // Throughput counts every issue done at close, even one reopened since (its current resolution
   // date is gone, but the sprint still completed it) - matching computeSprintMetrics.
   acc.throughput = doneIssues.length;
-  for (const { leadTime, cycleTime } of resolvedIssues) {
-    if (leadTime !== null) acc.leadTimes.push(leadTime);
-    if (cycleTime !== null) acc.cycleTimes.push(cycleTime);
-  }
 
   // QA rejection rate uses the full (unfiltered) issue set, mirroring computeWeeklySnapshots.
   for (const issue of issues) {
@@ -304,8 +297,6 @@ export async function computeSprintSnapshot(
   }
 
   return {
-    leadTimeAvg: avg(acc.leadTimes),
-    cycleTimeAvg: avg(acc.cycleTimes),
     throughput: acc.throughput,
     qaRejectionRate: acc.qaEntries > 0 ? Math.min(100, Math.round((acc.qaRejections / acc.qaEntries) * 1000) / 10) : null,
   };

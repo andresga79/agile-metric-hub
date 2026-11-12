@@ -303,8 +303,8 @@
   "page.evolution.noData": "Not enough data for this chart.",
   "page.evolution.target": "Target",
   "page.evolution.noTarget": "No target configured",
-  "page.evolution.leadTime": "Lead Time",
-  "page.evolution.cycleTime": "Cycle Time",
+  "page.evolution.leadTime": "Lead Time (median)",
+  "page.evolution.cycleTime": "Cycle Time (median)",
   "page.evolution.throughput": "Throughput",
   "page.evolution.qaRejectionRate": "QA Rejection Rate",
 

@@ -1105,8 +1105,8 @@ export const GetProjectEvolutionResponse = zod.object({
   "rangeLabel": zod.string().nullable().describe('Full date range for weekly (Kanban) rows, e.g. \"Ago 10 - Ago 16\" - same phrasing as the Kanban Semanal breakdown table. Null for sprint rows, whose full name\/dates aren\'t a fixed calendar range.'),
   "start": zod.coerce.date().describe('ISO date this period starts (sprint start date, or the Monday of the week)'),
   "isActive": zod.boolean().describe('True for the currently in-progress sprint (always false for weekly\/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final'),
-  "leadTimeAvg": zod.number().nullable(),
-  "cycleTimeAvg": zod.number().nullable(),
+  "leadTimeMedian": zod.number().nullable().describe('Median lead time (days) of issues delivered in this period (by delivery date, each issue counted once)'),
+  "cycleTimeMedian": zod.number().nullable().describe('Median cycle time (days) of issues delivered in this period'),
   "throughput": zod.number(),
   "qaRejectionRate": zod.number().nullable().describe('Percentage of issues entering QA that were rejected back, or null if none entered QA in this period')
 })),

@@ -303,8 +303,8 @@
   "page.evolution.noData": "Sin datos suficientes para este gráfico.",
   "page.evolution.target": "Meta",
   "page.evolution.noTarget": "Sin meta configurada",
-  "page.evolution.leadTime": "Lead Time",
-  "page.evolution.cycleTime": "Cycle Time",
+  "page.evolution.leadTime": "Lead Time (mediana)",
+  "page.evolution.cycleTime": "Cycle Time (mediana)",
   "page.evolution.throughput": "Throughput",
   "page.evolution.qaRejectionRate": "Tasa de Rechazo QA",
 

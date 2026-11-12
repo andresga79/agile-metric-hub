@@ -1236,10 +1236,16 @@ export interface EvolutionPeriod {
   start: string;
   /** True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final */
   isActive: boolean;
-  /** @nullable */
-  leadTimeAvg: number | null;
-  /** @nullable */
-  cycleTimeAvg: number | null;
+  /**
+     * Median lead time (days) of issues delivered in this period (by delivery date, each issue counted once)
+     * @nullable
+     */
+  leadTimeMedian: number | null;
+  /**
+     * Median cycle time (days) of issues delivered in this period
+     * @nullable
+     */
+  cycleTimeMedian: number | null;
   throughput: number;
   /**
      * Percentage of issues entering QA that were rejected back, or null if none entered QA in this period

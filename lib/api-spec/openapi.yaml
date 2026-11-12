@@ -2400,7 +2400,7 @@ components:
 
     EvolutionPeriod:
       type: object
-      required: [label, rangeLabel, start, isActive, leadTimeAvg, cycleTimeAvg, throughput, qaRejectionRate]
+      required: [label, rangeLabel, start, isActive, leadTimeMedian, cycleTimeMedian, throughput, qaRejectionRate]
       properties:
         label:
           type: string
@@ -2415,10 +2415,12 @@ components:
         isActive:
           type: boolean
           description: True for the currently in-progress sprint (always false for weekly/Kanban rows) - the UI renders it distinctly since its metrics are still climbing, not final
-        leadTimeAvg:
+        leadTimeMedian:
           type: ["number", "null"]
-        cycleTimeAvg:
+          description: Median lead time (days) of issues delivered in this period (by delivery date, each issue counted once)
+        cycleTimeMedian:
           type: ["number", "null"]
+          description: Median cycle time (days) of issues delivered in this period
         throughput:
           type: integer
         qaRejectionRate:

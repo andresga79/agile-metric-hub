@@ -9,7 +9,7 @@ import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
 
 interface MetricChartConfig {
-  key: "leadTimeAvg" | "cycleTimeAvg" | "throughput" | "qaRejectionRate";
+  key: "leadTimeMedian" | "cycleTimeMedian" | "throughput" | "qaRejectionRate";
   label: string;
   unit: string;
   target: number | null;
@@ -127,8 +127,8 @@ export default function ProjectEvolution() {
   const targets = evolution?.targets ?? { leadTime: null, cycleTime: null, throughput: null, qaRejectionRate: null };
 
   const charts: { title: string; config: MetricChartConfig }[] = [
-    { title: t('page.evolution.leadTime'), config: { key: "leadTimeAvg", label: t('page.evolution.leadTime'), unit: "d", target: targets.leadTime, lowerIsBetter: true } },
-    { title: t('page.evolution.cycleTime'), config: { key: "cycleTimeAvg", label: t('page.evolution.cycleTime'), unit: "d", target: targets.cycleTime, lowerIsBetter: true } },
+    { title: t('page.evolution.leadTime'), config: { key: "leadTimeMedian", label: t('page.evolution.leadTime'), unit: "d", target: targets.leadTime, lowerIsBetter: true } },
+    { title: t('page.evolution.cycleTime'), config: { key: "cycleTimeMedian", label: t('page.evolution.cycleTime'), unit: "d", target: targets.cycleTime, lowerIsBetter: true } },
     { title: t('page.evolution.throughput'), config: { key: "throughput", label: t('page.evolution.throughput'), unit: "", target: targets.throughput, lowerIsBetter: false } },
     { title: t('page.evolution.qaRejectionRate'), config: { key: "qaRejectionRate", label: t('page.evolution.qaRejectionRate'), unit: "%", target: targets.qaRejectionRate ?? null, lowerIsBetter: true } },
   ];

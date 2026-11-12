@@ -325,8 +325,16 @@ Objetivos configurables en Admin, mapeados por prioridad:
   OLP 2026-06-01/08/15 con throughput 0) se reparan con `POST /api/admin/snapshots/backfill`
   (`backfillWeeklySnapshots`: recalcula lead/cycle time y throughput de semanas completas; la
   tasa de rechazo QA se conserva porque necesita también los issues no resueltos).
-- **Scrum (por sprint):** `computeSprintSnapshot` sobre los issues del sprint, con la regla de
-  "completado = Done hoy".
+- **Scrum (por sprint):** throughput y rechazo QA salen de `computeSprintSnapshot` sobre los
+  issues del sprint, con la regla de "completado = Done hoy" (igual que la pestaña Sprints).
+- **Lead/Cycle Time = mediana** (desde 2026-11-12), para comparar contra la meta igual que el
+  semáforo y Health. En Scrum se calcula **por fecha de entrega** (`sprintTimeMedians`, mismos
+  buckets que el gráfico del Resumen y la pestaña Métricas): cada issue cuenta una sola vez, en el
+  sprint en que se entregó. Antes era el promedio de los issues *del* sprint en Done hoy, y un
+  issue que pasó por varios sprints sumaba en cada uno (OLP-3330, 427 d, en 116 y 117: el 117
+  marcaba ~32 d con una mediana de 8 d). En Kanban las filas de `metric_snapshots` guardan la
+  mediana en las columnas `lead_time_avg`/`cycle_time_avg` (nombre heredado); las semanas
+  escritas antes se pasan a mediana re-corriendo el backfill.
 
 ---
 
