@@ -224,8 +224,9 @@ cerrados y activos — la misma regla de los resúmenes de sprint de Rovo (2026-
 con Rovo: Tablero Sprint 117 = 99 SP comprometidos, 86 SP / 33 issues completados, 86.9%).
 Consecuencia aceptada: lo arrastrado y terminado en sprints siguientes se acredita a cada sprint
 por el que pasó, así que los sprints viejos tienden al ~100%. Hasta esa fecha se usaba "done al
-cierre" (`wasIssueDoneAt`, reconstruido desde el changelog). Evolution y Capacidad usan la misma
-regla. Tipos incluidos según Admin (Tablero/global: Story, Task, Bug, Spike, Tech Debt); Rovo
+cierre" (`wasIssueDoneAt`, reconstruido desde el changelog). El throughput de Evolution usa la
+misma regla. **Capacidad no**: su histórico y el ritmo de "Recomendado" usan "done al cierre"
+(ver Capacity). Tipos incluidos según Admin (Tablero/global: Story, Task, Bug, Spike, Tech Debt); Rovo
 además cuenta Epics, que acá no entran.
 
 **% Real cerrado** (`closedAtSprintEndRate`, columna aparte en la pestaña Sprints): para sprints
@@ -384,6 +385,12 @@ informativo (tarjetas "Lead Time Prom.", Analíticas, Flow Efficiency) pero no d
 ---
 
 ## Capacity (sprint actual y próximo, solo Scrum)
+
+- **Ritmo del equipo e histórico = lo cerrado AL CIERRE de cada sprint** (`wasIssueDoneAt`, igual
+  que "% Real cerrado" en Sprints), desde 2026-11-12. Con "Done hoy" un issue arrastrado y
+  terminado después contaba como entregado en cada sprint por el que pasó (OLP 117: ~86 SP contra
+  53 cerrados) y "Recomendado" pedía comprometer más de lo que el equipo cierra en un sprint. El
+  sprint activo sigue con "Done hoy" para Hecho/Restante. (`loadSprintIssues`, `routes/capacity.ts`)
 
 - **Vistas**: selector *Actual / Próximo* (`?sprint=active|next`). Sin parámetro (primera carga):
   primer sprint futuro del tablero; si no hay, el activo.

@@ -12,6 +12,9 @@ import {
   getStoryPoints,
   isIssueDone,
   isNonDeliveryClosure,
+  sprintCloseTime,
+  wasIssueDoneAt,
+  getStatusCategoryMap,
   getEffectiveIssueType,
   type JiraIssue,
   type JiraSprint,
@@ -63,14 +66,23 @@ function toMember(row: SprintCapacityRow): MemberAvailability {
 /** Sprint issues of THIS project only (a board's filter can pull in another project's issues —
  *  why Orvix Internacional I repeated Olimpo Internacional's July sprints) and of the issue types
  *  allowed in Admin, mapped to what lib/capacity needs. */
-async function loadSprintIssues(
+export async function loadSprintIssues(
   sprint: JiraSprint,
   projectKey: string,
   allowedIssueTypes: string[]
 ): Promise<CapacityIssue[]> {
   const issues = await getSprintIssues(sprint.id);
-  // Same "done in Jira now" rule as the Sprints tab (computeSprintMetrics).
-  const doneAtClose = (i: JiraIssue): boolean => isIssueDone(i);
+  // Scope: same rule as the Sprints tab (computeSprintMetrics), with Jira's current status.
+  const doneNow = (i: JiraIssue): boolean => isIssueDone(i);
+  // Delivered: for a CLOSED sprint, what was already Done when it closed ("% real cerrado",
+  // wasIssueDoneAt) — this feeds the team rate behind "Recomendado". With "done now" (Rovo's rule,
+  // used elsewhere) work finished in later sprints counted as delivered in every sprint it passed
+  // through: OLP Sprint 117 read ~86 SP done vs 53 SP actually closed, so the recommendation asked
+  // for more than the team closes within a sprint. Active/future sprints keep "done now".
+  const closeTime = sprint.state === "closed" ? sprintCloseTime(sprint) : null;
+  const categoryMap = closeTime ? await getStatusCategoryMap() : null;
+  const delivered = (i: JiraIssue): boolean =>
+    closeTime && categoryMap ? wasIssueDoneAt(i, closeTime, categoryMap) : doneNow(i);
   const typed = issues
     .filter((i: JiraIssue) => i.key.startsWith(`${projectKey}-`))
     .filter((i) => allowedIssueTypes.includes(getEffectiveIssueType(i)));
@@ -78,13 +90,13 @@ async function loadSprintIssues(
   // closed by the sprint's end is neither scope nor delivered work.
   const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
   return typed
-    .filter((i, idx) => !(nonDelivery[idx] && doneAtClose(i)))
+    .filter((i, idx) => !(nonDelivery[idx] && doneNow(i)))
     .map((i) => ({
       key: i.key,
       accountId: i.fields.assignee?.accountId ?? null,
       displayName: i.fields.assignee?.displayName ?? null,
       storyPoints: getStoryPoints(i),
-      done: doneAtClose(i),
+      done: delivered(i),
     }));
 }
 

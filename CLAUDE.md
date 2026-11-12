@@ -65,7 +65,9 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   sprint de Rovo (decidido 2026-11-06 para cuadrar con Rovo). Costo aceptado: lo arrastrado y
   terminado después se acredita a cada sprint por el que pasó (sprints viejos cerca del 100%).
   Antes era "done al cierre" (`wasIssueDoneAt`, sigue en `lib/jira.ts` por si se vuelve atrás).
-  Aplica a Sprints, Capacidad y snapshots de Evolution. La pestaña Sprints muestra además
+  Aplica a Sprints y al throughput de Evolution. **Excepción: Capacidad** — el ritmo que alimenta
+  "Recomendado" usa "done al cierre" en los sprints cerrados (2026-11-12): con "Done hoy" el 117 de
+  OLP sumaba ~86 SP contra 53 realmente cerrados y la recomendación pedía comprometer de más. La pestaña Sprints muestra además
   "% Real cerrado" (`closedAtSprintEndRate`, = `wasIssueDoneAt` al cierre) en columna aparte.
 - **Sync serializado (concurrency=1)**: `warmVisibleProjectsCache` y
   `calculateAndCachePortfolio` corren de a un proyecto por vez, a propósito — fix de un

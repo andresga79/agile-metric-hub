@@ -184,7 +184,8 @@ export interface CapacityIssue {
   accountId: string | null;
   displayName: string | null;
   storyPoints: number;
-  /** Done at sprint close (closed sprints) or currently done (active/future). */
+  /** Closed sprints: Done when the sprint closed (wasIssueDoneAt, = "% real cerrado").
+   *  Active/future sprints: Done now. */
   done: boolean;
 }
 
