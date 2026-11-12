@@ -328,6 +328,31 @@ Objetivos configurables en Admin, mapeados por prioridad:
 
 ---
 
+## Navegación por pestañas (fase 2, 2026-11-13)
+
+Pestañas: Resumen · Métricas · Flujo · Equipo · **Entrega y Planning** (sub-vistas Entrega =
+Sprints o Kanban semanal, Capacidad, Pronóstico) · **Calidad** (Rechazos QA, Trabajo QA, SLA) · Más →
+Reporte. Cada sub-vista conserva su URL; el modelo está en `TAB_GROUPS` / `ProjectSubNav`
+(`components/project-tabs.tsx`).
+
+- **Analíticas (retirada 2026-11-13):** "Entregados por semana" con detalle (clic → issues de la
+  semana, `issues-by-week`) y la distribución en 6 tramos (0–1, 1–3, 3–7, 7–14, 14–30, 30+ días) de
+  lead y cycle time pasaron a Métricas, calculados en `/metrics` sobre los mismos issues
+  (`deliveredByWeek`, `leadTimeBuckets`, `cycleTimeBuckets`; `lib/time-buckets.ts`). SLA pasó a
+  Calidad (`/projects/:id/sla`, permiso `qa-rejected`). Eficiencia de flujo, throughput por
+  prioridad, distribución por tipo y la comparación con el período anterior se eliminaron. Una URL
+  vieja a `/analytics` redirige a Métricas. `/analytics/:period` queda para Flujo, Resumen y reportes.
+- **Rechazo QA por semana** (`byWeek` en `/qa-rejected`, `lib/qa-rate.ts`): misma fórmula que el KPI
+  y la tabla por sprint (issues distintos rechazados ÷ issues distintos que entraron a QA en la
+  semana ISO), tope 100 %. En Kanban reemplaza a la tabla por sprint (todo caía en "Unknown").
+- **Sprints:** "% real cerrado" primero (issues cerrados al cierre y % sobre SP, con semáforo);
+  "Rovo (Done hoy)" como referencia en texto atenuado; "entró después" y "arrastrado" como números
+  neutros (sin colores de alarma: en Scrumban entrar trabajo a mitad de sprint es normal).
+- **Equipo y Reporte, por persona:** solo en curso, bloqueados y **atrasados** (en curso con edad >
+  P85 de cycle time del período), desde `/wip` con la misma regla que Flujo
+  (`hooks/use-team-attention.ts`). Sin tiempos ni SP por persona. El Reporte por persona sigue por
+  URL (`/projects/:id/team/:accountId/report`) pero sin links.
+
 ## Frescura de datos (2026-11-12)
 
 - **Páginas de proyecto** ("Datos de Jira: hace X", junto a las pestañas): `GET /projects/:id/freshness`

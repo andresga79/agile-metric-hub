@@ -10,7 +10,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   estándar de correr el proyecto en dev, no `pnpm dev` suelto.
 - `cp .env.example .env` antes del primer `up` si no existe `.env` (no viaja con git).
 - `pnpm run typecheck` — typecheck completo del workspace
-- `pnpm run lint` — ESLint (baseline: 0 errores, 138 warnings a propósito, no fuerza
+- `pnpm run lint` — ESLint (baseline: 0 errores, 115 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
 - `pnpm --filter @workspace/api-server test` — vitest, 270 tests (lógica pura de métricas,
