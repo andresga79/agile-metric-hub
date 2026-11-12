@@ -14,4 +14,8 @@ export interface WeeklyDataPoint {
   medianCycleTime?: number | null;
   /** Median lead time (days) of issues resolved in this bucket, null if none resolved */
   medianLeadTime?: number | null;
+  cycleTimeP85?: number | null;
+  cycleTimeP95?: number | null;
+  leadTimeP85?: number | null;
+  leadTimeP95?: number | null;
 }

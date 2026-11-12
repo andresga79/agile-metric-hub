@@ -76,6 +76,7 @@ export * from './projectWithVisibilityBoardType';
 export * from './qaRejectedResponse';
 export * from './rejectedBySprint';
 export * from './rejectedIssue';
+export * from './slowIssue';
 export * from './sprintMetric';
 export * from './sprintMetricCompletionBasis';
 export * from './sprintMetricsResponse';

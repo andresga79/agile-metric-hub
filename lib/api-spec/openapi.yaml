@@ -1119,7 +1119,7 @@ components:
 
     ProjectMetrics:
       type: object
-      required: [projectId, period, boardType, isScrum, velocity, cycleTime, leadTime, throughput, resolvedCount, velocityTrend, throughputTrend, velocityByWeek, cycleTimePercentiles, leadTimePercentiles]
+      required: [projectId, period, boardType, isScrum, velocity, cycleTime, leadTime, throughput, resolvedCount, velocityTrend, throughputTrend, velocityByWeek, cycleTimePercentiles, leadTimePercentiles, slowestIssues]
       properties:
         projectId:
           type: string
@@ -1169,6 +1169,41 @@ components:
           allOf:
             - $ref: "#/components/schemas/Percentiles"
           description: P50/P75/P85/P95 lead time percentiles
+        slowestIssues:
+          type: array
+          description: Issues resolved in the period whose lead or cycle time is above the period's P95, slowest lead time first
+          items:
+            $ref: "#/components/schemas/SlowIssue"
+
+    SlowIssue:
+      type: object
+      required: [key, summary, issueType, assignee, created, resolvedAt, leadTimeDays, cycleTimeDays, aboveLeadP95, aboveCycleP95]
+      properties:
+        key:
+          type: string
+        summary:
+          type: string
+        issueType:
+          type: string
+          description: Jira issue type name as shown in Jira
+        assignee:
+          type: string
+          nullable: true
+        created:
+          type: string
+        resolvedAt:
+          type: string
+          nullable: true
+        leadTimeDays:
+          type: number
+          nullable: true
+        cycleTimeDays:
+          type: number
+          nullable: true
+        aboveLeadP95:
+          type: boolean
+        aboveCycleP95:
+          type: boolean
 
     WeeklyDataPoint:
       type: object
@@ -1187,6 +1222,18 @@ components:
           type: number
           nullable: true
           description: "Median lead time (days) of issues resolved in this bucket, null if none resolved"
+        cycleTimeP85:
+          type: number
+          nullable: true
+        cycleTimeP95:
+          type: number
+          nullable: true
+        leadTimeP85:
+          type: number
+          nullable: true
+        leadTimeP95:
+          type: number
+          nullable: true
 
     CycleTimeDataPoint:
       type: object

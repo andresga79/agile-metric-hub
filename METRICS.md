@@ -138,8 +138,19 @@ Días desde que se **creó** el issue hasta la resolución: `(resolved - created
 tiempo en backlog. (`getLeadTimeDays`, `lib/jira.ts`)
 
 ### Percentiles (P50/P75/P85/P95)
-Percentil por interpolación lineal sobre el arreglo ordenado de cycle/lead times.
-(`computePercentiles`, `routes/metrics.ts`)
+Percentil por interpolación lineal sobre el arreglo ordenado de cycle/lead times (igual que
+`PERCENTILE.INC` de Excel). Una sola fórmula en toda la app: `percentile` / `median` de
+`lib/stats.ts`; `computePercentiles` (`routes/metrics.ts`) ya no tiene copia propia.
+Población: issues de los tipos habilitados entregados dentro de la ventana (la misma de las
+tarjetas del Resumen). El v2 en Scrum usa otra población (issues del sprint cerrados al cierre),
+así que sus números pueden no coincidir con los de esta pestaña.
+
+### Pestaña Métricas (reemplaza a Health en las pestañas)
+`/projects/:id/metrics`, mismo permiso que Health (Health sigue accesible por URL). Todo sale de
+`GET /projects/:id/metrics/:period`: promedio + P50/P85/P95 de lead y cycle time del período;
+P50/P85/P95 por sprint o semana (`velocityByWeek[].medianLeadTime/leadTimeP85/leadTimeP95`, ídem
+cycle, `bucketTimeStats` en `lib/jira.ts`); y `slowestIssues`: entregados del período con lead o
+cycle time por encima del P95 del período, más lento primero.
 
 ### Distribución de Cycle Time
 Buckets semiabiertos `[min,max)`: `0-1d`, `1-3d`, `3-7d`, `7-14d`, `14d+`. (`buildCycleTimeDistribution`, `routes/metrics.ts`)

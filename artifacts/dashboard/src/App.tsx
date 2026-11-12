@@ -12,6 +12,7 @@ import ProjectDetail from "@/pages/project-detail";
 import ProjectTeam from "@/pages/project-team";
 import ProjectMemberReport from "@/pages/project-member-report";
 import ProjectHealth from "@/pages/project-health";
+import ProjectMetrics from "@/pages/project-metrics";
 import ProjectForecast from "@/pages/project-forecast";
 import ProjectAnalytics from "@/pages/project-analytics";
 import ProjectFlow from "@/pages/project-flow";
@@ -136,6 +137,11 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/team/:accountId/report">
         {() => <SectionRoute section="report" component={ProjectMemberReport} />}
+      </Route>
+      {/* Métricas replaces Health in the tabs and reuses its permission slot, so no role loses
+          access; Health stays reachable by URL until we decide to drop it. */}
+      <Route path="/projects/:projectId/metrics">
+        {() => <SectionRoute section="health" component={ProjectMetrics} />}
       </Route>
       <Route path="/projects/:projectId/health">
         {() => <SectionRoute section="health" component={ProjectHealth} />}

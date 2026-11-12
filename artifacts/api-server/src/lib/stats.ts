@@ -12,6 +12,12 @@ export function median(values: number[]): number | null {
   return Math.round(value * 10) / 10;
 }
 
+/** Percentile rounded to 1 decimal, for chart buckets and tables. null for an empty sample. */
+export function percentileRounded(values: number[], p: number): number | null {
+  const v = percentile(values, p);
+  return v === null ? null : Math.round(v * 10) / 10;
+}
+
 /** Linear-interpolated percentile (p in 0..1), not rounded. null for an empty sample. */
 export function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null;

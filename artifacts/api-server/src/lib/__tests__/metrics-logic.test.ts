@@ -507,15 +507,15 @@ describe("buildSprintVelocityBuckets", () => {
     const buckets = buildSprintVelocityBuckets([issueA, issueB, issueC], resolvedMap, [sprint2, sprint1], new Map());
 
     expect(buckets).toEqual([
-      { label: "Sprint 1", value: 3, medianCycleTime: null, medianLeadTime: null },
-      { label: "Sprint 2", value: 7, medianCycleTime: null, medianLeadTime: null },
+      { label: "Sprint 1", value: 3, medianCycleTime: null, cycleTimeP85: null, cycleTimeP95: null, medianLeadTime: null, leadTimeP85: null, leadTimeP95: null },
+      { label: "Sprint 2", value: 7, medianCycleTime: null, cycleTimeP85: null, cycleTimeP95: null, medianLeadTime: null, leadTimeP85: null, leadTimeP95: null },
     ]);
   });
 
   it("gives a sprint with no resolved issues a value of 0", () => {
     const sprint1 = makeSprint({ id: 1, name: "Sprint 1", startDate: "2026-06-01T00:00:00.000Z", endDate: "2026-06-14T00:00:00.000Z" });
     const buckets = buildSprintVelocityBuckets([], new Map(), [sprint1], new Map());
-    expect(buckets).toEqual([{ label: "Sprint 1", value: 0, medianCycleTime: null, medianLeadTime: null }]);
+    expect(buckets).toEqual([{ label: "Sprint 1", value: 0, medianCycleTime: null, cycleTimeP85: null, cycleTimeP95: null, medianLeadTime: null, leadTimeP85: null, leadTimeP95: null }]);
   });
 
   it("computes per-sprint median cycle/lead time from the lead/cycle map", () => {
@@ -533,7 +533,11 @@ describe("buildSprintVelocityBuckets", () => {
 
     const buckets = buildSprintVelocityBuckets([issueA, issueB], resolvedMap, [sprint1], leadCycleByIssueId);
 
-    expect(buckets).toEqual([{ label: "Sprint 1", value: 0, medianCycleTime: 3, medianLeadTime: 5 }]);
+    expect(buckets).toEqual([{
+      label: "Sprint 1", value: 0,
+      medianCycleTime: 3, cycleTimeP85: 3.7, cycleTimeP95: 3.9,
+      medianLeadTime: 5, leadTimeP85: 5.7, leadTimeP95: 5.9,
+    }]);
   });
 });
 

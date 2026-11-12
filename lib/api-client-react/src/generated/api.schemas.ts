@@ -204,6 +204,10 @@ export interface WeeklyDataPoint {
   medianCycleTime?: number | null;
   /** Median lead time (days) of issues resolved in this bucket, null if none resolved */
   medianLeadTime?: number | null;
+  cycleTimeP85?: number | null;
+  cycleTimeP95?: number | null;
+  leadTimeP85?: number | null;
+  leadTimeP95?: number | null;
 }
 
 export interface CycleTimeDataPoint {
@@ -220,6 +224,20 @@ export interface Percentiles {
   p85: number;
   /** 95th percentile */
   p95: number;
+}
+
+export interface SlowIssue {
+  key: string;
+  summary: string;
+  /** Jira issue type name as shown in Jira */
+  issueType: string;
+  assignee: string | null;
+  created: string;
+  resolvedAt: string | null;
+  leadTimeDays: number | null;
+  cycleTimeDays: number | null;
+  aboveLeadP95: boolean;
+  aboveCycleP95: boolean;
 }
 
 export interface ProjectMetrics {
@@ -252,6 +270,8 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
+  /** Issues resolved in the period whose lead or cycle time is above the period's P95, slowest lead time first */
+  slowestIssues: SlowIssue[];
 }
 
 export interface MemberStats {

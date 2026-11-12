@@ -20,6 +20,8 @@ import {
   resolveSprintWindowDays,
   resolvePeriodDays,
   buildSprintVelocityBuckets,
+  bucketTimeStats,
+  type TimeBucket,
   sprintWindowHalves,
   getEffectiveIssueType,
   mapIssueType,
@@ -28,7 +30,7 @@ import {
   type ProjectBoardType,
 } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
-import { median } from "../lib/stats";
+import { percentile } from "../lib/stats";
 import { filterVisibleProjects, isProjectKeyVisible } from "../lib/project-visibility";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
 import { db, portfolioCacheTable } from "@workspace/db";
@@ -73,16 +75,14 @@ export function calculateTrend(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** Period percentiles. Same formula as every other percentile in the app (stats.percentile,
+ *  linear interpolation like Excel PERCENTILE.INC); this used to be a private copy of it. */
 function computePercentiles(
-  sorted: number[]
+  values: number[]
 ): { p50: number; p75: number; p85: number; p95: number } {
-  if (sorted.length === 0) return { p50: 0, p75: 0, p85: 0, p95: 0 };
   const p = (k: number) => {
-    const idx = k * (sorted.length - 1);
-    const lo = Math.floor(idx);
-    const hi = Math.ceil(idx);
-    if (lo === hi) return Math.round(sorted[lo] * 1000) / 1000;
-    return Math.round((sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo)) * 1000) / 1000;
+    const v = percentile(values, k);
+    return v === null ? 0 : Math.round(v * 1000) / 1000;
   };
   return { p50: p(0.5), p75: p(0.75), p85: p(0.85), p95: p(0.95) };
 }
@@ -164,10 +164,8 @@ async function computeMetrics(
   const avgLeadTime = avg(leadTimes);
   const avgCycleTime = avg(cycleTimes);
 
-  const sortedLT = [...leadTimes].sort((a, b) => a - b);
-  const sortedCT = [...cycleTimes].sort((a, b) => a - b);
-  const cycleTimePercentiles = computePercentiles(sortedCT);
-  const leadTimePercentiles = computePercentiles(sortedLT);
+  const cycleTimePercentiles = computePercentiles(cycleTimes);
+  const leadTimePercentiles = computePercentiles(leadTimes);
 
   const weeks = Math.max(1, Math.ceil(periodDays / 7));
   const throughput = resolved.length;
@@ -190,6 +188,33 @@ async function computeMetrics(
       ] as const)
     )
   );
+
+  // Issues that pull the period's times up: above the period's own P95 in lead or cycle time.
+  // Lets the Métricas tab name the tickets behind a spike (OLP Sprint 117: two year-old tickets)
+  // instead of someone digging through Jira by hand.
+  const slowestIssues = resolved
+    .map((i) => {
+      const lc = leadCycleByIssueId.get(i.id);
+      const lead = lc?.lead ?? null;
+      const cycle = lc?.cycle ?? null;
+      const overLead = lead !== null && leadTimes.length > 0 && lead > leadTimePercentiles.p95;
+      const overCycle = cycle !== null && cycleTimes.length > 0 && cycle > cycleTimePercentiles.p95;
+      if (!overLead && !overCycle) return null;
+      return {
+        key: i.key,
+        summary: i.fields.summary,
+        issueType: i.fields.issuetype?.name ?? getEffectiveIssueType(i),
+        assignee: i.fields.assignee?.displayName ?? null,
+        created: i.fields.created,
+        resolvedAt: resolvedMap.get(i.id)?.toISOString() ?? null,
+        leadTimeDays: lead === null ? null : Math.round(lead * 10) / 10,
+        cycleTimeDays: cycle === null ? null : Math.round(cycle * 10) / 10,
+        aboveLeadP95: overLead,
+        aboveCycleP95: overCycle,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => (b.leadTimeDays ?? 0) - (a.leadTimeDays ?? 0));
 
   const velocityByWeek = sprintWindowSprints !== null
     ? buildSprintVelocityBuckets(resolved, resolvedMap, sprintWindowSprints, leadCycleByIssueId)
@@ -256,6 +281,7 @@ async function computeMetrics(
     cycleTimeDistribution,
     cycleTimePercentiles,
     leadTimePercentiles,
+    slowestIssues,
   };
 }
 
@@ -310,10 +336,10 @@ function buildWeeklyVelocity(
   periodDays: number,
   isScrum: boolean,
   leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
-): { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] {
+): TimeBucket[] {
   const weeks = Math.min(Math.ceil(periodDays / 7), 24);
   const now = new Date();
-  const result: { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] = [];
+  const result: TimeBucket[] = [];
 
   for (let w = weeks - 1; w >= 0; w--) {
     const weekEnd = new Date(now);
@@ -330,15 +356,8 @@ function buildWeeklyVelocity(
       ? weekIssues.reduce((sum, i) => sum + getStoryPoints(i), 0)
       : weekIssues.length;
 
-    const medianCycleTime = median(
-      weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
-    );
-    const medianLeadTime = median(
-      weekIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
-    );
-
     const label = weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    result.push({ label, value: sp, medianCycleTime, medianLeadTime });
+    result.push({ label, value: sp, ...bucketTimeStats(weekIssues, leadCycleByIssueId) });
   }
 
   return result;
@@ -445,6 +464,7 @@ router.get(
           },
           trend: { value: 0 },
           velocityByWeek: [],
+          slowestIssues: [],
         });
         return;
       }

@@ -134,7 +134,11 @@ export const GetProjectMetricsResponse = zod.object({
   "label": zod.string().describe('Bucket label — calendar week (kanban \/ non-sprint window) or sprint name (scrum sprint window)'),
   "value": zod.number(),
   "medianCycleTime": zod.number().nullish().describe('Median cycle time (days) of issues resolved in this bucket, null if none resolved'),
-  "medianLeadTime": zod.number().nullish().describe('Median lead time (days) of issues resolved in this bucket, null if none resolved')
+  "medianLeadTime": zod.number().nullish().describe('Median lead time (days) of issues resolved in this bucket, null if none resolved'),
+  "cycleTimeP85": zod.number().nullish(),
+  "cycleTimeP95": zod.number().nullish(),
+  "leadTimeP85": zod.number().nullish(),
+  "leadTimeP95": zod.number().nullish()
 })),
   "cycleTimeDistribution": zod.array(zod.object({
   "range": zod.string(),
@@ -151,7 +155,19 @@ export const GetProjectMetricsResponse = zod.object({
   "p75": zod.number().describe('75th percentile'),
   "p85": zod.number().describe('85th percentile'),
   "p95": zod.number().describe('95th percentile')
-}).describe('P50\/P75\/P85\/P95 lead time percentiles')
+}).describe('P50\/P75\/P85\/P95 lead time percentiles'),
+  "slowestIssues": zod.array(zod.object({
+  "key": zod.string(),
+  "summary": zod.string(),
+  "issueType": zod.string().describe('Jira issue type name as shown in Jira'),
+  "assignee": zod.string().nullable(),
+  "created": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "leadTimeDays": zod.number().nullable(),
+  "cycleTimeDays": zod.number().nullable(),
+  "aboveLeadP95": zod.boolean(),
+  "aboveCycleP95": zod.boolean()
+})).describe('Issues resolved in the period whose lead or cycle time is above the period\'s P95, slowest lead time first')
 })
 
 

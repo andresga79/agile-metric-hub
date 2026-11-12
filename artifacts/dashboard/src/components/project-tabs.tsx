@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ChevronDown, BarChart3, HeartPulse, GitPullRequest, Activity, Users, FileText, ShieldAlert, TrendingUp, FlaskConical, Gauge } from "lucide-react";
+import { ChevronDown, BarChart3, GitPullRequest, Activity, Users, FileText, ShieldAlert, TrendingUp, FlaskConical, Gauge, Timer } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
 import {
   DropdownMenu,
@@ -21,7 +21,7 @@ const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   sprints: <BarChart3 size={16} />,
   kanban: <BarChart3 size={16} />,
   flow: <GitPullRequest size={16} />,
-  health: <HeartPulse size={16} />,
+  health: <Timer size={16} />,
   team: <Users size={16} />,
   evolution: <TrendingUp size={16} />,
   capacity: <Gauge size={16} />,

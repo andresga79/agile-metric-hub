@@ -1,5 +1,5 @@
 import { logger } from "./logger";
-import { median } from "./stats";
+import { median, percentileRounded } from "./stats";
 import {
   withCache,
   projectsCacheKey,
@@ -1000,6 +1000,38 @@ export async function resolvePeriodDays(
   };
 }
 
+/** One chart bucket (a sprint or a calendar week): delivered value plus the cycle/lead time
+ *  distribution of the issues resolved in it. Same percentile formula as the period-level
+ *  percentiles (stats.percentile), so a bucket's P95 and the period's P95 are comparable. */
+export interface TimeBucket {
+  label: string;
+  value: number;
+  medianCycleTime: number | null;
+  cycleTimeP85: number | null;
+  cycleTimeP95: number | null;
+  medianLeadTime: number | null;
+  leadTimeP85: number | null;
+  leadTimeP95: number | null;
+}
+
+export function bucketTimeStats(
+  bucketIssues: JiraIssue[],
+  leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
+): Omit<TimeBucket, "label" | "value"> {
+  const pick = (k: "lead" | "cycle") =>
+    bucketIssues.map((i) => leadCycleByIssueId.get(i.id)?.[k]).filter((v): v is number => v !== null && v !== undefined);
+  const cycles = pick("cycle");
+  const leads = pick("lead");
+  return {
+    medianCycleTime: median(cycles),
+    cycleTimeP85: percentileRounded(cycles, 0.85),
+    cycleTimeP95: percentileRounded(cycles, 0.95),
+    medianLeadTime: median(leads),
+    leadTimeP85: percentileRounded(leads, 0.85),
+    leadTimeP95: percentileRounded(leads, 0.95),
+  };
+}
+
 /** Groups resolved issues into one bucket per sprint (chronological order),
  * summing story points resolved within each sprint's [startDate, endDate]
  * window. Mirrors the shape buildWeeklyVelocity produces for the weekly
@@ -1010,7 +1042,7 @@ export function buildSprintVelocityBuckets(
   resolvedMap: Map<string, Date>,
   closedSprints: JiraSprint[],
   leadCycleByIssueId: Map<string, { lead: number | null; cycle: number | null }>
-): { label: string; value: number; medianCycleTime: number | null; medianLeadTime: number | null }[] {
+): TimeBucket[] {
   const chronological = [...closedSprints].sort((a, b) => {
     const aStart = a.startDate ? new Date(a.startDate).getTime() : 0;
     const bStart = b.startDate ? new Date(b.startDate).getTime() : 0;
@@ -1033,14 +1065,7 @@ export function buildSprintVelocityBuckets(
     });
 
     const value = sprintIssues.reduce((sum, issue) => sum + getStoryPoints(issue), 0);
-    const medianCycleTime = median(
-      sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.cycle).filter((v): v is number => v !== null && v !== undefined)
-    );
-    const medianLeadTime = median(
-      sprintIssues.map((i) => leadCycleByIssueId.get(i.id)?.lead).filter((v): v is number => v !== null && v !== undefined)
-    );
-
-    return { label: sprint.name, value, medianCycleTime, medianLeadTime };
+    return { label: sprint.name, value, ...bucketTimeStats(sprintIssues, leadCycleByIssueId) };
   });
 }
 

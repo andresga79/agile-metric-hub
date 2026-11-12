@@ -85,7 +85,8 @@ export function getSectionLinks(
   boardType?: string,
 ): { href: string; label: string; section: ProjectSection }[] {
   const links = [
-    { href: `/projects/${projectId}/health`, label: "Health", section: "health" as ProjectSection },
+    // The "health" slot now opens Métricas (lead/cycle time avg + P50/P85/P95); Health is URL-only.
+    { href: `/projects/${projectId}/metrics`, label: "Métricas", section: "health" as ProjectSection },
     { href: `/projects/${projectId}/flow`, label: "Flow", section: "flow" as ProjectSection },
     { href: `/projects/${projectId}/forecast`, label: "Forecast", section: "forecast" as ProjectSection },
     {
