@@ -7,6 +7,7 @@ import { ArrowLeft, Users } from "lucide-react";
 import CfdChart from "@/components/cfd-chart";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
+import { useTeamAttention } from "@/hooks/use-team-attention";
 import { useReportData } from "@/hooks/use-report-data";
 
 type Period = "1m" | "3m";
@@ -79,7 +80,7 @@ export default function ProjectReport() {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId!) },
   });
   const {
-    loading, error, cfdData, members, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
+    loading, error, cfdData, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
     blockedIssues, sprints, sprintGoal, releaseReadiness, insights,
     structuralBottleneck, nextSteps, featuredIssues, healthDimensions,
   } = useReportData(projectId, period);
@@ -89,7 +90,10 @@ export default function ProjectReport() {
   if (error) return <div>{error}</div>;
 
   const sortedTimeInStatus = [...timeInStatus].sort((a: any, b: any) => b.avgDays - a.avgDays);
-  const topMembers = [...(members ?? [])].sort((a: any, b: any) => b.issuesResolved - a.issuesResolved).slice(0, 5);
+  // Per-person: what needs attention (in progress, blocked, overdue), same as Equipo. The old top 5
+  // by issues resolved / cycle time / SP read as a ranking and was replaced 2026-11-13.
+  const { rows: attentionRows } = useTeamAttention(projectId!, period);
+  const topAttention = attentionRows.filter((r) => r.assignee !== null).slice(0, 5);
   const closedSprints = [...sprints].filter((s: any) => s.state === "closed");
   const activeSprint = sprints.find((s: any) => s.state === "active");
   const sortedBlockedIssues = [...blockedIssues].sort((a: any, b: any) => b.totalDays - a.totalDays);
@@ -349,28 +353,28 @@ export default function ProjectReport() {
         </Card>
       )}
 
-      {topMembers.length > 0 && (
+      {topAttention.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-1"><Users size={14} />{t("page.report.membersTitle")}</CardTitle>
+            <CardTitle className="flex items-center gap-1"><Users size={14} />{t("page.report.attentionTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-1 text-muted-foreground font-medium">{t("page.report.memberName")}</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberResolved")}</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberCycle")}</th>
-                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.report.memberPoints")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.team.wip")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.team.blocked")}</th>
+                  <th className="text-right py-1 text-muted-foreground font-medium">{t("page.team.overdue")}</th>
                 </tr>
               </thead>
               <tbody>
-                {topMembers.map((m: any) => (
-                  <tr key={m.accountId} className="border-b border-border/50">
-                    <td className="py-1 font-medium">{m.displayName}</td>
-                    <td className="py-1 text-right">{m.issuesResolved}</td>
-                    <td className="py-1 text-right">{m.medianCycleTime?.toFixed(1) ?? "—"}d</td>
-                    <td className="py-1 text-right">{m.storyPoints ?? "—"}</td>
+                {topAttention.map((m) => (
+                  <tr key={m.assignee!} className="border-b border-border/50">
+                    <td className="py-1 font-medium">{m.assignee}</td>
+                    <td className="py-1 text-right">{m.inProgress}</td>
+                    <td className="py-1 text-right">{m.blocked}</td>
+                    <td className={`py-1 text-right ${m.overdue > 0 ? "text-red-400 font-semibold" : ""}`}>{m.overdue}</td>
                   </tr>
                 ))}
               </tbody>

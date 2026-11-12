@@ -25,7 +25,8 @@ const router: IRouter = Router();
 router.get(
   "/projects/:projectId/wip",
   requireAuth,
-  requireSectionView("flow"),
+  // Equipo and the Report show per-person WIP from here too, so their sections may read it.
+  requireSectionView("flow", "team", "report"),
   async (req, res): Promise<void> => {
     try {
       const projectId = String(req.params.projectId);
