@@ -11,6 +11,8 @@ import type { WipStatusRow } from './wipStatusRow';
 
 export interface WipResponse {
   total: number;
+  /** Items in progress that are blocked right now (subset of total). */
+  blockedNow: number;
   items: WipItem[];
   byStatus: WipStatusRow[];
   weeks: WipFlowWeek[];

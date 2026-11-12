@@ -14,6 +14,8 @@ export interface WipItem {
   status: string;
   /** In an in-progress status (false = waiting mid-flow */
   active: boolean;
+  /** Blocked right now (status or Flagged field). */
+  blocked: boolean;
   /** Start of the current stretch of work (same rule as cycle time). */
   startedAt: string;
   ageDays: number;

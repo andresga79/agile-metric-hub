@@ -1735,7 +1735,7 @@ components:
 
     WipItem:
       type: object
-      required: [key, summary, assignee, issueType, status, active, startedAt, ageDays]
+      required: [key, summary, assignee, issueType, status, active, blocked, startedAt, ageDays]
       properties:
         key: { type: string }
         summary: { type: string }
@@ -1743,6 +1743,7 @@ components:
         issueType: { type: string }
         status: { type: string }
         active: { type: boolean, description: In an in-progress status (false = waiting mid-flow, e.g. Ready for QA). }
+        blocked: { type: boolean, description: Blocked right now (status or Flagged field). }
         startedAt: { type: string, description: Start of the current stretch of work (same rule as cycle time). }
         ageDays: { type: number }
 
@@ -1765,9 +1766,10 @@ components:
 
     WipResponse:
       type: object
-      required: [total, items, byStatus, weeks, sustainableWip, meanCycleTimeDays]
+      required: [total, blockedNow, items, byStatus, weeks, sustainableWip, meanCycleTimeDays]
       properties:
         total: { type: integer }
+        blockedNow: { type: integer, description: Items in progress that are blocked right now (subset of total). }
         items:
           type: array
           items: { $ref: "#/components/schemas/WipItem" }

@@ -7,6 +7,7 @@ import {
   getEffectiveIssueType,
   isIssueDone,
   isIssueInProgress,
+  isIssueCurrentlyBlocked,
   getDeliveryDate,
   getCycleTimeDays,
   getWorkStartDate,
@@ -55,10 +56,11 @@ router.get(
           issueType: i.fields.issuetype.name,
           status: i.fields.status.name,
           active: isIssueInProgress(i),
+          blocked: isIssueCurrentlyBlocked(i),
           startedAt,
         });
       });
-      const { items, byStatus } = buildWip(wipInputs, now);
+      const { items, byStatus, blockedNow } = buildWip(wipInputs, now);
 
       // Started / delivered per week: every allowed issue seen in the window or open now, once.
       const all = Array.from(new Map([...recent, ...open].filter(allowed).map((i) => [i.key, i])).values());
@@ -80,6 +82,7 @@ router.get(
 
       res.json({
         total: items.length,
+        blockedNow,
         items,
         byStatus,
         weeks,

@@ -773,6 +773,8 @@ export interface WipItem {
   status: string;
   /** In an in-progress status (false = waiting mid-flow */
   active: boolean;
+  /** Blocked right now (status or Flagged field). */
+  blocked: boolean;
   /** Start of the current stretch of work (same rule as cycle time). */
   startedAt: string;
   ageDays: number;
@@ -793,6 +795,8 @@ export interface WipFlowWeek {
 
 export interface WipResponse {
   total: number;
+  /** Items in progress that are blocked right now (subset of total). */
+  blockedNow: number;
   items: WipItem[];
   byStatus: WipStatusRow[];
   weeks: WipFlowWeek[];

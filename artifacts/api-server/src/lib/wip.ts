@@ -12,6 +12,8 @@ export interface WipIssueInput {
   status: string;
   /** Status category: indeterminate = being worked, anything else mid-flow = waiting. */
   active: boolean;
+  /** Blocked right now (status or Flagged field). */
+  blocked: boolean;
   startedAt: Date;
 }
 
@@ -22,6 +24,7 @@ export interface WipItem {
   issueType: string;
   status: string;
   active: boolean;
+  blocked: boolean;
   startedAt: string;
   ageDays: number;
 }
@@ -40,7 +43,10 @@ export interface FlowWeek {
 }
 
 /** Work in progress right now, oldest first, plus how it spreads over statuses. */
-export function buildWip(issues: WipIssueInput[], now: Date): { items: WipItem[]; byStatus: WipStatusRow[] } {
+export function buildWip(
+  issues: WipIssueInput[],
+  now: Date
+): { items: WipItem[]; byStatus: WipStatusRow[]; blockedNow: number } {
   const items = issues
     .map((i) => ({
       key: i.key,
@@ -49,6 +55,7 @@ export function buildWip(issues: WipIssueInput[], now: Date): { items: WipItem[]
       issueType: i.issueType,
       status: i.status,
       active: i.active,
+      blocked: i.blocked,
       startedAt: i.startedAt.toISOString(),
       ageDays: Math.max(0, Math.round(((now.getTime() - i.startedAt.getTime()) / DAY_MS) * 10) / 10),
     }))
@@ -63,7 +70,8 @@ export function buildWip(issues: WipIssueInput[], now: Date): { items: WipItem[]
   }
   // Being worked first, then waiting; within each, the most loaded status first.
   const byStatus = [...rows.values()].sort((a, b) => Number(b.active) - Number(a.active) || b.count - a.count);
-  return { items, byStatus };
+  // Blocked work counted within WIP only, so "% of WIP blocked" can never pass 100 %.
+  return { items, byStatus, blockedNow: items.filter((i) => i.blocked).length };
 }
 
 /** Started vs delivered per ISO week over the last `weeks` weeks (current week included, partial).

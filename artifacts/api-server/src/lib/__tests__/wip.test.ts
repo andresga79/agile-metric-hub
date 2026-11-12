@@ -5,7 +5,7 @@ const now = new Date("2026-11-12T12:00:00Z"); // Thursday; ISO week starts Mon 2
 
 describe("buildWip", () => {
   it("lists in-progress work oldest first and groups it by status, active statuses first", () => {
-    const base = { summary: "s", assignee: null, issueType: "Historia" };
+    const base = { summary: "s", assignee: null, issueType: "Historia", blocked: false };
     const { items, byStatus } = buildWip(
       [
         { ...base, key: "A-1", status: "DEV in Progress", active: true, startedAt: new Date("2026-11-10T12:00:00Z") },
@@ -19,6 +19,27 @@ describe("buildWip", () => {
       { status: "DEV in Progress", active: true, count: 2, oldestDays: 10 },
       { status: "Ready for QA", active: false, count: 1, oldestDays: 20 },
     ]);
+  });
+});
+
+describe("buildWip blocked", () => {
+  const base = { summary: "s", assignee: null, issueType: "Historia", status: "DEV in Progress", active: true };
+  it("counts only in-progress items that are blocked now", () => {
+    const { items, blockedNow } = buildWip(
+      [
+        { ...base, key: "B-1", blocked: true, startedAt: new Date("2026-11-05T12:00:00Z") },
+        { ...base, key: "B-2", blocked: false, startedAt: new Date("2026-11-06T12:00:00Z") },
+        { ...base, key: "B-3", blocked: false, startedAt: new Date("2026-11-07T12:00:00Z") },
+      ],
+      now
+    );
+    expect(blockedNow).toBe(1);
+    expect(items.find((i) => i.key === "B-1")!.blocked).toBe(true);
+    expect(items.find((i) => i.key === "B-2")!.blocked).toBe(false);
+  });
+
+  it("no work in progress gives zero, not NaN", () => {
+    expect(buildWip([], now)).toEqual({ items: [], byStatus: [], blockedNow: 0 });
   });
 });
 

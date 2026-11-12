@@ -78,7 +78,7 @@ export default function ProjectMemberReport() {
   });
   const {
     loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
-    blockedIssues, wipAging, healthDimensions,
+    blockedIssues, wipAgeByKey, healthDimensions,
   } = useMemberReportData(projectId, accountId, period);
 
   if (loading) return <div>{t("common.loading")}</div>;
@@ -94,10 +94,8 @@ export default function ProjectMemberReport() {
   const pending = memberIssues.filter((i: any) => !i.isInProgress && !i.isDone);
   const finished = memberIssues.filter((i: any) => i.isDone);
 
-  // Días trabajando en cada item "En desarrollo" — reusa el wipAging ya calculado por /analytics
-  // (misma detección de transición real a "in progress" que el resto de la app), sin el badge de
-  // color de alerta ni el dato de días-desde-creado en Pendientes (no aplica: todavía no arrancó).
-  const wipAgingByKey = new Map(wipAging.map((w: any) => [w.key, w]));
+  // Días trabajando en cada item "En desarrollo": la edad de /wip (desde el inicio del trabajo, misma
+  // regla que el cycle time), sin días-desde-creado en Pendientes (no aplica: todavía no arrancó).
 
   // --- Desglose por tipo (Historia/Tarea/Bug/Epic/...), con lead/cycle time mediano (P50) por tipo ---
   const medianOf = (values: (number | null)[]) => {
@@ -222,7 +220,7 @@ export default function ProjectMemberReport() {
                     // Días trabajando en el item — solo tiene sentido para lo que está En desarrollo
                     // (fecha real de entrada a "in progress", vía /analytics). Pendientes y Finalizados
                     // no muestran este dato: uno no empezó, el otro ya no está "trabajándose".
-                    const workingDays = i.isInProgress ? wipAgingByKey.get(i.key)?.daysInProgress ?? null : null;
+                    const workingDays = i.isInProgress ? wipAgeByKey.get(i.key) ?? null : null;
                     return (
                       <li key={i.id} className="flex items-baseline gap-1.5">
                         <span className="min-w-0 truncate">

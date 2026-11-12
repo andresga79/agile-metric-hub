@@ -18,7 +18,8 @@ export function useMemberReportData(
   const [throughputPerWeek, setThroughputPerWeek] = useState<number | null>(null);
   const [qaRejectionRate, setQaRejectionRate] = useState<number | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<any[]>([]);
-  const [wipAging, setWipAging] = useState<any[]>([]);
+  // Days in progress per issue key, from /wip (same work-start rule as cycle time).
+  const [wipAgeByKey, setWipAgeByKey] = useState<Map<string, number>>(new Map());
   const [healthDimensions, setHealthDimensions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +57,9 @@ export function useMemberReportData(
       fetch(`/api/projects/${projectId}/health/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("Health")),
       fetch(`/api/projects/${projectId}/qa-rejected/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("QA rejected")),
       fetch(`/api/projects/${projectId}/issues/${period}?assignee=${assignee}`, opts).then(jsonOrThrow("Issues")),
+      fetch(`/api/projects/${projectId}/wip`, opts).then(jsonOrThrow("WIP")),
     ])
-      .then(([memberRows, metricsData, analytics, health, qaRejected, issues]) => {
+      .then(([memberRows, metricsData, analytics, health, qaRejected, issues, wip]) => {
         if (superseded) return;
         setMembers(Array.isArray(memberRows) ? memberRows : []);
         setMemberIssues(Array.isArray(issues) ? issues : []);
@@ -65,7 +67,7 @@ export function useMemberReportData(
         setTrends(metricsData?.trends ?? null);
         setTimeInStatus(analytics?.timeInStatus ?? []);
         setBlockedIssues((analytics?.blockedIssues ?? []).filter((b: any) => b.isCurrentlyBlocked));
-        setWipAging(Array.isArray(analytics?.wipAging) ? analytics.wipAging : []);
+        setWipAgeByKey(new Map((Array.isArray(wip?.items) ? wip.items : []).map((w: any) => [w.key, w.ageDays])));
         const flowHealthDimension = health?.dimensions?.find((d: any) => d.name === "Flow Health Score");
         setHealthScore(typeof flowHealthDimension?.value === "number" ? flowHealthDimension.value : null);
         setThroughputPerWeek(typeof health?.raw?.throughput === "number" ? health.raw.throughput : null);
@@ -93,6 +95,6 @@ export function useMemberReportData(
 
   return {
     loading, error, members, memberIssues, timeInStatus, metrics, trends, healthScore, throughputPerWeek, qaRejectionRate,
-    blockedIssues, wipAging, healthDimensions,
+    blockedIssues, wipAgeByKey, healthDimensions,
   };
 }

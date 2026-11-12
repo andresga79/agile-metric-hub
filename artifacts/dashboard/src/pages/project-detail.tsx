@@ -278,17 +278,20 @@ function BlockedKpiCard({ projectId, period }: { projectId: string; period: stri
 
   useEffect(() => {
     if (!projectId || !token) return;
-    fetch(`/api/projects/${projectId}/analytics/${period}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((json) => {
+    const headers = { Authorization: `Bearer ${token}` };
+    // Blocked count and its share of WIP come from /wip (blocked items within work in progress, so
+    // the % never passes 100); the average blocked days still come from /analytics' blocked list.
+    Promise.all([
+      fetch(`/api/projects/${projectId}/wip`, { headers }).then((r) => r.json()),
+      fetch(`/api/projects/${projectId}/analytics/${period}`, { headers }).then((r) => r.json()),
+    ])
+      .then(([wip, json]) => {
         const blocked: { isCurrentlyBlocked: boolean; totalDays: number }[] = Array.isArray(json.blockedIssues) ? json.blockedIssues : [];
         const active = blocked.filter((b) => b.isCurrentlyBlocked);
-        const activeBlocked = active.length;
         const avgDays = active.length > 0 ? active.reduce((s, b) => s + b.totalDays, 0) / active.length : 0;
-        const wipCount: number | null = typeof json.wipAgingTotal === "number" && json.wipAgingTotal > 0 ? json.wipAgingTotal : null;
-        const wipPercent = wipCount !== null && wipCount > 0 ? Math.round((activeBlocked / wipCount) * 100) : null;
+        const activeBlocked: number = typeof wip?.blockedNow === "number" ? wip.blockedNow : 0;
+        const total: number = typeof wip?.total === "number" ? wip.total : 0;
+        const wipPercent = total > 0 ? Math.round((activeBlocked / total) * 100) : null;
         setData({ activeBlocked, avgDays, wipPercent });
       })
       .catch(console.error);

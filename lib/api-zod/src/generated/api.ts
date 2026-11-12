@@ -899,6 +899,7 @@ export const GetProjectWipParams = zod.object({
 
 export const GetProjectWipResponse = zod.object({
   "total": zod.number(),
+  "blockedNow": zod.number().describe('Items in progress that are blocked right now (subset of total).'),
   "items": zod.array(zod.object({
   "key": zod.string(),
   "summary": zod.string(),
@@ -906,6 +907,7 @@ export const GetProjectWipResponse = zod.object({
   "issueType": zod.string(),
   "status": zod.string(),
   "active": zod.boolean().describe('In an in-progress status (false = waiting mid-flow'),
+  "blocked": zod.boolean().describe('Blocked right now (status or Flagged field).'),
   "startedAt": zod.string().describe('Start of the current stretch of work (same rule as cycle time).'),
   "ageDays": zod.number()
 })),
