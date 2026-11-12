@@ -1225,3 +1225,38 @@ export const GetDashboardSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary Work in progress now, started vs delivered per week, and sustainable WIP
+ */
+export const GetProjectWipParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetProjectWipResponse = zod.object({
+  "total": zod.number(),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "summary": zod.string(),
+  "assignee": zod.string().nullable(),
+  "issueType": zod.string(),
+  "status": zod.string(),
+  "active": zod.boolean().describe('In an in-progress status (false = waiting mid-flow'),
+  "startedAt": zod.string().describe('Start of the current stretch of work (same rule as cycle time).'),
+  "ageDays": zod.number()
+})),
+  "byStatus": zod.array(zod.object({
+  "status": zod.string(),
+  "active": zod.boolean(),
+  "count": zod.number(),
+  "oldestDays": zod.number()
+})),
+  "weeks": zod.array(zod.object({
+  "weekStart": zod.string(),
+  "started": zod.number(),
+  "delivered": zod.number()
+})),
+  "sustainableWip": zod.number().nullable().describe('Little\'s law, throughput per day × mean cycle time over the full weeks of the window.'),
+  "meanCycleTimeDays": zod.number().nullable()
+})
+
+

@@ -9,6 +9,7 @@ import { ArrowLeft, AlertTriangle, Clock, RefreshCw, Pencil, Check, X } from "lu
 import { useState, useEffect } from "react";
 import { getAuthToken } from "@/lib/auth";
 import { ProjectTabs } from "@/components/project-tabs";
+import { WipSection } from "@/components/wip-section";
 import { TimeWindowFilter, type TimeWindow } from "@/components/time-window-filter";
 import { useTimeWindow } from "@/hooks/use-time-window";
 
@@ -208,6 +209,8 @@ export default function ProjectFlow() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="flow" />
+
+      <WipSection projectId={projectId!} period={period} enabled={!!projectId && !!token && periodReady} />
 
       <Card className="bg-card/40">
         <CardHeader>

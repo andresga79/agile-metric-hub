@@ -330,6 +330,22 @@ Objetivos configurables en Admin, mapeados por prioridad:
 
 ---
 
+## Trabajo en curso / WIP (pestaña Flujo, pensado para Scrumban)
+
+`GET /projects/:id/wip` (`routes/wip.ts`, lógica pura en `lib/wip.ts`), permiso de Flujo.
+- **En curso** = issue abierto (tipos de Admin, clave del proyecto) cuyo trabajo empezó, con la
+  misma regla de inicio que el cycle time (`getWorkStartDate` = `findWorkStartTransition`: primer
+  paso a en curso después de la última vuelta al backlog). Así la antigüedad de un issue en curso y
+  su cycle time final se miden desde el mismo instante. Un issue en "Ready for QA" después de
+  desarrollo cuenta (marcado "en espera"); uno en "Ready for DEV" que nunca empezó, no.
+- **Antigüedad vs. P50/P85**: el frontend toma los percentiles de cycle time de `/metrics/:period`
+  del período elegido (los mismos de Métricas): ámbar > P50, rojo > P85.
+- **Entrada vs. salida**: por semana ISO de las últimas 12, issues que empezaron (inicio de trabajo)
+  contra entregados (`getDeliveryDate`). La semana actual va incompleta.
+- **WIP sostenible** (Ley de Little): throughput diario de las 11 semanas completas × cycle time
+  **promedio** de lo entregado en ellas (Little usa promedios, no medianas). Referencia para acordar
+  límites de WIP, que en esta etapa los equipos manejan de palabra (no se leen de Jira).
+
 ## Evolution (histórico)
 
 - **Kanban (por semana):** filas de `metric_snapshots`, una por proyecto y semana ISO, escritas

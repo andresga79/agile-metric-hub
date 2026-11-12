@@ -611,6 +611,16 @@ function findWorkStartTransition(
   return start;
 }
 
+/** When the current stretch of work on `issue` started (same rule as cycle time: first move to
+ *  in-progress after it last went back to the backlog). Null without a changelog or when the work
+ *  hasn't started / was parked back in the backlog. Used for WIP age, so an issue's age in progress
+ *  and its eventual cycle time are measured from the same instant. */
+export async function getWorkStartDate(issue: JiraIssue): Promise<Date | null> {
+  if (!issue.changelog) return null;
+  const start = findWorkStartTransition(issue, await getStatusCategoryMap());
+  return start ? new Date(start.at) : null;
+}
+
 /** Whether the issue had an assignee at `at` (ms), rebuilt from the changelog's "assignee" items.
  *  Changes stamped at `at` count (the closing and the assignment can share one history entry).
  *  The first change's `from` is the initial value; with no changes the current assignee applies. */

@@ -1116,6 +1116,42 @@ export interface CapacityHistoryRow {
   completionPct: number;
 }
 
+export interface WipItem {
+  key: string;
+  summary: string;
+  assignee: string | null;
+  issueType: string;
+  status: string;
+  /** In an in-progress status (false = waiting mid-flow */
+  active: boolean;
+  /** Start of the current stretch of work (same rule as cycle time). */
+  startedAt: string;
+  ageDays: number;
+}
+
+export interface WipStatusRow {
+  status: string;
+  active: boolean;
+  count: number;
+  oldestDays: number;
+}
+
+export interface WipFlowWeek {
+  weekStart: string;
+  started: number;
+  delivered: number;
+}
+
+export interface WipResponse {
+  total: number;
+  items: WipItem[];
+  byStatus: WipStatusRow[];
+  weeks: WipFlowWeek[];
+  /** Little's law, throughput per day × mean cycle time over the full weeks of the window. */
+  sustainableWip: number | null;
+  meanCycleTimeDays: number | null;
+}
+
 export type CapacityTeamSummaryByRole = {
   dev: number;
   lt: number;

@@ -888,6 +888,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /projects/{projectId}/wip:
+    get:
+      operationId: getProjectWip
+      tags: [projects]
+      summary: Work in progress now, started vs delivered per week, and sustainable WIP
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: WIP snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WipResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -2148,6 +2166,58 @@ components:
         committed: { $ref: "#/components/schemas/CapacityUnits" }
         completed: { $ref: "#/components/schemas/CapacityUnits" }
         completionPct: { type: number }
+
+    WipItem:
+      type: object
+      required: [key, summary, assignee, issueType, status, active, startedAt, ageDays]
+      properties:
+        key: { type: string }
+        summary: { type: string }
+        assignee: { type: string, nullable: true }
+        issueType: { type: string }
+        status: { type: string }
+        active: { type: boolean, description: In an in-progress status (false = waiting mid-flow, e.g. Ready for QA). }
+        startedAt: { type: string, description: Start of the current stretch of work (same rule as cycle time). }
+        ageDays: { type: number }
+
+    WipStatusRow:
+      type: object
+      required: [status, active, count, oldestDays]
+      properties:
+        status: { type: string }
+        active: { type: boolean }
+        count: { type: integer }
+        oldestDays: { type: number }
+
+    WipFlowWeek:
+      type: object
+      required: [weekStart, started, delivered]
+      properties:
+        weekStart: { type: string }
+        started: { type: integer }
+        delivered: { type: integer }
+
+    WipResponse:
+      type: object
+      required: [total, items, byStatus, weeks, sustainableWip, meanCycleTimeDays]
+      properties:
+        total: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WipItem" }
+        byStatus:
+          type: array
+          items: { $ref: "#/components/schemas/WipStatusRow" }
+        weeks:
+          type: array
+          items: { $ref: "#/components/schemas/WipFlowWeek" }
+        sustainableWip:
+          type: number
+          nullable: true
+          description: Little's law, throughput per day × mean cycle time over the full weeks of the window.
+        meanCycleTimeDays:
+          type: number
+          nullable: true
 
     CapacityTeamSummary:
       type: object

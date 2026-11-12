@@ -132,3 +132,7 @@ export * from './v2WipAgingItemAlertLevel';
 export * from './v2WipBlock';
 export * from './weeklyDataPoint';
 export * from './weekMetric';
+export * from './wipFlowWeek';
+export * from './wipItem';
+export * from './wipResponse';
+export * from './wipStatusRow';

@@ -52,7 +52,8 @@ import type {
   User,
   V2CurrentSprintView,
   V2PortfolioView,
-  V2TeamView
+  V2TeamView,
+  WipResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2414,6 +2415,83 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProjectWipUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/wip`
+}
+
+/**
+ * @summary Work in progress now, started vs delivered per week, and sustainable WIP
+ */
+export const getProjectWip = async (projectId: string, options?: RequestInit): Promise<WipResponse> => {
+
+  return customFetch<WipResponse>(getGetProjectWipUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectWipQueryKey = (projectId: string,) => {
+    return [
+    `/api/projects/${projectId}/wip`
+    ] as const;
+    }
+
+
+export const getGetProjectWipQueryOptions = <TData = Awaited<ReturnType<typeof getProjectWip>>, TError = ErrorType<unknown>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectWip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectWipQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectWip>>> = ({ signal }) => getProjectWip(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectWip>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectWipQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectWip>>>
+export type GetProjectWipQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Work in progress now, started vs delivered per week, and sustainable WIP
+ */
+
+export function useGetProjectWip<TData = Awaited<ReturnType<typeof getProjectWip>>, TError = ErrorType<unknown>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectWip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectWipQueryOptions(projectId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
