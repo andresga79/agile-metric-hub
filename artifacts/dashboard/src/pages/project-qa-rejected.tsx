@@ -6,7 +6,7 @@ import { ArrowLeft, ShieldAlert, Bug, AlertTriangle, TestTube } from "lucide-rea
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getAuthToken } from "@/lib/auth";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 
 type Period = "1m" | "3m";
 
@@ -81,6 +81,7 @@ export default function ProjectQaRejected() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="qa-rejected" />
+      <ProjectSubNav projectId={projectId!} group="quality" active="qa-rejected" />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">

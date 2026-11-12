@@ -12,6 +12,7 @@ import ProjectDetail from "@/pages/project-detail";
 import ProjectTeam from "@/pages/project-team";
 import ProjectMemberReport from "@/pages/project-member-report";
 import ProjectMetrics from "@/pages/project-metrics";
+import ProjectSla from "@/pages/project-sla";
 import ProjectForecast from "@/pages/project-forecast";
 import ProjectAnalytics from "@/pages/project-analytics";
 import ProjectFlow from "@/pages/project-flow";
@@ -124,6 +125,9 @@ function Router() {
       </Route>
       {/* Métricas took Health's place (the Health page was removed 2026-11-12) and reuses its
           "health" permission slot, so no role lost access. */}
+      <Route path="/projects/:projectId/sla">
+        {() => <SectionRoute section="qa-rejected" component={ProjectSla} />}
+      </Route>
       <Route path="/projects/:projectId/metrics">
         {() => <SectionRoute section="health" component={ProjectMetrics} />}
       </Route>

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, FlaskConical, Clock, AlertTriangle } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
-import { ProjectTabs } from "@/components/project-tabs";
+import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
 
 type Period = "1m" | "3m";
@@ -107,6 +107,7 @@ export default function ProjectQaWork() {
       </div>
 
       <ProjectTabs projectId={projectId!} active="qa-work" />
+      <ProjectSubNav projectId={projectId!} group="quality" active="qa-work" />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-card/40">

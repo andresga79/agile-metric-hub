@@ -1,4 +1,8 @@
 {
+  "nav.quality": "Calidad",
+  "nav.sla": "SLA",
+  "nav.sub.qa-rejected": "Rechazos QA",
+  "nav.sub.qa-work": "Trabajo QA",
   "nav.primary": "Principal",
   "nav.configuration": "Configuración",
   "nav.dashboard": "Resumen Ejecutivo",

@@ -1,4 +1,8 @@
 {
+  "nav.quality": "Quality",
+  "nav.sla": "SLA",
+  "nav.sub.qa-rejected": "QA rejections",
+  "nav.sub.qa-work": "QA work",
   "nav.primary": "Main",
   "nav.configuration": "Configuration",
   "nav.dashboard": "Dashboard",

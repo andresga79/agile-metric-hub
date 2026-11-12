@@ -33,7 +33,7 @@ function slaTargetDays(priority: string, thresholds: Record<string, EffectiveThr
 router.get(
   "/projects/:projectId/sla/:period",
   requireAuth,
-  requireSectionView("analytics"),
+  requireSectionView("qa-rejected", "analytics"),
   async (req, res): Promise<void> => {
     const rawId = Array.isArray(req.params.projectId) ? req.params.projectId[0] : req.params.projectId;
     const rawPeriod = Array.isArray(req.params.period) ? req.params.period[0] : req.params.period;
