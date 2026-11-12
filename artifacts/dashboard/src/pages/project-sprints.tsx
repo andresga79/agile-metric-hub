@@ -205,16 +205,7 @@ export default function ProjectSprints() {
 
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                  <Gauge size={14} /> {t('page.sprints.avgVelocity')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{(summary?.avgVelocity ?? 0).toFixed(1)}</div>
-                <p className="text-xs text-muted-foreground mt-1">{summary?.totalCompletedStoryPoints.toFixed(0)} {t('page.sprints.totalSpDelivered')}</p>
-              </CardContent>
-            </Card>
-
+    
             <Card className="bg-card/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
@@ -242,6 +233,15 @@ export default function ProjectSprints() {
                 <p className="text-xs text-muted-foreground mt-1">
                   {t('page.sprints.avgRealClosedIssuesDesc', { planned: avgPlannedIssues.toFixed(1) })}
                 </p>
+              </CardContent>
+            </Card>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Gauge size={14} /> {t('page.sprints.avgVelocity')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{(summary?.avgVelocity ?? 0).toFixed(1)}</div>
+                <p className="text-xs text-muted-foreground mt-1">{summary?.totalCompletedStoryPoints.toFixed(0)} {t('page.sprints.totalSpDelivered')}</p>
               </CardContent>
             </Card>
 
@@ -367,13 +367,11 @@ export default function ProjectSprints() {
                     <TableHead>{t('page.sprints.state')}</TableHead>
                     <TableHead>{t('page.sprints.startDate')}</TableHead>
                     <TableHead>{t('page.sprints.endDate')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.issues')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.spPlanned')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.spDone')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.carryover')}</TableHead>
-                    <TableHead className="text-right">{t('page.sprints.addedAfterPlanning')}</TableHead>
-                    <TableHead className="text-right" title={t('page.sprints.completionTooltip')}>{t('page.sprints.completion')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.committedCol')}</TableHead>
                     <TableHead className="text-right" title={t('page.sprints.realClosedTooltip')}>{t('page.sprints.realClosed')}</TableHead>
+                    <TableHead className="text-right text-muted-foreground" title={t('page.sprints.completionTooltip')}>{t('page.sprints.rovoCol')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.addedAfterPlanning')}</TableHead>
+                    <TableHead className="text-right">{t('page.sprints.carryover')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.cycleTime')}</TableHead>
                     <TableHead className="text-right">{t('page.sprints.breakdownCol')}</TableHead>
                     </TableRow>
@@ -404,53 +402,13 @@ export default function ProjectSprints() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{sprintDate(s.startDate)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{sprintDate(s.endDate)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {s.completedIssues}/{s.totalIssues}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">{s.totalStoryPoints.toFixed(0)}</TableCell>
-                        <TableCell className="text-right font-mono">{s.completedStoryPoints.toFixed(0)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs" title={t('page.sprints.carryoverTooltip')}>
-                          {s.carryoverCount > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded font-semibold bg-orange-500/15 text-orange-400">
-                              {s.carryoverCount} ({s.carryoverStoryPoints.toFixed(0)} SP)
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono text-xs"
-                          title={s.addedAfterPlanningCount > 0
-                            ? `${t('page.sprints.addedAfterPlanningTooltip')}\n\n${t('page.sprints.addedAfterPlanningKeys', { keys: s.addedAfterPlanningKeys.join(', ') })}`
-                            : t('page.sprints.addedAfterPlanningTooltip')}
-                        >
-                          {s.addedAfterPlanningCount > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded font-semibold bg-sky-500/15 text-sky-400">
-                              {s.addedAfterPlanningCount} ({s.addedAfterPlanningStoryPoints.toFixed(0)} SP)
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {s.state === "active" ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : (
-                          <span
-                            className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                              s.completionRate >= completionThreshold.good ? "bg-green-500/20 text-green-400" :
-                              s.completionRate >= completionThreshold.warning ? "bg-orange-500/20 text-orange-400" :
-                              "bg-red-500/20 text-red-400"
-                            }`}
-                            title={s.completionBasis === "storyPoints" ? t('page.sprints.basisPoints') : t('page.sprints.basisIssues')}
-                          >
-                            {pct(s.completionRate)}
-                            <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
-                          </span>
-                          )}
+                        <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                          {s.totalIssues} · <span className="text-muted-foreground">{s.totalStoryPoints.toFixed(0)} SP</span>
                         </TableCell>
                         <TableCell className="text-right">
                           {s.closedAtSprintEndRate != null ? (
+                            <span className="inline-flex items-center gap-2 justify-end">
+                            <span className="font-mono text-xs">{t('page.sprints.issuesCount', { count: s.closedAtSprintEndIssues ?? 0 })}</span>
                             <span
                               className={`text-xs font-semibold px-2 py-0.5 rounded ${
                                 s.closedAtSprintEndRate >= completionThreshold.good ? "bg-green-500/20 text-green-400" :
@@ -467,6 +425,7 @@ export default function ProjectSprints() {
                               {pct(s.closedAtSprintEndRate)}
                               <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
                             </span>
+                            </span>
                           ) : s.state === "active" ? (
                             <span
                               className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400"
@@ -478,6 +437,34 @@ export default function ProjectSprints() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {s.state === "active" ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span
+                              className="font-mono text-xs text-muted-foreground"
+                              title={`${s.completedIssues}/${s.totalIssues} issues · ${s.completedStoryPoints.toFixed(0)}/${s.totalStoryPoints.toFixed(0)} SP — ${s.completionBasis === "storyPoints" ? t('page.sprints.basisPoints') : t('page.sprints.basisIssues')}`}
+                            >
+                              {pct(s.completionRate)}
+                              <sup className="ml-0.5 opacity-70">{s.completionBasis === "storyPoints" ? "SP" : "#"}</sup>
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs"
+                          title={s.addedAfterPlanningCount > 0
+                            ? `${t('page.sprints.addedAfterPlanningTooltip')}\n\n${t('page.sprints.addedAfterPlanningKeys', { keys: s.addedAfterPlanningKeys.join(', ') })}`
+                            : t('page.sprints.addedAfterPlanningTooltip')}
+                        >
+                          {s.addedAfterPlanningCount > 0
+                            ? `${s.addedAfterPlanningCount} (${s.addedAfterPlanningStoryPoints.toFixed(0)} SP)`
+                            : <span className="text-muted-foreground">0</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs" title={t('page.sprints.carryoverTooltip')}>
+                          {s.carryoverCount > 0
+                            ? `${s.carryoverCount} (${s.carryoverStoryPoints.toFixed(0)} SP)`
+                            : <span className="text-muted-foreground">0</span>}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{days(s.medianCycleTimeDays)}</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
