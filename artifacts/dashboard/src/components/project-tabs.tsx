@@ -35,13 +35,16 @@ export const TAB_GROUPS: TabGroup[] = [
     labelKey: "nav.delivery",
     icon: <BarChart3 size={16} />,
     // getSectionLinks only returns sprints (Scrum) or kanban (Kanban), and capacity only for Scrum.
-    sections: ["sprints", "kanban", "capacity", "forecast"],
+    // Pronóstico (forecast) was hidden at the user's request 2026-11-13; its URL still works.
+    sections: ["sprints", "kanban", "capacity"],
   },
 ];
 
 /** Primary order. Group keys stand for their whole group. */
 const PRIMARY_ORDER: string[] = ["health", "flow", "team", "delivery", "quality"];
 const SECONDARY_TAB_SECTIONS: string[] = ["report"];
+/** Sections kept reachable by URL but out of the menus (user's request, 2026-11-13). */
+const HIDDEN_SECTIONS: string[] = ["forecast"];
 
 const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   flow: <GitPullRequest size={16} />,
@@ -70,7 +73,9 @@ function useProjectLinks(projectId: string) {
   const { data: project } = useGetProject(projectId, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectQueryKey(projectId) },
   });
-  return getSectionLinks(currentUser?.role, projectId, permissions ?? [], project?.boardType);
+  return getSectionLinks(currentUser?.role, projectId, permissions ?? [], project?.boardType).filter(
+    (l) => !HIDDEN_SECTIONS.includes(l.section)
+  );
 }
 
 /** Shared per-project navigation - renders on every project sub-page so a user
