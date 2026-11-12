@@ -44,6 +44,7 @@ export * from './cfdDataPoint';
 export * from './cfdResponse';
 export * from './cycleTimeDataPoint';
 export * from './dashboardSummary';
+export * from './dataFreshness';
 export * from './errorResponse';
 export * from './forecastHistogramBin';
 export * from './forecastRequest';

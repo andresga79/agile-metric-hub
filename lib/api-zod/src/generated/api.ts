@@ -900,3 +900,16 @@ export const GetProjectWipResponse = zod.object({
 })
 
 
+/**
+ * @summary When this project's Jira data was last fetched, and whether it is older than 24 h
+ */
+export const GetProjectFreshnessParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetProjectFreshnessResponse = zod.object({
+  "fetchedAt": zod.string().nullable().describe('Latest fetch from Jira of this project\'s issues; null if never cached.'),
+  "stale": zod.boolean().describe('Older than 24 h.')
+})
+
+

@@ -49,8 +49,9 @@ function ninetyDayWindow(boardType: string | undefined): "6s" | "3m" {
   return boardType === "scrum" ? "6s" : "3m";
 }
 
-/** A project row that has synced data older than this is flagged as stale in the table. */
-const STALE_AFTER_MS = 26 * 60 * 60 * 1000;
+/** A project row whose data is older than this shows its date in amber (same 24 h rule as the
+ *  "Datos de Jira" label on project pages). */
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 function worstStatus(dims: HealthDimension[]): Semaphor {
   if (dims.some((d) => d.status === "fail")) return "Rojo";
@@ -602,10 +603,10 @@ export default function Dashboard() {
                               <Link href={`/projects/${p.id}?period=${ninetyDayWindow(boardTypeMap.get(p.id))}`} className="text-primary hover:underline font-medium">
                                 {p.name}
                               </Link>
-                              {p.stale && (
+                              {p.cachedAt && (
                                 <span
-                                  className="text-[10px] rounded px-1 py-0.5 bg-muted text-muted-foreground shrink-0"
-                                  title={`Datos sincronizados por última vez ${new Date(p.cachedAt).toLocaleString("es-MX")}`}
+                                  className={`text-[10px] rounded px-1 py-0.5 shrink-0 ${p.stale ? "bg-amber-500/15 text-amber-600 dark:text-yellow-300 font-medium" : "bg-muted text-muted-foreground"}`}
+                                  title={`Datos sincronizados por última vez ${new Date(p.cachedAt).toLocaleString("es-CL")}${p.stale ? " (más de 24 h)" : ""}`}
                                 >
                                   datos de hace {formatAge(p.cachedAt)}
                                 </span>

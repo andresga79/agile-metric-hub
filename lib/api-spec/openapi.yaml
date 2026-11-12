@@ -766,6 +766,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WipResponse"
+  /projects/{projectId}/freshness:
+    get:
+      operationId: getProjectFreshness
+      tags: [projects]
+      summary: When this project's Jira data was last fetched, and whether it is older than 24 h
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data freshness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataFreshness"
 components:
   securitySchemes:
     bearerAuth:
@@ -1709,6 +1727,13 @@ components:
         committed: { $ref: "#/components/schemas/CapacityUnits" }
         completed: { $ref: "#/components/schemas/CapacityUnits" }
         completionPct: { type: number }
+
+    DataFreshness:
+      type: object
+      required: [fetchedAt, stale]
+      properties:
+        fetchedAt: { type: string, nullable: true, description: Latest fetch from Jira of this project's issues; null if never cached. }
+        stale: { type: boolean, description: Older than 24 h. }
 
     WipItem:
       type: object

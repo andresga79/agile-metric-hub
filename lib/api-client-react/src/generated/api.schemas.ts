@@ -775,6 +775,13 @@ export interface CapacityHistoryRow {
   completionPct: number;
 }
 
+export interface DataFreshness {
+  /** Latest fetch from Jira of this project's issues; null if never cached. */
+  fetchedAt: string | null;
+  /** Older than 24 h. */
+  stale: boolean;
+}
+
 export interface WipItem {
   key: string;
   summary: string;

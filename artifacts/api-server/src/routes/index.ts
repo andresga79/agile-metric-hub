@@ -28,6 +28,7 @@ import releaseReadinessRouter from "./release-readiness";
 import qaWorkRouter from "./qa-work";
 import thresholdsRouter from "./thresholds";
 import wipRouter from "./wip";
+import freshnessRouter from "./freshness";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(reportInsightsRouter);
 router.use(releaseReadinessRouter);
 router.use(qaWorkRouter);
 router.use(wipRouter);
+router.use(freshnessRouter);
 
 export default router;

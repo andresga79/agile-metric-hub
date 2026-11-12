@@ -5,6 +5,7 @@ import {
   projectsCacheKey,
   issuesCacheKey,
   sprintsCacheKey,
+  getLatestCacheTimestamp,
 } from "./jira-cache";
 
 const ISSUE_TYPE_MAP: Record<string, string> = {
@@ -1401,6 +1402,12 @@ export async function getIssueComments(issueKey: string): Promise<JiraComment[]>
 }
 
 const canonicalProjectIdCache = new Map<string, string>();
+
+/** Last time this project's issues came from Jira: the latest fetched_at of its issue-cache rows
+ *  (MAX, not MIN — an old row for a period nobody requested lately must not read as stale data). */
+export async function getProjectDataFetchedAt(projectId: string): Promise<Date | null> {
+  return getLatestCacheTimestamp(`issues:${await getCanonicalProjectId(projectId)}:`);
+}
 
 export async function getCanonicalProjectId(projectId: string): Promise<string> {
   if (!isJiraConfigured()) return projectId;

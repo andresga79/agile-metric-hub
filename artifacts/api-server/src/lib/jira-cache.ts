@@ -337,6 +337,16 @@ export async function clearCache(cacheKey: string): Promise<void> {
   await db.execute(sql`DELETE FROM jira_cache WHERE cache_key = ${scopedCacheKey(cacheKey)}`);
 }
 
+/** Latest fetched_at among cache rows whose key starts with `keyPrefix` (within this namespace). */
+export async function getLatestCacheTimestamp(keyPrefix: string): Promise<Date | null> {
+  const pattern = `${scopedCacheKey(keyPrefix).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const result = await db.execute<{ latest: Date | null }>(
+    sql`SELECT MAX(fetched_at) AS latest FROM jira_cache WHERE cache_key LIKE ${pattern}`
+  );
+  const latest = result.rows?.[0]?.latest ?? null;
+  return latest ? new Date(latest as unknown as string) : null;
+}
+
 export async function getCacheTimestamp(cacheKey: string): Promise<Date | null> {
   const scopedKey = scopedCacheKey(cacheKey);
   const result = await db.execute<{ fetched_at: Date }>(

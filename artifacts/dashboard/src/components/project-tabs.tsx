@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { ChevronDown, BarChart3, GitPullRequest, Activity, Users, FileText, ShieldAlert, FlaskConical, Gauge, Timer } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
+import { DataFreshness } from "@/components/data-freshness";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -91,6 +92,7 @@ export function ProjectTabs({ projectId, active }: { projectId: string; active: 
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      <DataFreshness projectId={projectId} />
     </div>
   );
 }

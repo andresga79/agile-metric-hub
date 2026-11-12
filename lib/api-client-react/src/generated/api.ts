@@ -28,6 +28,7 @@ import type {
   CapacityResponse,
   CfdResponse,
   DashboardSummary,
+  DataFreshness,
   ErrorResponse,
   ForecastRequest,
   ForecastResponse,
@@ -2151,6 +2152,83 @@ export function useGetProjectWip<TData = Awaited<ReturnType<typeof getProjectWip
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProjectWipQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProjectFreshnessUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/freshness`
+}
+
+/**
+ * @summary When this project's Jira data was last fetched, and whether it is older than 24 h
+ */
+export const getProjectFreshness = async (projectId: string, options?: RequestInit): Promise<DataFreshness> => {
+
+  return customFetch<DataFreshness>(getGetProjectFreshnessUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectFreshnessQueryKey = (projectId: string,) => {
+    return [
+    `/api/projects/${projectId}/freshness`
+    ] as const;
+    }
+
+
+export const getGetProjectFreshnessQueryOptions = <TData = Awaited<ReturnType<typeof getProjectFreshness>>, TError = ErrorType<unknown>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectFreshness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectFreshnessQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectFreshness>>> = ({ signal }) => getProjectFreshness(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectFreshness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectFreshnessQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectFreshness>>>
+export type GetProjectFreshnessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary When this project's Jira data was last fetched, and whether it is older than 24 h
+ */
+
+export function useGetProjectFreshness<TData = Awaited<ReturnType<typeof getProjectFreshness>>, TError = ErrorType<unknown>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectFreshness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectFreshnessQueryOptions(projectId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
