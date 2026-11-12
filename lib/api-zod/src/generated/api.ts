@@ -156,6 +156,18 @@ export const GetProjectMetricsResponse = zod.object({
   "p85": zod.number().describe('85th percentile'),
   "p95": zod.number().describe('95th percentile')
 }).describe('P50\/P75\/P85\/P95 lead time percentiles'),
+  "leadTimeBuckets": zod.array(zod.object({
+  "range": zod.string(),
+  "count": zod.number()
+})).optional().describe('Lead time of the period\'s delivered issues in 6 day buckets (0-1d … 30d+)'),
+  "cycleTimeBuckets": zod.array(zod.object({
+  "range": zod.string(),
+  "count": zod.number()
+})).optional().describe('Cycle time of the period\'s delivered issues in the same 6 buckets'),
+  "deliveredByWeek": zod.array(zod.object({
+  "week": zod.string(),
+  "count": zod.number()
+})).optional().describe('Delivered issues per ISO week (label like 2026-W45, as issues-by-week uses)'),
   "timeTargets": zod.object({
   "leadTime": zod.number().nullable(),
   "cycleTime": zod.number().nullable()

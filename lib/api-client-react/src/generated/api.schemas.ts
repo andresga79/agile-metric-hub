@@ -196,6 +196,11 @@ export const ProjectMetricsBoardType = {
   simple: 'simple',
 } as const;
 
+export type ProjectMetricsDeliveredByWeekItem = {
+  week: string;
+  count: number;
+};
+
 /**
  * Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none.
  */
@@ -278,6 +283,12 @@ export interface ProjectMetrics {
   cycleTimePercentiles: Percentiles;
   /** P50/P75/P85/P95 lead time percentiles */
   leadTimePercentiles: Percentiles;
+  /** Lead time of the period's delivered issues in 6 day buckets (0-1d … 30d+) */
+  leadTimeBuckets?: CycleTimeDataPoint[];
+  /** Cycle time of the period's delivered issues in the same 6 buckets */
+  cycleTimeBuckets?: CycleTimeDataPoint[];
+  /** Delivered issues per ISO week (label like 2026-W45, as issues-by-week uses) */
+  deliveredByWeek?: ProjectMetricsDeliveredByWeekItem[];
   /** Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none. */
   timeTargets?: ProjectMetricsTimeTargets;
   /** Issues resolved in the period whose lead or cycle time is above the period's P95, slowest lead time first */

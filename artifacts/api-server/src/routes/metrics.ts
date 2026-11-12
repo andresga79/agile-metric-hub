@@ -36,6 +36,7 @@ import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings"
 import { db, portfolioCacheTable, metricTargetsTable } from "@workspace/db";
 import { getEffectiveThresholds } from "../lib/health-thresholds";
 import { pickTimeTarget } from "../lib/time-targets";
+import { bucketDays, deliveredByWeek } from "../lib/time-buckets";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -266,6 +267,10 @@ async function computeMetrics(
     : calculateTrend(secondHalfCount, firstHalfCount);
 
   const cycleTimeDistribution = await buildCycleTimeDistribution(resolved);
+  // Same delivered issues as the rest of Métricas (moved here from Analytics, which used its own set).
+  const leadTimeBuckets = bucketDays(leadTimes);
+  const cycleTimeBuckets = bucketDays(cycleTimes);
+  const deliveredWeeks = deliveredByWeek([...resolvedMap.values()]);
 
   return {
     projectId,
@@ -284,6 +289,9 @@ async function computeMetrics(
     cycleTimePercentiles,
     leadTimePercentiles,
     slowestIssues,
+    leadTimeBuckets,
+    cycleTimeBuckets,
+    deliveredByWeek: deliveredWeeks,
   };
 }
 

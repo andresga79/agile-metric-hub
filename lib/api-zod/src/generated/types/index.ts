@@ -68,6 +68,7 @@ export * from './project';
 export * from './projectBoardType';
 export * from './projectMetrics';
 export * from './projectMetricsBoardType';
+export * from './projectMetricsDeliveredByWeekItem';
 export * from './projectMetricsTimeTargets';
 export * from './projectVisibilityUpdate';
 export * from './projectWithVisibility';

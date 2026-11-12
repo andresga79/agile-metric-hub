@@ -1057,6 +1057,25 @@ components:
           allOf:
             - $ref: "#/components/schemas/Percentiles"
           description: P50/P75/P85/P95 lead time percentiles
+        leadTimeBuckets:
+          type: array
+          description: Lead time of the period's delivered issues in 6 day buckets (0-1d … 30d+)
+          items:
+            $ref: "#/components/schemas/CycleTimeDataPoint"
+        cycleTimeBuckets:
+          type: array
+          description: Cycle time of the period's delivered issues in the same 6 buckets
+          items:
+            $ref: "#/components/schemas/CycleTimeDataPoint"
+        deliveredByWeek:
+          type: array
+          description: Delivered issues per ISO week (label like 2026-W45, as issues-by-week uses)
+          items:
+            type: object
+            required: [week, count]
+            properties:
+              week: { type: string }
+              count: { type: integer }
         timeTargets:
           type: object
           description: Lead/cycle time target (project 3m target, else any project target, else the Admin good threshold); null when none.
