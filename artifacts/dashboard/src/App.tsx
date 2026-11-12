@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, QueryCache } from "@tanstack/react-query";
 import { ApiError, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { ThemeProvider } from "next-themes";
@@ -14,7 +14,6 @@ import ProjectMemberReport from "@/pages/project-member-report";
 import ProjectMetrics from "@/pages/project-metrics";
 import ProjectSla from "@/pages/project-sla";
 import ProjectForecast from "@/pages/project-forecast";
-import ProjectAnalytics from "@/pages/project-analytics";
 import ProjectFlow from "@/pages/project-flow";
 import ProjectReport from "@/pages/project-report";
 import ProjectQaRejected from "@/pages/project-qa-rejected";
@@ -134,8 +133,9 @@ function Router() {
       <Route path="/projects/:projectId/forecast">
         {() => <SectionRoute section="forecast" component={ProjectForecast} />}
       </Route>
+      {/* Analytics was removed 2026-11-13; old links land on Métricas with the same period. */}
       <Route path="/projects/:projectId/analytics">
-        {() => <SectionRoute section="analytics" component={ProjectAnalytics} />}
+        {(params) => <Redirect to={`/projects/${params.projectId}/metrics${window.location.search}`} />}
       </Route>
       <Route path="/projects/:projectId/flow">
         {() => <SectionRoute section="flow" component={ProjectFlow} />}

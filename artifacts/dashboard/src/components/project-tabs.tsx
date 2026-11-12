@@ -41,7 +41,7 @@ export const TAB_GROUPS: TabGroup[] = [
 
 /** Primary order. Group keys stand for their whole group. */
 const PRIMARY_ORDER: string[] = ["health", "flow", "team", "delivery", "quality"];
-const SECONDARY_TAB_SECTIONS: string[] = ["analytics", "report"];
+const SECONDARY_TAB_SECTIONS: string[] = ["report"];
 
 const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   flow: <GitPullRequest size={16} />,
@@ -50,7 +50,6 @@ const TAB_ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 const DROPDOWN_ICON_MAP: Record<string, React.ReactNode> = {
-  analytics: <BarChart3 size={14} />,
   report: <FileText size={14} />,
 };
 

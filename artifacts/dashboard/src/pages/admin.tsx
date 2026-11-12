@@ -48,7 +48,7 @@ type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 const RETIRED_METRICS = ["kanbanThroughputDrop", "kanbanCycleTimeRise"];
 
 const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanCycleTimeRise"];
-const HIGHER_BETTER = ["sprintCompletionReal", "throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
+const HIGHER_BETTER = ["sprintCompletionReal", "throughput", "predictability", "sprintCompletion", "slaCompliance"];
 
 // These are a single target value, not a good/warning band — the backend only ever reads
 // goodValue for them (see sla.ts). warningValue is kept in sync automatically so editing this
@@ -62,7 +62,6 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   wipRatio: { label: "WIP Balance", unit: "%" },
   cfr: { label: "Calidad (CFR)", unit: "%" },
   predictability: { label: "Predictabilidad", unit: "" },
-  flowEfficiency: { label: "Flow Efficiency", unit: "%" },
   blocked: { label: "Issues Bloqueados", unit: "% del WIP" },
   flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
   sprintCompletion: { label: "Sprint Completion", unit: "%" },

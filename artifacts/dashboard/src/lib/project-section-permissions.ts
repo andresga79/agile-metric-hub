@@ -100,7 +100,6 @@ export function getSectionLinks(
     { href: `/projects/${projectId}/team`, label: "Team", section: "team" as ProjectSection },
     { href: `/projects/${projectId}/qa-rejected`, label: "QA Rejected", section: "qa-rejected" as ProjectSection },
     { href: `/projects/${projectId}/qa-work`, label: "QA", section: "qa-work" as ProjectSection },
-    { href: `/projects/${projectId}/analytics`, label: "Analytics", section: "analytics" as ProjectSection },
     { href: `/projects/${projectId}/report`, label: "Report", section: "report" as ProjectSection },
   ];
   return links.filter((l) => canAccessSection(role, l.section, permissions));
