@@ -12,7 +12,6 @@ import {
   isValidPeriodOrSprintWindow,
   resolvePeriodDays,
   isIssueDone,
-  isIssueInProgress,
   getResolutionDate,
   getDeliveryDate,
   withoutNonDeliveryClosures,
@@ -29,13 +28,12 @@ import {
 } from "../lib/jira";
 import { logger } from "../lib/logger";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
-import { getEffectiveThresholds } from "../lib/health-thresholds";
 import { detectStructuralBottleneck } from "../lib/report-insights";
 import { db, blockedReasonsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { isoWeekLabel } from "../lib/iso-week";
 import { median } from "../lib/stats";
-import { computeTimeInStatus, computeWipAging } from "../lib/flow-insights";
+import { computeTimeInStatus } from "../lib/flow-insights";
 
 const router: IRouter = Router();
 
@@ -213,7 +211,7 @@ router.get(
       await clearCache(`issues:${projectId}:flagged:changelog`);
     }
 
-    const [issues, blockedScopeIssues, flaggedIssues, openIssues, allowedIssueTypes, effectiveThresholds] = await Promise.all([
+    const [issues, blockedScopeIssues, flaggedIssues, openIssues, allowedIssueTypes] = await Promise.all([
       getJiraIssuesForWindow(projectId, periodDays, { includeChangelog: true }).catch((err) => {
         logger.warn({ err, projectId }, "Failed to fetch Jira issues for analytics, returning empty");
         return [] as JiraIssue[];
@@ -235,7 +233,6 @@ router.get(
         return [] as JiraIssue[];
       }),
       getPortfolioAllowedIssueTypes(),
-      getEffectiveThresholds(projectId),
     ]);
     const cacheTimestamp = await getCacheTimestamp(issuesCacheKey(projectId, periodDays));
 
@@ -266,27 +263,6 @@ router.get(
     ).filter(isValueIssue);
 
     const metrics = await computePeriodMetrics(uniqueIssues, startDate, windowEnd ?? undefined);
-
-    // --- WIP Aging Report (#2) ---
-    // Use the wider 90-day fetch (same one blocked analysis uses), not the
-    // period-scoped `uniqueIssues` - otherwise an issue created 45 days ago
-    // and still open never matches "resolved in period" nor "created in
-    // period" on the 1M view, and silently disappears from its own aging report.
-    const uniqueBlockedScopeIssues = Array.from(
-      new Map(blockedScopeIssues.map((i) => [i.key, i])).values()
-    ).filter(isValueIssue);
-    const inProgressIssues = uniqueBlockedScopeIssues.filter((i) => isIssueInProgress(i));
-    const wipAging = await computeWipAging(inProgressIssues, effectiveThresholds.wipAging);
-    const wipAgingTotal = wipAging.length;
-    const wipAgingTop = wipAging.slice(0, 10);
-    // Computed over the FULL list, not wipAgingTop — otherwise "N critical" only counts among the
-    // 10 oldest shown, silently hiding critical/warning items ranked 11+ from the tally itself
-    // (not just from the visible table).
-    const wipAgingCounts = {
-      critical: wipAging.filter((i) => i.alertLevel === "critical").length,
-      warning: wipAging.filter((i) => i.alertLevel === "warning").length,
-      watch: wipAging.filter((i) => i.alertLevel === "watch").length,
-    };
 
     // --- Blocked Time Analysis (#7) ---
     const blockedData = await Promise.all(
@@ -510,9 +486,6 @@ router.get(
       compareTo,
       fetchedAt: cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null,
       ...metrics,
-      wipAging: wipAgingTop,
-      wipAgingTotal,
-      wipAgingCounts,
       blockedIssues,
       timeInStatus,
       structuralBottleneck,

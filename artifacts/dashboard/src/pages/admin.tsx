@@ -47,7 +47,7 @@ type AdminSection = "admin" | "roles" | "health" | "types" | "visibility";
 // Kanban attention thresholds were retired (2026-11-09); old DBs still hold the rows, so hide them.
 const RETIRED_METRICS = ["kanbanThroughputDrop", "kanbanCycleTimeRise"];
 
-const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "wipAging", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanCycleTimeRise"];
+const LOWER_BETTER = ["cycleTime", "leadTime", "cfr", "wipRatio", "blocked", "flowLoad", "slaHighest", "slaHigh", "slaMedium", "slaLow", "slaLowest", "sprintPredictability", "kanbanCycleTimeRise"];
 const HIGHER_BETTER = ["sprintCompletionReal", "throughput", "predictability", "flowEfficiency", "sprintCompletion", "slaCompliance"];
 
 // These are a single target value, not a good/warning band — the backend only ever reads
@@ -65,7 +65,6 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   flowEfficiency: { label: "Flow Efficiency", unit: "%" },
   blocked: { label: "Issues Bloqueados", unit: "% del WIP" },
   flowLoad: { label: "Flow Load (WIP/Throughput)", unit: "x" },
-  wipAging: { label: "WIP Aging", unit: "d" },
   sprintCompletion: { label: "Sprint Completion", unit: "%" },
   sprintCompletionReal: { label: "Cumplimiento real (v2)", unit: "%" },
   sprintPredictability: { label: "Predictibilidad (desvío, v2)", unit: "pp" },

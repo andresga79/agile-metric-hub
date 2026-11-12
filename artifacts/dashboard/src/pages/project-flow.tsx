@@ -112,11 +112,6 @@ export default function ProjectFlow() {
   if (!project) return <div>{t('page.flow.notFound')}</div>;
   if (error) return <div>{error}</div>;
 
-  const wipItems = data?.wipAging ?? [];
-  const wipAgingTotal = data?.wipAgingTotal ?? wipItems.length;
-  // Computed server-side over the FULL wip-aging list, not just the (up to) 10 oldest shown below —
-  // filtering wipItems here would silently undercount critical/warning items ranked 11+.
-  const wipAgingCounts = data?.wipAgingCounts ?? { critical: 0, warning: 0, watch: 0 };
   const blockedItems = data?.blockedIssues ?? [];
   const visibleBlockedItems = showAllBlocked ? blockedItems : blockedItems.filter((b: any) => b.isCurrentlyBlocked);
   const timeInStatus = data?.timeInStatus ?? [];
@@ -272,67 +267,6 @@ export default function ProjectFlow() {
                             <span className="text-xs text-muted-foreground w-9 text-right">{pct.toFixed(0)}%</span>
                           </div>
                         </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-card/40">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock size={18} />
-            {t('page.flow.agingTitle')}
-          </CardTitle>
-          <CardDescription>
-            {wipAgingTotal} {t('page.flow.agingDesc')} — {wipAgingCounts.critical} {t('page.flow.critical')}, {wipAgingCounts.warning} {t('page.flow.warning')}, {wipAgingCounts.watch} {t('page.flow.watch')}
-            {wipAgingTotal > wipItems.length && (
-              <span className="block text-xs mt-0.5">{t('page.flow.showingOldest', { count: wipItems.length })}</span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {wipItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('page.flow.noIssues')}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border hover:bg-transparent">
-                    <TableHead>{t('page.flow.key')}</TableHead>
-                    <TableHead>{t('page.flow.summary')}</TableHead>
-                    <TableHead>{t('page.flow.type')}</TableHead>
-                    <TableHead>{t('page.flow.priority')}</TableHead>
-                    <TableHead>{t('page.flow.assignee')}</TableHead>
-                    <TableHead>{t('page.flow.alert')}</TableHead>
-                    <TableHead>{t('page.flow.since')}</TableHead>
-                    <TableHead className="text-right">{t('page.flow.daysInProgress')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {wipItems.map((item: any) => {
-                    const days = item.daysInProgress ?? 0;
-                    const alertLevel = item.alertLevel;
-                    const alertBadge = alertLevel === "critical" ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/15 text-red-400">{t('page.flow.criticalLabel')}</span>
-                      : alertLevel === "warning" ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-500/15 text-orange-400">{t('page.flow.warningLabel')}</span>
-                      : alertLevel === "watch" ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400">{t('page.flow.watchLabel')}</span>
-                      : <span className="text-xs text-muted-foreground">—</span>;
-                    return (
-                      <TableRow key={item.id} className={`border-border hover:bg-accent/50 ${alertLevel === "critical" ? "bg-red-500/5" : alertLevel === "warning" ? "bg-orange-500/5" : ""}`}>
-                        <TableCell className="font-mono text-xs text-primary">{item.key}</TableCell>
-                        <TableCell className="max-w-[200px] truncate" title={item.summary}>{item.summary}</TableCell>
-                        <TableCell>{item.issueType}</TableCell>
-                        <TableCell>{item.priority}</TableCell>
-                        <TableCell>{item.assignee ?? "—"}</TableCell>
-                        <TableCell>{alertBadge}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {item.enteredDate ? new Date(item.enteredDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">{item.daysInProgress !== null ? `${item.daysInProgress}d` : "—"}</TableCell>
                       </TableRow>
                     );
                   })}

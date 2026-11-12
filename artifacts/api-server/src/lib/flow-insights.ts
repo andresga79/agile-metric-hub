@@ -5,22 +5,6 @@ import {
   getResolutionDate,
   type JiraIssue,
 } from "./jira";
-import type { EffectiveThreshold } from "./health-thresholds";
-
-// Admin -> Health configures wipAging as a (goodValue, warningValue) pair (defaults 3d / 14d).
-// The "watch"/"warning" split below the two admin cutoffs is derived as their midpoint so the
-// existing 3-tier UI (project-flow.tsx, flow-health-card.tsx) keeps working without a 3rd
-// admin-configurable number.
-export function getAlertLevel(days: number | null, threshold: EffectiveThreshold | undefined): "critical" | "warning" | "watch" | null {
-  if (days === null) return null;
-  const good = threshold?.goodValue ?? 3;
-  const warning = threshold?.warningValue ?? 14;
-  const midpoint = (good + warning) / 2;
-  if (days >= warning) return "critical";
-  if (days >= midpoint) return "warning";
-  if (days >= good) return "watch";
-  return null;
-}
 
 export interface TimeInStatusEntry {
   status: string;
@@ -121,67 +105,4 @@ const WAITING_RE = /ready|accepted|aceptad|listo|espera|waiting|pending|pendient
 
 export function isWaitingStatus(name: string): boolean {
   return WAITING_RE.test(name);
-}
-
-export interface WipAgingItem {
-  id: string;
-  key: string;
-  summary: string;
-  assignee: string | null;
-  issueType: string;
-  priority: string;
-  daysInProgress: number;
-  alertLevel: "critical" | "warning" | "watch" | null;
-  enteredDate: string;
-}
-
-export async function computeWipAging(
-  inProgress: JiraIssue[],
-  threshold: EffectiveThreshold | undefined,
-): Promise<WipAgingItem[]> {
-  const items = await Promise.all(
-    inProgress.map(async (i): Promise<WipAgingItem> => {
-      const histories = i.changelog?.histories ?? [];
-      let enteredInProgress: Date | null = null;
-
-      if (histories.length > 0) {
-        const categoryMap = await getStatusCategoryMap();
-        const transitions = histories
-          .filter((h) => h.items.some((it) => it.field === "status"))
-          .map((h) => {
-            const item = h.items.find((it) => it.field === "status");
-            return { at: new Date(h.created), to: item?.toString ?? "", toId: item?.to ?? null };
-          })
-          .sort((a, b) => b.at.getTime() - a.at.getTime());
-
-        for (const t of transitions) {
-          const cat = statusCategory(categoryMap, t.to, t.toId);
-          if (cat === "indeterminate") {
-            enteredInProgress = t.at;
-            break;
-          }
-        }
-      }
-
-      const fallbackStart = new Date(i.fields.created);
-      const effectiveStart = enteredInProgress ?? fallbackStart;
-      const daysInProgress = Math.max(
-        0,
-        Math.round(((Date.now() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) * 10) / 10
-      );
-
-      return {
-        id: i.id,
-        key: i.key,
-        summary: i.fields.summary,
-        assignee: i.fields.assignee?.displayName ?? null,
-        issueType: i.fields.issuetype.name,
-        priority: i.fields.priority.name,
-        daysInProgress,
-        alertLevel: getAlertLevel(daysInProgress, threshold),
-        enteredDate: enteredInProgress?.toISOString() ?? fallbackStart.toISOString(),
-      };
-    })
-  );
-  return items.sort((a, b) => b.daysInProgress - a.daysInProgress);
 }
