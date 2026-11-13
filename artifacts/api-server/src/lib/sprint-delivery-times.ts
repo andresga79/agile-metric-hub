@@ -13,8 +13,9 @@ import { getPortfolioAllowedIssueTypes } from "./portfolio-metric-settings";
 import { median } from "./stats";
 
 export interface SprintDeliveryTimes {
-  /** Median lead/cycle time per sprint, keyed by sprint id. */
-  perSprint: Map<number, { lead: number | null; cycle: number | null }>;
+  /** Median lead/cycle time per sprint, keyed by sprint id. cycleCount = how many delivered
+   *  issues with a cycle time the median is over (a P50 over 2 issues swings a lot). */
+  perSprint: Map<number, { lead: number | null; cycle: number | null; cycleCount: number }>;
   /** Median over every issue delivered inside a CLOSED sprint's window (active sprint excluded,
    *  its numbers are still moving), for "the window's cycle time" cards. */
   closedPooled: { lead: number | null; cycle: number | null };
@@ -26,7 +27,7 @@ export interface SprintDeliveryTimes {
  *  number for a sprint. Sprint membership would credit an issue to every sprint it passed through
  *  (OLP-3330, 427 d, in both 116 and 117). */
 export async function sprintDeliveryTimes(projectId: string, sprints: JiraSprint[]): Promise<SprintDeliveryTimes> {
-  const perSprint = new Map<number, { lead: number | null; cycle: number | null }>();
+  const perSprint = new Map<number, { lead: number | null; cycle: number | null; cycleCount: number }>();
   const withStart = sprints.filter((s) => s.startDate);
   if (withStart.length === 0) return { perSprint, closedPooled: { lead: null, cycle: null } };
 
@@ -54,7 +55,16 @@ export async function sprintDeliveryTimes(projectId: string, sprints: JiraSprint
   const byName = new Map(buckets.map((b) => [b.label, b]));
   for (const s of withStart) {
     const b = byName.get(s.name);
-    perSprint.set(s.id, { lead: b?.medianLeadTime ?? null, cycle: b?.medianCycleTime ?? null });
+    // Same [start, close) window as buildSprintVelocityBuckets.
+    const start = new Date(s.startDate!).getTime();
+    const endRaw = s.completeDate ?? s.endDate ?? null;
+    const end = endRaw ? new Date(endRaw).getTime() : Infinity;
+    const cycleCount = resolved.filter((i) => {
+      const t = resolvedMap.get(i.id)!.getTime();
+      const c = leadCycle.get(i.id)?.cycle;
+      return t >= start && t < end && c !== null && c !== undefined;
+    }).length;
+    perSprint.set(s.id, { lead: b?.medianLeadTime ?? null, cycle: b?.medianCycleTime ?? null, cycleCount });
   }
 
   const closedWindows = withStart

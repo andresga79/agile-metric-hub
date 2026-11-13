@@ -443,13 +443,19 @@ paths:
       tags: [metrics]
       summary: Get sprint-level metrics (velocity, completion, cycle time) for Scrum projects
       description: >
-        Returns per-sprint breakdown: velocity, completion rate, cycle time,
-        reopened count, and issue type breakdown. Only available for Scrum projects.
+        Returns per-sprint metrics for the last 2 / 6 closed sprints plus the active one: velocity,
+        completion, planned vs added scope, carryover and cycle time. Only available for Scrum projects.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/PeriodPath"
+        - name: period
+          in: path
+          required: true
+          description: Last 2 / 6 CLOSED sprints, plus the sprint in progress (same cadence as sprint-composition).
+          schema:
+            type: string
+            enum: ["2s", "6s"]
       responses:
         "200":
           description: Sprint metrics
@@ -1873,9 +1879,11 @@ components:
       required:
         [sprintId, sprintName, state, startDate, endDate, totalIssues, totalStoryPoints,
          completedIssues, completedStoryPoints, completionRate, completionBasis, velocity,
-         reopenedCount, avgCycleTimeDays, medianCycleTimeDays, breakdown, carryoverCount, carryoverStoryPoints,
+         reopenedCount, avgCycleTimeDays, medianCycleTimeDays, cycleSampleSize, carryoverCount, carryoverStoryPoints,
          carryoverRate, addedAfterPlanningCount, addedAfterPlanningStoryPoints, addedAfterPlanningKeys,
-         closedAtSprintEndIssues, closedAtSprintEndStoryPoints, closedAtSprintEndRate]
+         plannedIssues, plannedStoryPoints, plannedCompletionRate,
+         closedAtSprintEndIssues, closedAtSprintEndStoryPoints, closedAtSprintEndRate,
+         closedAtSprintEndPlannedIssues, closedAtSprintEndPlannedStoryPoints, closedAtSprintEndPlannedRate]
       properties:
         sprintId:
           type: integer
@@ -1913,8 +1921,9 @@ components:
         medianCycleTimeDays:
           type: ["number", "null"]
           description: Median cycle time of the issues delivered in this sprint's window (same as Métricas)
-        breakdown:
-          $ref: "#/components/schemas/IssueTypeBreakdown"
+        cycleSampleSize:
+          type: integer
+          description: How many delivered issues medianCycleTimeDays is over.
         carryoverCount:
           type: integer
           description: Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one.
@@ -1935,6 +1944,14 @@ components:
           items:
             type: string
           description: Keys of the addedAfterPlanningCount issues.
+        plannedIssues:
+          type: integer
+          description: The plan - scope minus addedAfterPlanningCount (in the sprint at the end of day 1).
+        plannedStoryPoints:
+          type: number
+        plannedCompletionRate:
+          type: ["number", "null"]
+          description: Planned issues done now over the plan, on completionBasis. Null with nothing planned.
         closedAtSprintEndIssues:
           type: integer
           nullable: true
@@ -1947,6 +1964,14 @@ components:
           type: number
           nullable: true
           description: "\"% real cerrado\": closedAtSprintEnd over the sprint's scope, on the same completionBasis as completionRate. Null while the sprint is not closed."
+        closedAtSprintEndPlannedIssues:
+          type: ["integer", "null"]
+          description: Planned issues already done when the sprint closed. Null while the sprint is not closed.
+        closedAtSprintEndPlannedStoryPoints:
+          type: ["number", "null"]
+        closedAtSprintEndPlannedRate:
+          type: ["number", "null"]
+          description: "\"% real cerrado sobre planificado\": closedAtSprintEndPlanned over the plan, same basis. Null while not closed or with nothing planned."
         goal:
           type: ["string", "null"]
           description: This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.

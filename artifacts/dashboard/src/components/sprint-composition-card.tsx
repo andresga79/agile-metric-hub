@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Layers } from "lucide-react";
 import {
@@ -40,17 +39,17 @@ const FALLBACK_COLOR = "hsl(var(--muted-foreground))";
 
 export type SprintWindow = "2s" | "6s";
 
-const WINDOWS: { value: SprintWindow; labelKey: string }[] = [
+/** The Sprints page's one window selector (it drives this card and the Sprints table). */
+export const SPRINT_WINDOWS: { value: SprintWindow; labelKey: string }[] = [
   { value: "2s", labelKey: "page.sprintComposition.last2" },
   { value: "6s", labelKey: "page.sprintComposition.last6" },
 ];
 
 const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 
-export function SprintCompositionCard({ projectId }: { projectId: string }) {
+export function SprintCompositionCard({ projectId, window: win }: { projectId: string; window: SprintWindow }) {
   const { t } = useTranslation();
   const token = localStorage.getItem("auth_token");
-  const [win, setWin] = useState<SprintWindow>("6s");
   const { data, isLoading, isError } = useGetProjectSprintComposition(projectId, win, {
     query: {
       enabled: !!token,
@@ -80,19 +79,6 @@ export function SprintCompositionCard({ projectId }: { projectId: string }) {
                 })}
               </CardDescription>
             )}
-          </div>
-          <div className="flex bg-background border border-border rounded-md p-1">
-            {WINDOWS.map((w) => (
-              <button
-                key={w.value}
-                onClick={() => setWin(w.value)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-                  win === w.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t(w.labelKey)}
-              </button>
-            ))}
           </div>
         </div>
       </CardHeader>

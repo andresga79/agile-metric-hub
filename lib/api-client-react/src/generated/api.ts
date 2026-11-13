@@ -1391,7 +1391,7 @@ export function useGetProjectKanbanMetrics<TData = Awaited<ReturnType<typeof get
 
 
 export const getGetProjectSprintMetricsUrl = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '2s' | '6s',) => {
 
 
 
@@ -1400,12 +1400,12 @@ export const getGetProjectSprintMetricsUrl = (projectId: string,
 }
 
 /**
- * Returns per-sprint breakdown: velocity, completion rate, cycle time, reopened count, and issue type breakdown. Only available for Scrum projects.
+ * Returns per-sprint metrics for the last 2 / 6 closed sprints plus the active one: velocity, completion, planned vs added scope, carryover and cycle time. Only available for Scrum projects.
  *
  * @summary Get sprint-level metrics (velocity, completion, cycle time) for Scrum projects
  */
 export const getProjectSprintMetrics = async (projectId: string,
-    period: '1m' | '3m', options?: RequestInit): Promise<SprintMetricsResponse> => {
+    period: '2s' | '6s', options?: RequestInit): Promise<SprintMetricsResponse> => {
 
   return customFetch<SprintMetricsResponse>(getGetProjectSprintMetricsUrl(projectId,period),
   {
@@ -1421,7 +1421,7 @@ export const getProjectSprintMetrics = async (projectId: string,
 
 
 export const getGetProjectSprintMetricsQueryKey = (projectId: string,
-    period: '1m' | '3m',) => {
+    period: '2s' | '6s',) => {
     return [
     `/api/projects/${projectId}/sprints/${period}`
     ] as const;
@@ -1429,7 +1429,7 @@ export const getGetProjectSprintMetricsQueryKey = (projectId: string,
 
 
 export const getGetProjectSprintMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError = ErrorType<ErrorResponse>>(projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1457,7 +1457,7 @@ export type GetProjectSprintMetricsQueryError = ErrorType<ErrorResponse>
 
 export function useGetProjectSprintMetrics<TData = Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError = ErrorType<ErrorResponse>>(
  projectId: string,
-    period: '1m' | '3m', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    period: '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 

@@ -553,14 +553,6 @@ export const SprintMetricCompletionBasis = {
   issueCount: 'issueCount',
 } as const;
 
-export interface IssueTypeBreakdown {
-  Story: number;
-  Bug: number;
-  Task: number;
-  Epic: number;
-  Other: number;
-}
-
 export interface SprintMetric {
   sprintId: number;
   sprintName: string;
@@ -588,7 +580,8 @@ export interface SprintMetric {
      * @nullable
      */
   medianCycleTimeDays: number | null;
-  breakdown: IssueTypeBreakdown;
+  /** How many delivered issues medianCycleTimeDays is over. */
+  cycleSampleSize: number;
   /** Number of issues in this sprint that were already assigned to an earlier sprint (per Jira's Sprint field history) whose end date precedes this sprint's start date — work that slipped from a previous sprint into this one. */
   carryoverCount: number;
   /** Story points belonging to carryoverCount issues. */
@@ -601,12 +594,32 @@ export interface SprintMetric {
   addedAfterPlanningStoryPoints: number;
   /** Keys of the addedAfterPlanningCount issues. */
   addedAfterPlanningKeys: string[];
+  /** The plan - scope minus addedAfterPlanningCount (in the sprint at the end of day 1). */
+  plannedIssues: number;
+  plannedStoryPoints: number;
+  /**
+     * Planned issues done now over the plan, on completionBasis. Null with nothing planned.
+     * @nullable
+     */
+  plannedCompletionRate: number | null;
   /** Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative). */
   closedAtSprintEndIssues: number | null;
   /** Story points of closedAtSprintEndIssues. Null while the sprint is not closed. */
   closedAtSprintEndStoryPoints: number | null;
   /** "% real cerrado": closedAtSprintEnd over the sprint's scope, on the same completionBasis as completionRate. Null while the sprint is not closed. */
   closedAtSprintEndRate: number | null;
+  /**
+     * Planned issues already done when the sprint closed. Null while the sprint is not closed.
+     * @nullable
+     */
+  closedAtSprintEndPlannedIssues: number | null;
+  /** @nullable */
+  closedAtSprintEndPlannedStoryPoints: number | null;
+  /**
+     * "% real cerrado sobre planificado": closedAtSprintEndPlanned over the plan, same basis. Null while not closed or with nothing planned.
+     * @nullable
+     */
+  closedAtSprintEndPlannedRate: number | null;
   /**
      * This sprint's goal, as set in Jira. Null when the sprint has no goal or it's blank.
      * @nullable
@@ -946,6 +959,14 @@ export interface CapacityResponse {
   teamSummary: CapacityTeamSummary;
   history: CapacityHistoryRow[];
   warnings: string[];
+}
+
+export interface IssueTypeBreakdown {
+  Story: number;
+  Bug: number;
+  Task: number;
+  Epic: number;
+  Other: number;
 }
 
 export interface WeekMetric {

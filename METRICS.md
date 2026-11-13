@@ -232,6 +232,26 @@ cerrados, lo que **ya estaba en Done al momento del cierre** (`wasIssueDoneAt` d
 mismo alcance y misma base SP/conteo). `null` en el sprint activo (la UI muestra ahí el avance
 actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP (53.5%).
 
+**Tabla "Desglose por Sprint" (2026-11-13):**
+- **Ventana:** la misma de Composición del sprint, con un solo selector para toda la página:
+  `2s` / `6s` = últimos 2 / 6 sprints **cerrados** por fecha de fin, más el sprint en curso como fila
+  aparte (`selectSprintWindow`, `routes/sprint-metrics.ts`). Antes era 1M/3M por fecha (hasta 4 / 8
+  sprints) y no coincidía con la tarjeta de Composición.
+- **Planificado** (`plannedIssues` / `plannedStoryPoints`): el alcance menos lo que entró después de
+  la planning (`isAddedAfterPlanning`, corte fin del día 1). **+ Entró después** al lado; planificado +
+  entró después = alcance total. Antes la columna "Comprometido" mostraba el alcance total, como si el
+  equipo se hubiera comprometido también a lo que entró a mitad.
+- **% Real cerrado sobre Total | Planificado** (selector de la tabla): Total = `closedAtSprintEndRate`;
+  Planificado = `closedAtSprintEndPlannedRate` = issues planificados en Done al cierre / planificado,
+  misma base SP/conteo (`null` si no hubo nada planificado). La celda muestra "hecho/alcance" en la
+  **misma unidad** que el % (SP cuando el sprint tiene SP, si no issues). En el sprint en curso:
+  avance actual (`completionRate` o `plannedCompletionRate`). El acumulado "Done hoy" (Rovo) pasó de
+  columna a tooltip. Las tarjetas de resumen y el gráfico siguen sobre el total.
+- **Cycle Time P50** con `n` = issues entregados detrás de la mediana (`cycleSampleSize`, desde
+  `sprintDeliveryTimes`).
+- Se quitó la columna "Desglose" (S/B/T/E): contaba Spike y Deuda técnica como "Otro" y Epic siempre
+  daba 0 (no es un tipo permitido); la mezcla por tipo vive en Composición del sprint.
+
 ### Composición del sprint (pestaña Sprints) y Mezcla esperada (Capacidad)
 De qué está hecho un sprint normal del equipo, por tipo de trabajo
 (`GET /api/projects/:id/sprint-composition/:window`, `routes/sprint-composition.ts`; cálculo puro
@@ -362,8 +382,8 @@ Reporte. Cada sub-vista conserva su URL; el modelo está en `TAB_GROUPS` / `Proj
 - **Rechazo QA por semana** (`byWeek` en `/qa-rejected`, `lib/qa-rate.ts`): misma fórmula que el KPI
   y la tabla por sprint (issues distintos rechazados ÷ issues distintos que entraron a QA en la
   semana ISO), tope 100 %. En Kanban reemplaza a la tabla por sprint (todo caía en "Unknown").
-- **Sprints:** "% real cerrado" primero (issues cerrados al cierre y % sobre SP, con semáforo);
-  "Rovo (Done hoy)" como referencia en texto atenuado; "entró después" y "arrastrado" como números
+- **Sprints:** "% real cerrado" primero (hecho/alcance y % en la misma unidad, con semáforo, sobre
+  total o planificado); "Rovo (Done hoy)" en el tooltip; "entró después" y "arrastrado" como números
   neutros (sin colores de alarma: en Scrumban entrar trabajo a mitad de sprint es normal).
 - **Equipo y Reporte, por persona:** solo en curso, bloqueados y **atrasados** (en curso con edad >
   P85 de cycle time del período), desde `/wip` con la misma regla que Flujo

@@ -14,9 +14,7 @@ import {
   sprintCloseTime,
   wasIssueDoneAt,
   getStatusCategoryMap,
-  mapIssueType,
   getEffectiveIssueType,
-  periodToDays,
   type JiraSprint,
   type JiraIssue,
   isJiraConfigured,
@@ -49,13 +47,8 @@ export interface SprintMetric {
    *  same number as the Métricas tab. avgCycleTimeDays (mean over the sprint's own
    *  issues) stays for compatibility. Null until the route fills it in. */
   medianCycleTimeDays: number | null;
-  breakdown: {
-    Story: number;
-    Bug: number;
-    Task: number;
-    Epic: number;
-    Other: number;
-  };
+  /** How many delivered issues medianCycleTimeDays is over. 0 until the route fills it in. */
+  cycleSampleSize: number;
   // Issues already tagged with an earlier, already-closed sprint (per Jira's Sprint field
   // history) that slipped into this one — work that didn't finish on time, not new scope.
   carryoverCount: number;
@@ -65,12 +58,24 @@ export interface SprintMetric {
   addedAfterPlanningCount: number;
   addedAfterPlanningStoryPoints: number;
   addedAfterPlanningKeys: string[];
+  // The plan: the scope minus what entered after planning (what was in the sprint at the end of
+  // day 1). "Comprometido" used to be the final scope, which counted mid-sprint additions as if
+  // the team had committed to them.
+  plannedIssues: number;
+  plannedStoryPoints: number;
+  /** Done now (like completionRate) over the planned issues only. Null with nothing planned. */
+  plannedCompletionRate: number | null;
   // "% real cerrado": what was already done at the moment the sprint closed (wasIssueDoneAt), as
   // opposed to completed* above, which is the current status (cumulative, like Rovo). Null for a
   // sprint that hasn't closed yet. Same scope (filtered issues) and same SP/issue-count basis.
   closedAtSprintEndIssues: number | null;
   closedAtSprintEndStoryPoints: number | null;
   closedAtSprintEndRate: number | null;
+  /** "% real cerrado sobre planificado": planned issues done at close over the plan, same basis.
+   *  Null while the sprint is not closed, or with nothing planned. */
+  closedAtSprintEndPlannedIssues: number | null;
+  closedAtSprintEndPlannedStoryPoints: number | null;
+  closedAtSprintEndPlannedRate: number | null;
   goal: string | null;
 }
 
@@ -88,8 +93,8 @@ interface SprintMetricsResponse {
     /** Median cycle time over every issue delivered inside the closed sprints of the window. */
     medianCycleTimeDays: number | null;
     totalCompletedStoryPoints: number;
-    // How many sprints actually fell inside the period, before capping to maxSprints below —
-    // lets the UI say "showing N of M" instead of silently dropping older sprints.
+    // Rows returned (last N closed + the one in progress). Kept for compatibility: the window is
+    // now a sprint count, so nothing is cut off anymore.
     totalSprintsInPeriod: number;
   };
 }
@@ -98,7 +103,7 @@ interface SprintMetricsResponse {
  *  cancellations / backlog cleanups that are already closed (isNonDeliveryClosure). OLI's board
  *  doesn't treat "Cancelado" as done, so Jira carries each one into every following sprint and it
  *  was "completed" in all of them (OLI-3629: sprints 46-49). Shared by the Sprints table and the
- *  sprint summary so both count the same issues. */
+ *  report insights so both count the same issues. */
 export async function sprintScopeIssues(
   sprintIssues: JiraIssue[],
   allowedIssueTypes: string[]
@@ -125,18 +130,6 @@ export async function computeSprintMetrics(
   const totalSp = filtered.reduce((sum, i) => sum + getStoryPoints(i), 0);
   const doneSp = doneIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
-  const breakdown: SprintMetric["breakdown"] = {
-    Story: 0, Bug: 0, Task: 0, Epic: 0, Other: 0,
-  };
-      for (const i of filtered) {
-        const mapped = mapIssueType(i.fields.issuetype.name);
-        if (mapped in breakdown) {
-          breakdown[mapped as keyof typeof breakdown]++;
-        } else {
-          breakdown.Other++;
-        }
-      }
-
   const reopenedCount = await countReopenedIssues(filtered);
 
   const carryoverIssues = filtered.filter((i) => isCarryoverIssue(i, allSprints, sprint));
@@ -144,6 +137,9 @@ export async function computeSprintMetrics(
   const carryoverStoryPoints = carryoverIssues.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
   const addedAfterPlanning = filtered.filter((i) => isAddedAfterPlanning(i, sprint));
+  const addedKeys = new Set(addedAfterPlanning.map((i) => i.key));
+  const planned = filtered.filter((i) => !addedKeys.has(i.key));
+  const plannedSp = planned.reduce((sum, i) => sum + getStoryPoints(i), 0);
 
   const cycleTimes = await Promise.all(
     doneIssues.map((i) => getCycleTimeDays(i))
@@ -156,11 +152,16 @@ export async function computeSprintMetrics(
   const closeTime = sprintCloseTime(sprint);
   let closedAtSprintEndIssues: number | null = null;
   let closedAtSprintEndStoryPoints: number | null = null;
+  let closedAtSprintEndPlannedIssues: number | null = null;
+  let closedAtSprintEndPlannedStoryPoints: number | null = null;
   if (closeTime) {
     const categoryMap = await getStatusCategoryMap();
     const doneAtEnd = filtered.filter((i) => wasIssueDoneAt(i, closeTime, categoryMap));
     closedAtSprintEndIssues = doneAtEnd.length;
     closedAtSprintEndStoryPoints = doneAtEnd.reduce((sum, i) => sum + getStoryPoints(i), 0);
+    const plannedDoneAtEnd = doneAtEnd.filter((i) => !addedKeys.has(i.key));
+    closedAtSprintEndPlannedIssues = plannedDoneAtEnd.length;
+    closedAtSprintEndPlannedStoryPoints = plannedDoneAtEnd.reduce((sum, i) => sum + getStoryPoints(i), 0);
   }
 
   const completedIssues = doneIssues.length;
@@ -169,6 +170,14 @@ export async function computeSprintMetrics(
   const completionRate = completionBasis === "storyPoints"
     ? (doneSp / totalSp) * 100
     : totalIssues > 0 ? (completedIssues / totalIssues) * 100 : 0;
+
+  // Over the plan, on the sprint's basis. Null with nothing planned on that basis (a sprint whose
+  // whole scope entered after planning has no plan to measure).
+  const plannedRate = (issues: number, sp: number): number | null =>
+    completionBasis === "storyPoints"
+      ? plannedSp > 0 ? (sp / plannedSp) * 100 : null
+      : planned.length > 0 ? (issues / planned.length) * 100 : null;
+  const plannedDoneNow = planned.filter(doneAtClose);
 
   return {
     sprintId: sprint.id,
@@ -186,13 +195,19 @@ export async function computeSprintMetrics(
     reopenedCount,
     avgCycleTimeDays,
     medianCycleTimeDays: null,
-    breakdown,
+    cycleSampleSize: 0,
     carryoverCount,
     carryoverStoryPoints,
     carryoverRate: totalSp > 0 ? (carryoverStoryPoints / totalSp) * 100 : 0,
     addedAfterPlanningCount: addedAfterPlanning.length,
     addedAfterPlanningStoryPoints: addedAfterPlanning.reduce((sum, i) => sum + getStoryPoints(i), 0),
     addedAfterPlanningKeys: addedAfterPlanning.map((i) => i.key),
+    plannedIssues: planned.length,
+    plannedStoryPoints: plannedSp,
+    plannedCompletionRate: plannedRate(
+      plannedDoneNow.length,
+      plannedDoneNow.reduce((sum, i) => sum + getStoryPoints(i), 0)
+    ),
     closedAtSprintEndIssues,
     closedAtSprintEndStoryPoints,
     closedAtSprintEndRate:
@@ -201,8 +216,36 @@ export async function computeSprintMetrics(
         : completionBasis === "storyPoints"
           ? (closedAtSprintEndStoryPoints / totalSp) * 100
           : totalIssues > 0 ? (closedAtSprintEndIssues / totalIssues) * 100 : 0,
+    closedAtSprintEndPlannedIssues,
+    closedAtSprintEndPlannedStoryPoints,
+    closedAtSprintEndPlannedRate:
+      closedAtSprintEndPlannedIssues === null || closedAtSprintEndPlannedStoryPoints === null
+        ? null
+        : plannedRate(closedAtSprintEndPlannedIssues, closedAtSprintEndPlannedStoryPoints),
     goal: sprint.goal?.trim() || null,
   };
+}
+
+const WINDOW_CLOSED_SPRINTS: Record<string, number> = { "2s": 2, "6s": 6 };
+
+const sprintEnd = (s: JiraSprint): number => {
+  const raw = s.endDate ?? s.completeDate ?? null;
+  return raw ? new Date(raw).getTime() : 0;
+};
+
+/** The Sprints page's cadence, the same as Composición del sprint (resolveSprintWindowDays): the
+ *  last `closedCount` CLOSED sprints by end date, oldest first, then the sprint(s) in progress as
+ *  their own rows. Future sprints never. */
+export function selectSprintWindow(sprints: JiraSprint[], closedCount: number): JiraSprint[] {
+  const closed = sprints
+    .filter((s) => s.state === "closed")
+    .sort((a, b) => sprintEnd(b) - sprintEnd(a))
+    .slice(0, closedCount)
+    .reverse();
+  const active = sprints
+    .filter((s) => s.state === "active")
+    .sort((a, b) => new Date(a.startDate ?? 0).getTime() - new Date(b.startDate ?? 0).getTime());
+  return [...closed, ...active];
 }
 
 router.get(
@@ -213,12 +256,11 @@ router.get(
     const projectId = Array.isArray(req.params.projectId)
       ? req.params.projectId[0]
       : req.params.projectId;
-    const period = req.params.period ?? "1m";
-
-    const maxSprints = period === "1m" ? 4 : 8;
-    const periodDays = periodToDays(period as any);
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - periodDays);
+    const closedCount = WINDOW_CLOSED_SPRINTS[String(req.params.period)];
+    if (!closedCount) {
+      res.status(400).json({ error: "period debe ser '2s' o '6s'" });
+      return;
+    }
 
     const jiraProject = await getJiraProject(projectId);
     if (!jiraProject) {
@@ -233,23 +275,12 @@ router.get(
     }
 
     const sprints = await getJiraSprints(projectId, 50);
-    // Sprints within the period, newest first, before capping to maxSprints below.
-    const sprintsInPeriod = [...sprints]
-      .filter((s) => {
-        const endDate = s.endDate ? new Date(s.endDate).getTime() : s.completeDate ? new Date(s.completeDate).getTime() : 0;
-        return endDate >= startDate.getTime();
-      })
-      .sort((a, b) => {
-        const aEnd = a.endDate ? new Date(a.endDate).getTime() : a.completeDate ? new Date(a.completeDate).getTime() : 0;
-        const bEnd = b.endDate ? new Date(b.endDate).getTime() : b.completeDate ? new Date(b.completeDate).getTime() : 0;
-        return bEnd - aEnd;
-      });
-    const filteredSprints = sprintsInPeriod.slice(0, maxSprints).reverse();
+    const filteredSprints = selectSprintWindow(sprints, closedCount);
 
     if (filteredSprints.length === 0) {
       res.json({ sprints: [], summary: {
         totalSprints: 0, avgVelocity: 0, avgCompletionRate: 0, avgCycleTimeDays: null, medianCycleTimeDays: null,
-        totalCompletedStoryPoints: 0, totalSprintsInPeriod: sprintsInPeriod.length,
+        totalCompletedStoryPoints: 0, totalSprintsInPeriod: 0,
       } });
       return;
     }
@@ -267,6 +298,7 @@ router.get(
     const sprintMetrics = scopeMetrics.map((m) => ({
       ...m,
       medianCycleTimeDays: deliveryTimes.perSprint.get(m.sprintId)?.cycle ?? null,
+      cycleSampleSize: deliveryTimes.perSprint.get(m.sprintId)?.cycleCount ?? 0,
     }));
 
     // Averages only reflect CLOSED sprints — an active sprint is partway through its timebox by
@@ -293,7 +325,7 @@ router.get(
         avgCycleTimeDays,
         medianCycleTimeDays: deliveryTimes.closedPooled.cycle,
         totalCompletedStoryPoints: closedMetrics.reduce((sum, s) => sum + s.completedStoryPoints, 0),
-        totalSprintsInPeriod: sprintsInPeriod.length,
+        totalSprintsInPeriod: sprintMetrics.length,
       },
     };
 

@@ -455,13 +455,13 @@ export const GetProjectKanbanMetricsResponse = zod.object({
 
 
 /**
- * Returns per-sprint breakdown: velocity, completion rate, cycle time, reopened count, and issue type breakdown. Only available for Scrum projects.
+ * Returns per-sprint metrics for the last 2 / 6 closed sprints plus the active one: velocity, completion, planned vs added scope, carryover and cycle time. Only available for Scrum projects.
  *
  * @summary Get sprint-level metrics (velocity, completion, cycle time) for Scrum projects
  */
 export const GetProjectSprintMetricsParams = zod.object({
   "projectId": zod.coerce.string(),
-  "period": zod.enum(['1m', '3m'])
+  "period": zod.enum(['2s', '6s']).describe('Last 2 \/ 6 CLOSED sprints, plus the sprint in progress (same cadence as sprint-composition).')
 })
 
 export const GetProjectSprintMetricsResponse = zod.object({
@@ -481,22 +481,22 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "reopenedCount": zod.number().describe('Number of issues reopened after being marked done'),
   "avgCycleTimeDays": zod.number().nullable(),
   "medianCycleTimeDays": zod.number().nullable().describe('Median cycle time of the issues delivered in this sprint\'s window (same as Métricas)'),
-  "breakdown": zod.object({
-  "Story": zod.number(),
-  "Bug": zod.number(),
-  "Task": zod.number(),
-  "Epic": zod.number(),
-  "Other": zod.number()
-}),
+  "cycleSampleSize": zod.number().describe('How many delivered issues medianCycleTimeDays is over.'),
   "carryoverCount": zod.number().describe('Number of issues in this sprint that were already assigned to an earlier sprint (per Jira\'s Sprint field history) whose end date precedes this sprint\'s start date — work that slipped from a previous sprint into this one.'),
   "carryoverStoryPoints": zod.number().describe('Story points belonging to carryoverCount issues.'),
   "carryoverRate": zod.number().describe('Percentage of this sprint\'s total story points that is carryover (0-100).'),
   "addedAfterPlanningCount": zod.number().describe('Issues that entered this sprint after its planning (end of the sprint\'s first day, team timezone), per Jira\'s Sprint field history or the creation date when created straight into the sprint. A removal and later re-add counts from the re-add.'),
   "addedAfterPlanningStoryPoints": zod.number().describe('Story points belonging to addedAfterPlanningCount issues.'),
   "addedAfterPlanningKeys": zod.array(zod.string()).describe('Keys of the addedAfterPlanningCount issues.'),
+  "plannedIssues": zod.number().describe('The plan - scope minus addedAfterPlanningCount (in the sprint at the end of day 1).'),
+  "plannedStoryPoints": zod.number(),
+  "plannedCompletionRate": zod.number().nullable().describe('Planned issues done now over the plan, on completionBasis. Null with nothing planned.'),
   "closedAtSprintEndIssues": zod.number().nullable().describe('Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative).'),
   "closedAtSprintEndStoryPoints": zod.number().nullable().describe('Story points of closedAtSprintEndIssues. Null while the sprint is not closed.'),
   "closedAtSprintEndRate": zod.number().nullable().describe('\"% real cerrado\": closedAtSprintEnd over the sprint\'s scope, on the same completionBasis as completionRate. Null while the sprint is not closed.'),
+  "closedAtSprintEndPlannedIssues": zod.number().nullable().describe('Planned issues already done when the sprint closed. Null while the sprint is not closed.'),
+  "closedAtSprintEndPlannedStoryPoints": zod.number().nullable(),
+  "closedAtSprintEndPlannedRate": zod.number().nullable().describe('\"% real cerrado sobre planificado\": closedAtSprintEndPlanned over the plan, same basis. Null while not closed or with nothing planned.'),
   "goal": zod.string().nullish().describe('This sprint\'s goal, as set in Jira. Null when the sprint has no goal or it\'s blank.')
 })),
   "summary": zod.object({

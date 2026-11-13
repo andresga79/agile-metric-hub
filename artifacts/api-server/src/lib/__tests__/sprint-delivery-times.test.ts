@@ -46,9 +46,9 @@ describe("sprintDeliveryTimes", () => {
 
   it("buckets each issue once, by delivery date, and takes the median", async () => {
     const t = await sprintDeliveryTimes("10003", [a, b]);
-    expect(t.perSprint.get(1)).toEqual({ lead: 5, cycle: 2.5 });
+    expect(t.perSprint.get(1)).toEqual({ lead: 5, cycle: 2.5, cycleCount: 2 });
     // The 427-day carryover only moves sprint B's median one rank, not its mean by ~140 days.
-    expect(t.perSprint.get(2)).toEqual({ lead: 10, cycle: 3 });
+    expect(t.perSprint.get(2)).toEqual({ lead: 10, cycle: 3, cycleCount: 3 });
   });
 
   it("pools closed sprints for the window-level median", async () => {
@@ -60,6 +60,13 @@ describe("sprintDeliveryTimes", () => {
     const active: JiraSprint = { ...b, state: "active", completeDate: undefined, endDate: "2026-11-02T00:00:00Z" };
     const t = await sprintDeliveryTimes("10003", [a, active]);
     expect(t.closedPooled).toEqual({ lead: 5, cycle: 2.5 });
-    expect(t.perSprint.get(2)).toEqual({ lead: 10, cycle: 3 });
+    expect(t.perSprint.get(2)).toEqual({ lead: 10, cycle: 3, cycleCount: 3 });
+  });
+
+  // A per-sprint P50 over 2 deliveries swings a lot: the Sprints table shows the n beside it.
+  it("reports how many delivered issues each sprint's median is over", async () => {
+    const t = await sprintDeliveryTimes("10003", [a, b]);
+    expect(t.perSprint.get(1)?.cycleCount).toBe(2);
+    expect(t.perSprint.get(2)?.cycleCount).toBe(3);
   });
 });
