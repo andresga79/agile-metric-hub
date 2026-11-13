@@ -3,23 +3,18 @@ import {
   getJiraProject,
   getProjectBoardType,
   getJiraSprints,
-  getSprintIssues,
   resolveSprintWindowDays,
   getJiraIssuesForWindow,
   getEffectiveIssueType,
-  getStoryPoints,
   isIssueDone,
-  isNonDeliveryClosure,
-  wasIssueDoneAt,
-  sprintCloseTime,
   getStatusCategoryMap,
-  isAddedAfterPlanning,
   getDeliveryDate,
   getCycleTimeDays,
   type JiraIssue,
 } from "../lib/jira";
 import { requireAuth, requireSectionView } from "../middleware/auth";
 import { getPortfolioAllowedIssueTypes } from "../lib/portfolio-metric-settings";
+import { loadCompositionSprint } from "../lib/sprint-composition-source";
 import {
   buildSprintComposition,
   type CompositionDelivered,
@@ -72,24 +67,9 @@ router.get(
       const inScopeType = (i: JiraIssue): boolean =>
         i.key.startsWith(`${project.key}-`) && allowedIssueTypes.includes(getEffectiveIssueType(i));
 
+      // A sprint Jira fails to return rejects (→ 500), instead of reading as an empty sprint.
       const sprintInputs: CompositionSprintInput[] = await Promise.all(
-        included.map(async (sprint) => {
-          const typed = (await getSprintIssues(sprint.id)).filter(inScopeType);
-          const nonDelivery = await Promise.all(typed.map((i) => isNonDeliveryClosure(i)));
-          const scope = typed.filter((i, idx) => !(nonDelivery[idx] && isIssueDone(i)));
-          const closeTime = sprintCloseTime(sprint);
-          return {
-            sprintId: sprint.id,
-            sprintName: sprint.name,
-            issues: scope.map((i) => ({
-              key: i.key,
-              category: getEffectiveIssueType(i),
-              storyPoints: getStoryPoints(i),
-              doneAtClose: closeTime ? wasIssueDoneAt(i, closeTime, categoryMap) : isIssueDone(i),
-              addedAfterPlanning: isAddedAfterPlanning(i, sprint),
-            })),
-          };
-        })
+        included.map((sprint) => loadCompositionSprint(sprint, project.key, allowedIssueTypes, categoryMap))
       );
 
       // Cycle time by delivery date, inside the [start, close) of one of the included sprints —

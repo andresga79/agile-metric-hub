@@ -496,6 +496,7 @@
   "page.sprintComposition.chartTitle": "Mezcla por sprint (% de issues)",
   "page.sprintComposition.note": "% real cerrado cuenta issues cerrados al terminar su sprint; la columna de la tabla de Sprints usa SP cuando hay. Cycle time: issues de ese tipo entregados dentro de estos sprints (P50/P85 con 3 o más).",
   "page.sprintComposition.loading": "Calculando composición…",
+  "page.sprintComposition.error": "No se pudo calcular la composición (falló la consulta a Jira). Intente nuevamente en unos minutos.",
   "page.sprintComposition.empty": "Todavía no hay sprints cerrados para calcular la composición",
   "page.sprintComposition.cat.story": "Historia (HU)",
   "page.sprintComposition.cat.bug": "Hotfix (Error)",

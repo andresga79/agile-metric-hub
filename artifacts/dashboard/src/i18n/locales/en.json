@@ -496,6 +496,7 @@
   "page.sprintComposition.chartTitle": "Mix per sprint (% of issues)",
   "page.sprintComposition.note": "% actually closed counts issues done when their sprint closed; the Sprints table column uses SP when there are any. Cycle time: issues of that type delivered inside these sprints (P50/P85 with 3 or more).",
   "page.sprintComposition.loading": "Calculating composition…",
+  "page.sprintComposition.error": "Could not calculate the composition (the Jira request failed). Try again in a few minutes.",
   "page.sprintComposition.empty": "No closed sprints yet to calculate the composition",
   "page.sprintComposition.cat.story": "Story",
   "page.sprintComposition.cat.bug": "Hotfix (Bug)",

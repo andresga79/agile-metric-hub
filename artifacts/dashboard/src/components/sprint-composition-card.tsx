@@ -51,7 +51,7 @@ export function SprintCompositionCard({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const token = localStorage.getItem("auth_token");
   const [win, setWin] = useState<SprintWindow>("6s");
-  const { data, isLoading } = useGetProjectSprintComposition(projectId, win, {
+  const { data, isLoading, isError } = useGetProjectSprintComposition(projectId, win, {
     query: {
       enabled: !!token,
       queryKey: getGetProjectSprintCompositionQueryKey(projectId, win),
@@ -97,7 +97,9 @@ export function SprintCompositionCard({ projectId }: { projectId: string }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {isLoading || !data ? (
+        {isError ? (
+          <p className="text-sm text-red-400">{t("page.sprintComposition.error")}</p>
+        ) : isLoading || !data ? (
           <p className="text-sm text-muted-foreground">{t("page.sprintComposition.loading")}</p>
         ) : rows.length === 0 ? (
           <EmptyState icon={Layers} title={t("page.sprintComposition.empty")} />
