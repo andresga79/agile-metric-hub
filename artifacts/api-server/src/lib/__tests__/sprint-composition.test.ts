@@ -168,4 +168,18 @@ describe("buildSprintComposition", () => {
     expect(row(c, "Story").issuesPerSprint).toBe(0.7);
     expect(row(c, "Bug").issueShare).toBe(33.3);
   });
+
+  it("shares add up to exactly 100 (seven equal types would round to 100.1)", () => {
+    const types = ["Story", "Bug", "Task", "Spike", "Tech Debt", "Alpha", "Zeta"];
+    const c = buildSprintComposition([sprint(1, types.map((t) => issue(t)))], []);
+    const total = c.rows.reduce((sum, r) => sum + r.issueShare, 0);
+    expect(Math.round(total * 10) / 10).toBe(100);
+    const perSprint = Object.values(c.sprints[0].shares).reduce((a, b) => a + b, 0);
+    expect(Math.round(perSprint * 10) / 10).toBe(100);
+  });
+
+  it("shares add up to exactly 100 when thirds would give 99.9", () => {
+    const c = buildSprintComposition([sprint(1, [issue("Story"), issue("Bug"), issue("Task")])], []);
+    expect(c.rows.map((r) => r.issueShare)).toEqual([33.4, 33.3, 33.3]);
+  });
 });
