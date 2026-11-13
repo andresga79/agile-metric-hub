@@ -470,6 +470,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/sprint-composition/{window}:
+    get:
+      operationId: getProjectSprintComposition
+      tags: [metrics]
+      summary: Sprint composition by work type over the last 2 or 6 closed sprints
+      description: >
+        Share of each issue type (Story, Bug = hotfix, Task, Spike, Tech Debt) in the sprints'
+        scope, per-sprint averages, % real cerrado by issues (pooled), cycle time P50/P85 of the
+        type's issues delivered inside those sprints, and how much entered after planning. The
+        active sprint never counts. Scrum only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: window
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: ["2s", "6s"]
+      responses:
+        "200":
+          description: Sprint composition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintComposition"
+        "400":
+          description: Project is not a Scrum project, or invalid window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/sprint-summary/{sprintId}:
     get:
       operationId: getProjectSprintSummary
@@ -1645,6 +1685,67 @@ components:
           allOf:
             - $ref: "#/components/schemas/SprintSummaryKpis"
           nullable: true
+    SprintCompositionRow:
+      type: object
+      required: [category, issueShare, issuesPerSprint, storyPointsPerSprint, realClosedRate, cycleP50, cycleP85, addedAfterPlanningRate, addedAfterPlanningPerSprint]
+      properties:
+        category:
+          type: string
+          description: Effective issue type (Story, Bug, Task, Spike, Tech Debt, ...).
+        issueShare:
+          type: number
+          description: "% of the window's issues (0-100)."
+        issuesPerSprint:
+          type: number
+        storyPointsPerSprint:
+          type: number
+        realClosedRate:
+          type: number
+          nullable: true
+          description: "% of the type's issues done when their sprint closed, pooled over the window."
+        cycleP50:
+          type: number
+          nullable: true
+          description: Days; null with fewer than 3 delivered.
+        cycleP85:
+          type: number
+          nullable: true
+        addedAfterPlanningRate:
+          type: number
+          description: "% of the type's issues that entered after planning."
+        addedAfterPlanningPerSprint:
+          type: number
+    SprintCompositionSprint:
+      type: object
+      required: [sprintId, sprintName, totalIssues, shares]
+      properties:
+        sprintId:
+          type: integer
+        sprintName:
+          type: string
+        totalIssues:
+          type: integer
+        shares:
+          type: object
+          description: "% of this sprint's issues per category."
+          additionalProperties:
+            type: number
+    SprintComposition:
+      type: object
+      required: [sprintCount, totalIssues, rows, sprints]
+      properties:
+        sprintCount:
+          type: integer
+        totalIssues:
+          type: integer
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SprintCompositionRow"
+        sprints:
+          type: array
+          items:
+            $ref: "#/components/schemas/SprintCompositionSprint"
     SprintMetricsResponse:
       type: object
       required: [sprints, summary]

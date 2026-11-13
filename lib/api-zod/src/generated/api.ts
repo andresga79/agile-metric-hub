@@ -512,6 +512,39 @@ export const GetProjectSprintMetricsResponse = zod.object({
 
 
 /**
+ * Share of each issue type (Story, Bug = hotfix, Task, Spike, Tech Debt) in the sprints' scope, per-sprint averages, % real cerrado by issues (pooled), cycle time P50/P85 of the type's issues delivered inside those sprints, and how much entered after planning. The active sprint never counts. Scrum only.
+ *
+ * @summary Sprint composition by work type over the last 2 or 6 closed sprints
+ */
+export const GetProjectSprintCompositionParams = zod.object({
+  "projectId": zod.coerce.string(),
+  "window": zod.enum(['2s', '6s'])
+})
+
+export const GetProjectSprintCompositionResponse = zod.object({
+  "sprintCount": zod.number(),
+  "totalIssues": zod.number(),
+  "rows": zod.array(zod.object({
+  "category": zod.string().describe('Effective issue type (Story, Bug, Task, Spike, Tech Debt, ...).'),
+  "issueShare": zod.number().describe('% of the window\'s issues (0-100).'),
+  "issuesPerSprint": zod.number(),
+  "storyPointsPerSprint": zod.number(),
+  "realClosedRate": zod.number().nullable().describe('% of the type\'s issues done when their sprint closed, pooled over the window.'),
+  "cycleP50": zod.number().nullable().describe('Days; null with fewer than 3 delivered.'),
+  "cycleP85": zod.number().nullable(),
+  "addedAfterPlanningRate": zod.number().describe('% of the type\'s issues that entered after planning.'),
+  "addedAfterPlanningPerSprint": zod.number()
+})),
+  "sprints": zod.array(zod.object({
+  "sprintId": zod.number(),
+  "sprintName": zod.string(),
+  "totalIssues": zod.number(),
+  "shares": zod.record(zod.string(), zod.number()).describe('% of this sprint\'s issues per category.')
+}))
+})
+
+
+/**
  * Rovo-style sprint report for the Resumen tab. Same scope as the Sprints table. For a closed sprint "completed" means already done when the sprint closed ("% real cerrado"); for one not closed yet, the current status. previous is the sprint that closed right before this one.
  *
  * @summary Executive summary of one sprint (KPIs vs the previous sprint, per member, per issue type)

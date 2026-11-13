@@ -575,6 +575,43 @@ export interface SprintSummaryResponse {
   previous: SprintSummaryKpis | null;
 }
 
+export interface SprintCompositionRow {
+  /** Effective issue type (Story, Bug, Task, Spike, Tech Debt, ...). */
+  category: string;
+  /** % of the window's issues (0-100). */
+  issueShare: number;
+  issuesPerSprint: number;
+  storyPointsPerSprint: number;
+  /** % of the type's issues done when their sprint closed, pooled over the window. */
+  realClosedRate: number | null;
+  /** Days; null with fewer than 3 delivered. */
+  cycleP50: number | null;
+  cycleP85: number | null;
+  /** % of the type's issues that entered after planning. */
+  addedAfterPlanningRate: number;
+  addedAfterPlanningPerSprint: number;
+}
+
+/**
+ * % of this sprint's issues per category.
+ */
+export type SprintCompositionSprintShares = {[key: string]: number};
+
+export interface SprintCompositionSprint {
+  sprintId: number;
+  sprintName: string;
+  totalIssues: number;
+  /** % of this sprint's issues per category. */
+  shares: SprintCompositionSprintShares;
+}
+
+export interface SprintComposition {
+  sprintCount: number;
+  totalIssues: number;
+  rows: SprintCompositionRow[];
+  sprints: SprintCompositionSprint[];
+}
+
 /**
  * Which base completionRate was computed on — falls back to issue count when the sprint has no story points logged. Two sprints' rates aren't comparable unless the basis matches.
  */

@@ -44,6 +44,7 @@ import type {
   ProjectVisibilityUpdate,
   ProjectWithVisibility,
   QaRejectedResponse,
+  SprintComposition,
   SprintMetricsResponse,
   SprintSummaryResponse,
   SuccessResponse,
@@ -1462,6 +1463,90 @@ export function useGetProjectSprintMetrics<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProjectSprintMetricsQueryOptions(projectId,period,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProjectSprintCompositionUrl = (projectId: string,
+    window: '2s' | '6s',) => {
+
+
+
+
+  return `/api/projects/${projectId}/sprint-composition/${window}`
+}
+
+/**
+ * Share of each issue type (Story, Bug = hotfix, Task, Spike, Tech Debt) in the sprints' scope, per-sprint averages, % real cerrado by issues (pooled), cycle time P50/P85 of the type's issues delivered inside those sprints, and how much entered after planning. The active sprint never counts. Scrum only.
+ *
+ * @summary Sprint composition by work type over the last 2 or 6 closed sprints
+ */
+export const getProjectSprintComposition = async (projectId: string,
+    window: '2s' | '6s', options?: RequestInit): Promise<SprintComposition> => {
+
+  return customFetch<SprintComposition>(getGetProjectSprintCompositionUrl(projectId,window),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectSprintCompositionQueryKey = (projectId: string,
+    window: '2s' | '6s',) => {
+    return [
+    `/api/projects/${projectId}/sprint-composition/${window}`
+    ] as const;
+    }
+
+
+export const getGetProjectSprintCompositionQueryOptions = <TData = Awaited<ReturnType<typeof getProjectSprintComposition>>, TError = ErrorType<ErrorResponse>>(projectId: string,
+    window: '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintComposition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectSprintCompositionQueryKey(projectId,window);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectSprintComposition>>> = ({ signal }) => getProjectSprintComposition(projectId,window, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined && window !== null && window !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintComposition>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectSprintCompositionQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectSprintComposition>>>
+export type GetProjectSprintCompositionQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Sprint composition by work type over the last 2 or 6 closed sprints
+ */
+
+export function useGetProjectSprintComposition<TData = Awaited<ReturnType<typeof getProjectSprintComposition>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string,
+    window: '2s' | '6s', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSprintComposition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectSprintCompositionQueryOptions(projectId,window,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
