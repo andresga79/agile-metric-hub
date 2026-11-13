@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ComposedChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
-import { SprintSummarySection } from "@/components/sprint-summary-section";
+import { SprintCompositionCard } from "@/components/sprint-composition-card";
 import { useThresholds } from "@/hooks/use-thresholds";
 import { EmptyState } from "@/components/empty-state";
 
@@ -482,7 +482,7 @@ export default function ProjectSprints() {
             </CardContent>
           </Card>
 
-          <SprintSummarySection projectId={project.id} />
+          <SprintCompositionCard projectId={project.id} />
         </>
       )}
     </div>
