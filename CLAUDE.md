@@ -13,7 +13,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - `pnpm run lint` — ESLint (baseline: 0 errores, 113 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
-- `pnpm --filter @workspace/api-server test` — vitest, 270 tests (lógica pura de métricas,
+- `pnpm --filter @workspace/api-server test` — vitest, 267 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
 - Backups: servicio `backup` del compose, `pg_dump` diario con rotación 7 diarios + 4 semanales

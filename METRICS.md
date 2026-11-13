@@ -232,17 +232,34 @@ cerrados, lo que **ya estaba en Done al momento del cierre** (`wasIssueDoneAt` d
 mismo alcance y misma base SP/conteo). `null` en el sprint activo (la UI muestra ahí el avance
 actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP (53.5%).
 
-### Resumen de sprint (pestaña Resumen)
-Informe por sprint al estilo del que generaba Rovo, en la pestaña Resumen de proyectos Scrum
-(`GET /api/projects/:id/sprint-summary/:sprintId`, `lib/sprint-summary.ts`). Mismo alcance que la
-tabla de Sprints (`sprintScopeIssues`: tipos de Admin, sin limpiezas de backlog). "Completado" =
-en Done **al cierre** (`wasIssueDoneAt`, igual que "% Real cerrado"); en un sprint sin cerrar, el
-estado actual. Se compara con el sprint que cerró justo antes (`previousClosedSprint`).
-Secciones: KPIs (comprometido, entregado, % cumplimiento SP, issues, incompletas al cierre, bugs
-resueltos al cierre), SP por integrante (asignado **actual**, como Rovo), rendimiento individual
-y distribución por tipo con el nombre real de Jira (Historia, Tarea Técnica, Deuda Técnica, ...)
-y las claves de lo pendiente. Tablero Sprint 116 cuadra exacto con Rovo: 85/112 SP (75.9%),
-32/42 issues, 10 incompletas (27 SP), 5/5 bugs.
+### Composición del sprint (pestaña Sprints) y Mezcla esperada (Capacidad)
+De qué está hecho un sprint normal del equipo, por tipo de trabajo
+(`GET /api/projects/:id/sprint-composition/:window`, `routes/sprint-composition.ts`; cálculo puro
+`buildSprintComposition` en `lib/sprint-composition.ts`). Reemplazó al "Resumen de sprint" estilo
+Rovo (2026-11-13). Diseño: `docs/superpowers/specs/2026-11-13-sprint-composition-design.md`.
+
+- **Ventana:** `2s` / `6s` = últimos 2 / 6 sprints **cerrados** (`resolveSprintWindowDays`); el activo
+  nunca entra.
+- **Alcance por sprint:** el de la tabla de Sprints (tipos de Admin, sin cierres que no son entrega
+  ya en Done) **más** el filtro por clave de proyecto de Capacidad (`key.startsWith(KEY-)`). Un issue
+  arrastrado cuenta en cada sprint en que estuvo.
+- **Categorías** (`getEffectiveIssueType`), en este orden: Historia (Story), Hotfix (Bug = Error +
+  Problema), Tarea (Task = Tarea + Tarea Técnica), Spike, Deuda técnica; otros tipos habilitados
+  después, alfabético. Sin issues en la ventana → la fila no aparece.
+- **% issues:** issues del tipo / issues de la ventana. **Issues/sprint, SP/sprint:** total / sprints
+  cerrados de la ventana (un sprint vacío cuenta como 0).
+- **% real cerrado:** por **issues** (no SP), pooled: issues del tipo en Done al cierre de su sprint
+  (`wasIssueDoneAt`) / issues del tipo. Por eso puede no coincidir con la columna "% Real cerrado"
+  de la tabla, que usa SP cuando hay.
+- **Cycle P50 / P85:** issues del tipo **entregados** (`getDeliveryDate`) dentro de `[inicio, cierre)`
+  de alguno de los sprints de la ventana (sin los huecos entre sprints, misma población que
+  `sprintDeliveryTimes.closedPooled`); un issue cuenta una vez. Menos de 3 → "—".
+- **Entró a mitad:** % de issues del tipo que entraron después de la planificación
+  (`isAddedAfterPlanning`).
+- **Mezcla esperada (Capacidad):** punto medio del rango recomendado en issues × % issues de cada
+  tipo en Últimos 6, redondeado, sin los que dan 0 (`lib/expected-mix.ts` del dashboard). Si el
+  promedio de hotfix que entran a mitad es ≥ 1 por sprint, se avisa ese margen. Sin recomendación
+  (menos de 3 sprints cerrados) no se muestra.
 
 ### Predictability
 `clamp(100 - (stddev / avg) * 50, 0, 100)` sobre el throughput semanal (solo semanas con
