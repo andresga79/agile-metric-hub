@@ -737,6 +737,8 @@
   "page.capacity.nextSprint": "Próximo sprint",
   "page.capacity.activeSprint": "Sprint activo",
   "page.capacity.recommended": "Recomendado",
+  "page.capacity.expectedMix": "Mezcla esperada (últimos {{count}} sprints)",
+  "page.capacity.hotfixMargin": "~{{count}} hotfix suelen entrar a mitad de sprint: conviene dejar ese margen libre",
   "page.capacity.committed": "Cargado",
   "page.capacity.availability": "Disponibilidad del equipo",
   "page.capacity.unitIssuesPrimary": "Issues (base para planificar)",

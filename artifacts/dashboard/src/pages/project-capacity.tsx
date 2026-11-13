@@ -10,6 +10,8 @@ import {
   useGetProjectCapacity,
   getGetProjectCapacityQueryKey,
   useUpdateProjectCapacity,
+  useGetProjectSprintComposition,
+  getGetProjectSprintCompositionQueryKey,
   type CapacityTeamRow,
   type CapacityMemberInput,
   type CapacityAbsence,
@@ -24,6 +26,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MetricTooltip } from "@/components/metric-tooltip";
 import { ProjectTabs, ProjectSubNav } from "@/components/project-tabs";
 import { EmptyState } from "@/components/empty-state";
+import { CATEGORY_SHORT_KEY } from "@/components/sprint-composition-card";
+import { expectedMix } from "@/lib/expected-mix";
 
 type Band = "ok" | "warn" | "over";
 type Unit = "sp" | "issues";
@@ -144,6 +148,10 @@ export default function ProjectCapacity() {
   const params = view ? { sprint: view } : undefined;
   const { data, isLoading, isError } = useGetProjectCapacity(projectId!, params, {
     query: { enabled: !!projectId && !!token, queryKey: getGetProjectCapacityQueryKey(projectId!, params) },
+  });
+  // Expected work-type mix under the recommendation: last 6 closed sprints (Composición del sprint).
+  const { data: composition } = useGetProjectSprintComposition(projectId!, "6s", {
+    query: { enabled: !!projectId && !!token, queryKey: getGetProjectSprintCompositionQueryKey(projectId!, "6s"), retry: false },
   });
   const save = useUpdateProjectCapacity();
   const shownView: View | undefined = view ?? (data?.sprint ? (data.sprint.state === "active" ? "active" : "next") : undefined);
@@ -597,6 +605,25 @@ export default function ProjectCapacity() {
               </div>
             ))}
           </CardContent>
+          {rec && composition && composition.rows.length > 0 && (() => {
+            const mix = expectedMix(rec.range.issues as [number, number], composition.rows);
+            const hotfixPerSprint = composition.rows.find((r) => r.category === "Bug")?.addedAfterPlanningPerSprint ?? 0;
+            const hotfixMidSprint = Math.round(hotfixPerSprint);
+            if (mix.length === 0) return null;
+            return (
+              <CardContent className="pt-0 text-sm space-y-1">
+                <p>
+                  <span className="text-muted-foreground">{t("page.capacity.expectedMix", { count: composition.sprintCount })}: </span>
+                  {mix
+                    .map((m) => `~${m.issues} ${CATEGORY_SHORT_KEY[m.category] ? t(CATEGORY_SHORT_KEY[m.category]) : m.category}`)
+                    .join(" · ")}
+                </p>
+                {hotfixPerSprint >= 1 && (
+                  <p className="text-xs text-amber-600 dark:text-yellow-300">{t("page.capacity.hotfixMargin", { count: hotfixMidSprint })}</p>
+                )}
+              </CardContent>
+            );
+          })()}
         </Card>
       )}
 
