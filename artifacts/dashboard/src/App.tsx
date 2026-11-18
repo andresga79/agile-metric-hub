@@ -19,6 +19,7 @@ import ProjectReport from "@/pages/project-report";
 import ProjectQaRejected from "@/pages/project-qa-rejected";
 import ProjectQaWork from "@/pages/project-qa-work";
 import ProjectSprints from "@/pages/project-sprints";
+import ProjectEvolution from "@/pages/project-evolution";
 import ProjectCapacity from "@/pages/project-capacity";
 import ProjectKanban from "@/pages/project-kanban";
 import Admin from "@/pages/admin";
@@ -148,6 +149,10 @@ function Router() {
       </Route>
       <Route path="/projects/:projectId/qa-work">
         {() => <SectionRoute section="qa-work" component={ProjectQaWork} />}
+      </Route>
+      {/* Evolución is gated like Sprints (same permission slot as the API). */}
+      <Route path="/projects/:projectId/evolution">
+        {() => <SectionRoute section="sprints" component={ProjectEvolution} />}
       </Route>
       <Route path="/projects/:projectId/sprints">
         {() => <SectionRoute section="sprints" component={ProjectSprints} />}

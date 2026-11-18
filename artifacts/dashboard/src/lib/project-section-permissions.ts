@@ -102,5 +102,10 @@ export function getSectionLinks(
     { href: `/projects/${projectId}/qa-work`, label: "QA", section: "qa-work" as ProjectSection },
     { href: `/projects/${projectId}/report`, label: "Report", section: "report" as ProjectSection },
   ];
-  return links.filter((l) => canAccessSection(role, l.section, permissions));
+  const visible = links.filter((l) => canAccessSection(role, l.section, permissions));
+  // Evolución is Scrum-only and follows the Sprints permission (the API gates it with requireSectionView("sprints")).
+  if (boardType === "scrum" && canAccessSection(role, "sprints", permissions)) {
+    visible.push({ href: `/projects/${projectId}/evolution`, label: "Evolución", section: "evolution" });
+  }
+  return visible;
 }

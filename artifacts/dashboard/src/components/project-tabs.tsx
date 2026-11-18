@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useGetProject, getGetProjectQueryKey, useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ChevronDown, BarChart3, GitPullRequest, Users, FileText, ShieldCheck, Timer } from "lucide-react";
+import { ChevronDown, BarChart3, GitPullRequest, Users, FileText, ShieldCheck, Timer, LineChart } from "lucide-react";
 import { getSectionLinks, useRolePermissions, type ProjectSection } from "@/lib/project-section-permissions";
 import { DataFreshness } from "@/components/data-freshness";
 import {
@@ -41,7 +41,7 @@ export const TAB_GROUPS: TabGroup[] = [
 ];
 
 /** Primary order. Group keys stand for their whole group. */
-const PRIMARY_ORDER: string[] = ["health", "flow", "team", "delivery", "quality"];
+const PRIMARY_ORDER: string[] = ["health", "flow", "team", "delivery", "evolution", "quality"];
 const SECONDARY_TAB_SECTIONS: string[] = ["report"];
 /** Sections kept reachable by URL but out of the menus (user's request, 2026-11-13). */
 const HIDDEN_SECTIONS: string[] = ["forecast"];
@@ -50,6 +50,7 @@ const TAB_ICON_MAP: Record<string, React.ReactNode> = {
   flow: <GitPullRequest size={16} />,
   health: <Timer size={16} />,
   team: <Users size={16} />,
+  evolution: <LineChart size={16} />,
 };
 
 const DROPDOWN_ICON_MAP: Record<string, React.ReactNode> = {
