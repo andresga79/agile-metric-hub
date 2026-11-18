@@ -54,6 +54,7 @@ export const evolutionDeliveriesTable = pgTable(
     storyPoints: doublePrecision("story_points").notNull().default(0),
     assigneeId: text("assignee_id"),
     sprintId: integer("sprint_id"),
+    formulaVersion: integer("formula_version").notNull().default(1),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
     frozenAt: timestamp("frozen_at", { withTimezone: true }),
   },

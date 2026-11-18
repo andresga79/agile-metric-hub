@@ -92,16 +92,27 @@ export async function upsertSprintRow(
   return written.length > 0 ? "written" : "frozen";
 }
 
+/** One entry per issueKey, the last occurrence winning (Postgres rejects a key twice in one upsert). */
+export function dedupeDeliveries(ds: EvolutionDelivery[]): EvolutionDelivery[] {
+  const byKey = new Map<string, EvolutionDelivery>();
+  for (const d of ds) {
+    byKey.delete(d.issueKey);
+    byKey.set(d.issueKey, d);
+  }
+  return [...byKey.values()];
+}
+
 export async function upsertDeliveries(
   projectId: string,
-  ds: EvolutionDelivery[],
+  input: EvolutionDelivery[],
 ): Promise<{ written: number; frozen: number }> {
+  const ds = dedupeDeliveries(input);
   let written = 0;
   for (let i = 0; i < ds.length; i += DELIVERY_CHUNK) {
     const chunk = ds.slice(i, i + DELIVERY_CHUNK);
     const res = await db
       .insert(evolutionDeliveriesTable)
-      .values(chunk.map((d) => ({ projectId, ...d })))
+      .values(chunk.map((d) => ({ projectId, ...d, formulaVersion: FORMULA_VERSION })))
       .onConflictDoUpdate({
         target: [evolutionDeliveriesTable.projectId, evolutionDeliveriesTable.issueKey],
         set: {
@@ -112,6 +123,7 @@ export async function upsertDeliveries(
           storyPoints: sql`excluded.story_points`,
           assigneeId: sql`excluded.assignee_id`,
           sprintId: sql`excluded.sprint_id`,
+          formulaVersion: sql`excluded.formula_version`,
           computedAt: new Date(),
         },
         setWhere: isNull(evolutionDeliveriesTable.frozenAt),
@@ -122,9 +134,67 @@ export async function upsertDeliveries(
   return { written, frozen: ds.length - written };
 }
 
+interface MetaSource {
+  source: string;
+  computedAt: Date;
+  frozenAt: Date | null;
+  closedAt: Date;
+}
+
 /**
- * Sprints closed and deliveries delivered in [from, to). `reconstructedAt` is the newest compute time
- * among rows still open to rewrites; `frozenUntil` the latest close covered by a frozen sprint.
+ * `reconstructedAt`: newest compute time among backfilled (reconstructed) rows, frozen or not, so
+ * freezing never erases the note; on_close rows are live captures, not reconstructions.
+ * `frozenUntil`: latest close among frozen rows.
+ */
+export function evolutionMeta(rows: MetaSource[]): { reconstructedAt: Date | null; frozenUntil: Date | null } {
+  let reconstructedAt: Date | null = null;
+  let frozenUntil: Date | null = null;
+  for (const r of rows) {
+    if (r.source === "backfill" && (reconstructedAt === null || r.computedAt > reconstructedAt)) {
+      reconstructedAt = r.computedAt;
+    }
+    if (r.frozenAt !== null && (frozenUntil === null || r.closedAt > frozenUntil)) frozenUntil = r.closedAt;
+  }
+  return { reconstructedAt, frozenUntil };
+}
+
+const TZ = "America/Santiago";
+const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+const wallFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+
+function santiagoOffsetMs(at: Date): number {
+  const p = Object.fromEntries(wallFmt.formatToParts(at).map((x) => [x.type, x.value]));
+  const asUtc = Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!, +p.second!);
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/**
+ * Exclusive upper bound for "freeze until <day>": midnight starting the day after `until`, Santiago
+ * time. `until` is an inclusive calendar day: a "YYYY-MM-DD" string is that day; a Date is read as
+ * the Santiago calendar day it falls on.
+ */
+export function freezeBoundary(until: Date | string): Date {
+  const day = typeof until === "string" ? until : dayFmt.format(until);
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const nextDay = next.toISOString().slice(0, 10);
+  const wall = next.getTime();
+  // First instant whose Santiago date is the next day. Try both offsets around the date (they differ on a
+  // DST change day); when midnight itself doesn't exist (spring-forward) the valid one is 01:00.
+  const candidates = [-1, 1]
+    .map((k) => wall - santiagoOffsetMs(new Date(wall + k * 24 * 3600 * 1000)))
+    .sort((p, q) => p - q);
+  const hit = candidates.find(
+    (t) => dayFmt.format(new Date(t)) === nextDay && dayFmt.format(new Date(t - 1)) !== nextDay,
+  );
+  return new Date(hit ?? candidates[0]!);
+}
+
+/**
+ * Sprints closed and deliveries delivered in [from, to). See evolutionMeta for `reconstructedAt` / `frozenUntil`.
  */
 export async function readEvolution(
   projectId: string,
@@ -159,15 +229,7 @@ export async function readEvolution(
     )
     .orderBy(asc(evolutionDeliveriesTable.deliveredAt));
 
-  let reconstructedAt: Date | null = null;
-  let frozenUntil: Date | null = null;
-  for (const s of sprints) {
-    if (s.frozenAt === null) {
-      if (reconstructedAt === null || s.computedAt > reconstructedAt) reconstructedAt = s.computedAt;
-    } else if (frozenUntil === null || s.closedAt > frozenUntil) {
-      frozenUntil = s.closedAt;
-    }
-  }
+  const { reconstructedAt, frozenUntil } = evolutionMeta(sprints);
 
   return {
     rows: sprints.map(fromSprintRecord),
@@ -194,11 +256,15 @@ export async function storedSprintIds(projectId: string): Promise<Set<number>> {
   return new Set(rows.map((r) => r.sprintId));
 }
 
-/** Freezes every not-yet-frozen sprint closed, and delivery delivered, before `until`. */
+/**
+ * Freezes every not-yet-frozen sprint closed, and delivery delivered, up to and including the
+ * calendar day `until` in America/Santiago (until 2026-12-31 covers all of 31-dic Santiago time).
+ */
 export async function freezeUntil(
   projectId: string,
-  until: Date,
+  untilDay: Date | string,
 ): Promise<{ sprints: number; deliveries: number }> {
+  const until = freezeBoundary(untilDay);
   const now = new Date();
   const sprints = await db
     .update(evolutionSprintsTable)

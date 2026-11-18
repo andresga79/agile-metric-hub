@@ -210,10 +210,15 @@ async function initDb() {
         story_points DOUBLE PRECISION NOT NULL DEFAULT 0,
         assignee_id TEXT,
         sprint_id INTEGER,
+        formula_version INTEGER NOT NULL DEFAULT 1,
         computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         frozen_at TIMESTAMPTZ,
         UNIQUE(project_id, issue_key)
       );
+    `);
+
+    await db.execute(sql`
+      ALTER TABLE evolution_deliveries ADD COLUMN IF NOT EXISTS formula_version INTEGER NOT NULL DEFAULT 1;
     `);
 
     await db.execute(sql`
