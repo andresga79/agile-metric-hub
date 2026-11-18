@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   useGetProject, getGetProjectQueryKey,
   useGetCurrentUser, getGetCurrentUserQueryKey,
@@ -65,6 +65,13 @@ function shortSprint(name: string): string {
   return name.replace(/^.*\s/, "S");
 }
 
+/** Log-axis domain padded around the data: "auto" rounds the ends inside the data range on a log
+ *  scale, and with allowDataOverflow the lowest P50s (S117: 3.2 d) were drawn below the plot. */
+const LOG_DOMAIN: [(min: number) => number, (max: number) => number] = [
+  (min) => Math.max(0.1, min * 0.8),
+  (max) => max * 1.25,
+];
+
 /** Log axes cannot draw 0; a same-day delivery is shown at the axis floor instead of vanishing. */
 const forLog = (v: number | null) => (v === null ? null : Math.max(v, 0.1));
 
@@ -117,6 +124,8 @@ export default function ProjectEvolution() {
     query: {
       enabled: !!projectId && !!token && isScrum && sprintQuery.isSuccess,
       queryKey: getGetProjectEvolutionQueryKey(projectId!, params),
+      // Switching Sprint/Mes/Trimestre or milestone keeps the current view until the new one arrives.
+      placeholderData: keepPreviousData,
     },
   });
 
@@ -283,7 +292,7 @@ export default function ProjectEvolution() {
   const target = (key: "cycleTime" | "leadTime") => metrics?.timeTargets?.[key] ?? null;
   const targetLine = (value: number | null) =>
     value === null ? null : (
-      <ReferenceLine y={value} stroke="#22c55e" strokeDasharray="6 3" label={{ value: t("page.evolution.target", { value }), position: "insideBottomRight", fill: "#22c55e", fontSize: 10 }} />
+      <ReferenceLine y={value} ifOverflow="extendDomain" stroke="#22c55e" strokeDasharray="6 3" label={{ value: t("page.evolution.target", { value }), position: "insideBottomRight", fill: "#22c55e", fontSize: 10 }} />
     );
 
   const realClosedData = rows.map((r) => ({
@@ -333,15 +342,15 @@ export default function ProjectEvolution() {
     );
   };
 
-  const axes = (logScale = false, unit = "") => (
-    <>
-      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-      <XAxis dataKey="x" tick={TICK} />
-      {logScale
-        ? <YAxis scale="log" domain={["auto", "auto"]} tick={TICK} allowDataOverflow tickFormatter={(v: number) => `${v}${unit}`} />
-        : <YAxis tick={TICK} unit={unit} />}
-    </>
-  );
+  // An array, not a Fragment: recharts finds its children with react-is 18, which doesn't recognise
+  // React 19 Fragments, so axes inside <></> were silently dropped (and the milestone lines with them).
+  const axes = (logScale = false, unit = "") => [
+    <CartesianGrid key="grid" strokeDasharray="3 3" stroke="hsl(var(--border))" />,
+    <XAxis key="x" dataKey="x" tick={TICK} />,
+    logScale
+      ? <YAxis key="y" scale="log" domain={LOG_DOMAIN} tick={TICK} allowDataOverflow tickFormatter={(v: number) => `${v}${unit}`} />
+      : <YAxis key="y" tick={TICK} unit={unit} />,
+  ];
 
   const timeChart = (key: "ct" | "lt", titleKey: string) => (
     <Card className="bg-card/40">
