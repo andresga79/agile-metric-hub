@@ -148,8 +148,9 @@ const within = (d: EvolutionDelivery, from: Date, toExclusive: Date) =>
 /**
  * One sprint at a time, oldest close first. Each sprint's unit is: the gap before it (deliveries
  * since the previous close, or since `gapFrom`, outside every sprint), its scope and its window's
- * deliveries. Everything is fetched before anything is written, so a failing sprint writes nothing
- * and stops the run: a row is never built on data that could not be read.
+ * deliveries. Everything is fetched before anything is written, and deliveries are written before
+ * the row, so a sprint that fails (read or write) gets no row and stops the run, reported in `failed`:
+ * a row is never built on data that could not be read, nor stored without its deliveries.
  */
 async function processSprints(
   projectId: string,
@@ -166,20 +167,30 @@ async function processSprints(
   let cursor = gapFrom;
 
   for (const { sprint, window } of todo) {
-    let row;
-    let windowDeliveries: EvolutionDelivery[];
-    let gapDeliveries: EvolutionDelivery[] = [];
     try {
+      let gapDeliveries: EvolutionDelivery[] = [];
       if (window.start.getTime() > cursor.getTime()) {
-        gapDeliveries = (await deps.getDeliveries(projectId, cursor, window.start, allowed))
-          .filter((d) => within(d, cursor, window.start))
+        const gapFrom = cursor;
+        gapDeliveries = (await deps.getDeliveries(projectId, gapFrom, window.start, allowed))
+          .filter((d) => within(d, gapFrom, window.start))
           .map((d) => ({ ...d, sprintId: assignDeliverySprint(d.deliveredAt, windows) }));
       }
       const issues = await deps.getSprintIssues(sprint.id);
       const metric = await deps.computeSprintMetrics(sprint, issues, allowed, allSprints);
-      windowDeliveries = (await deps.getDeliveries(projectId, window.start, window.close, allowed))
+      const windowDeliveries = (await deps.getDeliveries(projectId, window.start, window.close, allowed))
         .filter((d) => within(d, window.start, window.close));
-      row = buildSprintRow(projectId, sprint, metric, windowDeliveries);
+      const row = buildSprintRow(projectId, sprint, metric, windowDeliveries);
+
+      // Deliveries before the row: the row is what marks the sprint as stored (latestStoredClose), so
+      // it must only exist once its deliveries are in, or a failed delivery write would leave a hole
+      // the daily snapshot never revisits.
+      await deps.upsertDeliveries(projectId, [
+        ...gapDeliveries,
+        ...windowDeliveries.map((d) => ({ ...d, sprintId: assignDeliverySprint(d.deliveredAt, windows) })),
+      ]);
+      const outcome = await deps.upsertSprintRow(row, source);
+      if (outcome === "written") result.written += 1;
+      else result.frozen += 1;
     } catch (err) {
       result.failed = {
         sprintId: sprint.id,
@@ -188,14 +199,6 @@ async function processSprints(
       };
       return result;
     }
-
-    const outcome = await deps.upsertSprintRow(row, source);
-    if (outcome === "written") result.written += 1;
-    else result.frozen += 1;
-    await deps.upsertDeliveries(projectId, [
-      ...gapDeliveries,
-      ...windowDeliveries.map((d) => ({ ...d, sprintId: assignDeliverySprint(d.deliveredAt, windows) })),
-    ]);
     if (window.close.getTime() > cursor.getTime()) cursor = window.close;
   }
   return result;

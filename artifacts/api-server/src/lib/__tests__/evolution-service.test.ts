@@ -146,6 +146,31 @@ describe("backfillProject", () => {
     expect(h.deliveries.map((d) => d.issueKey)).toEqual(expect.not.arrayContaining(["P-3", "P-4"]));
   });
 
+  it("a failed delivery write stops the run before that sprint's row exists", async () => {
+    const h = harness({ sprints: [s1, s2, s3] });
+    const write = h.deps.upsertDeliveries;
+    h.deps.upsertDeliveries = async (p, ds) => {
+      if (ds.some((d) => d.sprintId === 2)) throw new Error("db down");
+      return write(p, ds);
+    };
+    const res = await backfillProject("10001", FROM, h.deps);
+
+    expect(res.written).toBe(1);
+    expect(res.failed).toEqual({ sprintId: 2, sprintName: "Sprint 2", error: "db down" });
+    expect(h.rows.map((r) => r.row.sprintId)).toEqual([1]);
+    expect(h.issueFetches).toEqual([1, 2]);
+  });
+
+  it("a failed row write is reported in `failed`, not thrown", async () => {
+    const h = harness({ sprints: [s1, s2] });
+    h.deps.upsertSprintRow = async () => {
+      throw new Error("constraint");
+    };
+    const res = await backfillProject("10001", FROM, h.deps);
+    expect(res.failed).toEqual({ sprintId: 1, sprintName: "Sprint 1", error: "constraint" });
+    expect(h.issueFetches).toEqual([1]);
+  });
+
   it("skips sprints without a start or a close instead of building an Invalid Date row", async () => {
     const noClose: JiraSprint = { id: 6, name: "Sin cierre", state: "closed", originBoardId: BOARD,
       startDate: "2026-01-05T12:00:00Z" };
