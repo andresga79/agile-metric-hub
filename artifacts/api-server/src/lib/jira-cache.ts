@@ -257,6 +257,36 @@ export async function warmCache(): Promise<void> {
   }
 }
 
+/** Stores the Evolución row of every sprint closed since the last sync, one Scrum project at a time
+ *  (serial for the same memory reason as the warm-up). Never throws: a project that fails is logged
+ *  and counted in syncFailedProjects, and the rest of the sync goes on. */
+async function snapshotEvolution(): Promise<void> {
+  try {
+    const { listJiraProjects, getProjectBoardTypeOrThrow } = await import("./jira");
+    const { filterVisibleProjects } = await import("./project-visibility");
+    const { snapshotClosedSprints } = await import("./evolution-service");
+    const projects = await filterVisibleProjects(await listJiraProjects());
+    for (const project of projects) {
+      try {
+        if ((await getProjectBoardTypeOrThrow(project.id)) !== "scrum") continue;
+        const res = await snapshotClosedSprints(project.id);
+        if (res.failed) {
+          syncFailedProjects += 1;
+          logger.warn({ projectId: project.id, failed: res.failed }, "Evolution snapshot stopped at a sprint");
+        } else if (res.written + res.frozen > 0) {
+          logger.info({ projectId: project.id, written: res.written, frozen: res.frozen }, "Evolution snapshot done");
+        }
+      } catch (err) {
+        syncFailedProjects += 1;
+        logger.warn({ err, projectId: project.id }, "Evolution snapshot failed");
+      }
+    }
+  } catch (err) {
+    syncFailedProjects += 1;
+    logger.warn({ err }, "Evolution snapshot failed");
+  }
+}
+
 async function executeSync(trigger: SyncTrigger): Promise<void> {
   const forceRefresh = trigger === "manual";
   lastSyncStartedAt = new Date();
@@ -271,6 +301,7 @@ async function executeSync(trigger: SyncTrigger): Promise<void> {
       logger.warn({ err }, "RC epics sync failed, continuing");
     });
     await calculateAndCachePortfolio({ forceRefresh });
+    await snapshotEvolution();
     lastSyncedAt = new Date();
     lastSyncOutcome = syncFailedProjects > 0 ? "partial" : "success";
     logger.info(

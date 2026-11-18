@@ -8,7 +8,7 @@ import {
   type Milestone,
   type NewMilestone,
 } from "@workspace/db";
-import { and, asc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, max, sql } from "drizzle-orm";
 import { FORMULA_VERSION, type EvolutionDelivery, type EvolutionSprintRow } from "./evolution";
 
 export type { EvolutionSprint, NewEvolutionSprint, Milestone, NewMilestone };
@@ -254,6 +254,15 @@ export async function storedSprintIds(projectId: string): Promise<Set<number>> {
     .from(evolutionSprintsTable)
     .where(eq(evolutionSprintsTable.projectId, projectId));
   return new Set(rows.map((r) => r.sprintId));
+}
+
+/** Close of the newest stored sprint; null for a project that has no rows yet (never backfilled). */
+export async function latestStoredClose(projectId: string): Promise<Date | null> {
+  const [r] = await db
+    .select({ latest: max(evolutionSprintsTable.closedAt) })
+    .from(evolutionSprintsTable)
+    .where(eq(evolutionSprintsTable.projectId, projectId));
+  return r?.latest ?? null;
 }
 
 /**

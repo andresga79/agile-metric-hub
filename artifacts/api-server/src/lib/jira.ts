@@ -1514,6 +1514,13 @@ export async function getBoardId(
   }
 }
 
+/** getBoardId without the null fallback on a failed lookup: a caller that filters shared sprints by
+ *  board must not read "lookup failed" as "no board" (that keeps every board's sprints). */
+export async function getBoardIdOrThrow(projectId: string): Promise<number | null> {
+  if (!isJiraConfigured()) return null;
+  return findBoardId(projectId);
+}
+
 /** Like getBoardId, but a Jira failure throws instead of reading as "no board" - for callers
  *  that cache their result and must not cache a transient error as a real answer. */
 async function findBoardId(projectId: string): Promise<number | null> {
@@ -1949,49 +1956,93 @@ export async function getResolvedJiraIssuesInRange(
     rangeStart.setDate(rangeStart.getDate() - fromDaysAgo);
     const rangeEnd = new Date(now);
     rangeEnd.setDate(rangeEnd.getDate() - toDaysAgo);
-
-    const fields =
-      "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
-    const CHUNK_DAYS = 7;
-    const CONCURRENCY = 4;
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
-
-    // Same date-only "<=" boundary bug as getJiraIssuesForProject above: Jira reads a bare date
-    // in a "<=" bound as that day's 00:00, so anything resolved later that day falls into neither
-    // this chunk nor the next one. fetchPage's `to` here is always an exclusive upper bound.
-    // "Resolved" must include issues moved to Done without a resolution date - the majority on this
-    // site (OLI, 60..30 days ago: 49 with resolutiondate vs 197 done without). Matching only
-    // resolutiondate made every "vs previous period" compare a full current period (whose fetch
-    // does include them) against a previous period missing most of its work. Their completion
-    // date is statusCategoryChangedDate; getResolutionDate then derives it from the changelog.
-    const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> =>
-      searchAllByKey(
-        `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND ((resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}") OR (resolutiondate is EMPTY AND statusCategory = Done AND statusCategoryChangedDate >= "${from}" AND statusCategoryChangedDate < "${toExclusive}"))`,
-        { fields, includeChangelog, logContext: { projectId } }
-      );
-
-    const chunks: Array<[Date, Date]> = [];
-    let chunkStart = rangeStart;
-    while (chunkStart <= rangeEnd) {
-      const chunkEnd = new Date(Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * ONE_DAY_MS, rangeEnd.getTime()));
-      chunks.push([chunkStart, chunkEnd]);
-      chunkStart = new Date(chunkEnd.getTime() + ONE_DAY_MS);
-    }
-
-    const allIssues: JiraIssue[] = [];
-    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-      const batch = chunks.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(([from, to]) =>
-          fetchPage(formatDate(from), formatDate(new Date(to.getTime() + ONE_DAY_MS)))
-        )
-      );
-      for (const r of results) allIssues.push(...r);
-    }
-
-    return Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
+    return fetchResolvedByDay(projectId, canonicalProjectId, rangeStart, rangeEnd, includeChangelog);
   }, { forceRefresh: options?.forceRefresh });
+}
+
+/** Resolved issues of the calendar days rangeStart..rangeEnd (both inclusive, UTC dates), in 7-day
+ *  chunks, 4 at a time. A failed search throws. */
+async function fetchResolvedByDay(
+  projectId: string,
+  canonicalProjectId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  includeChangelog: boolean
+): Promise<JiraIssue[]> {
+  const fields =
+    "summary,status,issuetype,priority,assignee,customfield_10016,customfield_10028,customfield_10072,customfield_10021,created,resolutiondate,updated";
+  const CHUNK_DAYS = 7;
+  const CONCURRENCY = 4;
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const formatDate = (d: Date): string => d.toISOString().split("T")[0]!;
+
+  // Same date-only "<=" boundary bug as getJiraIssuesForProject above: Jira reads a bare date
+  // in a "<=" bound as that day's 00:00, so anything resolved later that day falls into neither
+  // this chunk nor the next one. fetchPage's `to` here is always an exclusive upper bound.
+  // "Resolved" must include issues moved to Done without a resolution date - the majority on this
+  // site (OLI, 60..30 days ago: 49 with resolutiondate vs 197 done without). Matching only
+  // resolutiondate made every "vs previous period" compare a full current period (whose fetch
+  // does include them) against a previous period missing most of its work. Their completion
+  // date is statusCategoryChangedDate; getResolutionDate then derives it from the changelog.
+  const fetchPage = async (from: string, toExclusive: string): Promise<JiraIssue[]> =>
+    searchAllByKey(
+      `project = "${canonicalProjectId}" AND issuetype not in subtaskIssueTypes() AND ((resolutiondate >= "${from}" AND resolutiondate < "${toExclusive}") OR (resolutiondate is EMPTY AND statusCategory = Done AND statusCategoryChangedDate >= "${from}" AND statusCategoryChangedDate < "${toExclusive}"))`,
+      { fields, includeChangelog, logContext: { projectId } }
+    );
+
+  const chunks: Array<[Date, Date]> = [];
+  let chunkStart = rangeStart;
+  while (chunkStart <= rangeEnd) {
+    const chunkEnd = new Date(Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * ONE_DAY_MS, rangeEnd.getTime()));
+    chunks.push([chunkStart, chunkEnd]);
+    chunkStart = new Date(chunkEnd.getTime() + ONE_DAY_MS);
+  }
+
+  const allIssues: JiraIssue[] = [];
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const batch = chunks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(([from, to]) =>
+        fetchPage(formatDate(from), formatDate(new Date(to.getTime() + ONE_DAY_MS)))
+      )
+    );
+    for (const r of results) allIssues.push(...r);
+  }
+
+  return Array.from(new Map(allIssues.map((issue) => [issue.id, issue])).values());
+}
+
+/** getResolvedJiraIssuesInRange for absolute dates: resolved issues of [from, toExclusive), no
+ *  90-day cap (the Evolución backfill reaches back to January). The search is day-granular and
+ *  widened by a day on each side (Jira reads bare dates in its own time zone), so it over-fetches:
+ *  callers cut to the exact window by delivery date. A failed search throws, never reads as "none". */
+export async function getResolvedJiraIssuesBetween(
+  projectId: string,
+  from: Date,
+  toExclusive: Date,
+  options?: { includeChangelog?: boolean; forceRefresh?: boolean }
+): Promise<JiraIssue[]> {
+  if (!isJiraConfigured()) {
+    return getMockIssues(projectId);
+  }
+
+  const includeChangelog = options?.includeChangelog === true;
+  const canonicalProjectId = await getCanonicalProjectId(projectId);
+  const cacheKey = `issues:${canonicalProjectId}:between:v1:${from.toISOString()}-${toExclusive.toISOString()}${includeChangelog ? ":changelog" : ""}`;
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+  return withCache(
+    cacheKey,
+    () =>
+      fetchResolvedByDay(
+        projectId,
+        canonicalProjectId,
+        new Date(from.getTime() - ONE_DAY_MS),
+        new Date(toExclusive.getTime() + ONE_DAY_MS),
+        includeChangelog
+      ),
+    { forceRefresh: options?.forceRefresh }
+  );
 }
 
 export async function getFlaggedJiraIssuesForProject(
