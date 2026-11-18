@@ -1,4 +1,5 @@
 ---
+name: run-app
 description: Launch and drive the Agile Metric Hub locally with Docker Compose (db + api + web). Use when asked to run, start, or verify this app works end to end.
 ---
 
