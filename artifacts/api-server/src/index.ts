@@ -163,6 +163,73 @@ async function initDb() {
     `);
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS evolution_sprints (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id INTEGER NOT NULL,
+        sprint_name TEXT NOT NULL,
+        start_at TIMESTAMPTZ NOT NULL,
+        closed_at TIMESTAMPTZ NOT NULL,
+        scope_issues INTEGER NOT NULL,
+        scope_sp DOUBLE PRECISION NOT NULL,
+        planned_issues INTEGER NOT NULL,
+        added_issues INTEGER NOT NULL,
+        carryover_issues INTEGER NOT NULL,
+        closed_at_end_issues INTEGER NOT NULL,
+        closed_at_end_sp DOUBLE PRECISION NOT NULL,
+        real_closed_pct DOUBLE PRECISION,
+        rovo_pct DOUBLE PRECISION NOT NULL,
+        delivered INTEGER NOT NULL,
+        delivered_sp DOUBLE PRECISION NOT NULL,
+        people INTEGER NOT NULL,
+        ct_n INTEGER NOT NULL,
+        ct_p50 DOUBLE PRECISION,
+        ct_p85 DOUBLE PRECISION,
+        ct_avg DOUBLE PRECISION,
+        lt_n INTEGER NOT NULL,
+        lt_p50 DOUBLE PRECISION,
+        lt_p85 DOUBLE PRECISION,
+        lt_avg DOUBLE PRECISION,
+        formula_version INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        frozen_at TIMESTAMPTZ,
+        UNIQUE(project_id, sprint_id)
+      );
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS evolution_deliveries (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        issue_key TEXT NOT NULL,
+        issue_type TEXT NOT NULL,
+        delivered_at TIMESTAMPTZ NOT NULL,
+        lead_days DOUBLE PRECISION,
+        cycle_days DOUBLE PRECISION,
+        story_points DOUBLE PRECISION NOT NULL DEFAULT 0,
+        assignee_id TEXT,
+        sprint_id INTEGER,
+        computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        frozen_at TIMESTAMPTZ,
+        UNIQUE(project_id, issue_key)
+      );
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_milestones (
+        id SERIAL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id INTEGER,
+        label TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        note TEXT,
+        created_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS portfolio_cache (
         id SERIAL PRIMARY KEY,
         project_id TEXT NOT NULL UNIQUE,

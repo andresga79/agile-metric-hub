@@ -14,3 +14,4 @@ export * from "./project-release-keywords";
 export * from "./sprint-capacity";
 export * from "./capacity-roster";
 export * from "./capacity-absence";
+export * from "./evolution";
