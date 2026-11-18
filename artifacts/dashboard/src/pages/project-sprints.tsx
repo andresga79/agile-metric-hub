@@ -123,10 +123,13 @@ export default function ProjectSprints() {
   const issuesStats = commitmentStats(closedSprints.map((s) => s.completedIssues));
   const spStats = commitmentStats(closedSprints.map((s) => s.completedStoryPoints));
 
-  // "% Real cerrado": what was already done when each sprint closed. The active sprint hasn't
-  // closed, so its current progress stands in (same as the table column).
+  // "% Real cerrado": what was already done when each sprint closed, in ISSUES (like Evolución and
+  // Composición del sprint; only Rovo's completionRate is in SP). The active sprint hasn't closed,
+  // so its current progress in issues stands in (same as the table column).
   const realClosedSp = (s: (typeof sprints)[number]) => s.closedAtSprintEndStoryPoints ?? s.completedStoryPoints;
-  const realClosedRate = (s: (typeof sprints)[number]) => s.closedAtSprintEndRate ?? s.completionRate;
+  const issuesProgress = (s: (typeof sprints)[number]) =>
+    s.totalIssues > 0 ? (s.completedIssues / s.totalIssues) * 100 : null;
+  const realClosedRate = (s: (typeof sprints)[number]) => s.closedAtSprintEndRate ?? issuesProgress(s) ?? 0;
   const closedRealRates = closedSprints
     .map((s) => s.closedAtSprintEndRate)
     .filter((r): r is number => r != null);
@@ -405,18 +408,12 @@ export default function ProjectSprints() {
                   </TableHeader>
                   <TableBody>
                     {sprints.map((s, i) => {
-                      const sp = s.completionBasis === "storyPoints";
-                      const unit = sp ? "SP" : "issues";
                       const planned = realClosedBasis === "planned";
-                      // Done at close and its denominator, in the same unit as the %.
-                      const doneAtClose = planned
-                        ? (sp ? s.closedAtSprintEndPlannedStoryPoints : s.closedAtSprintEndPlannedIssues)
-                        : (sp ? s.closedAtSprintEndStoryPoints : s.closedAtSprintEndIssues);
-                      const scope = planned
-                        ? (sp ? s.plannedStoryPoints : s.plannedIssues)
-                        : (sp ? s.totalStoryPoints : s.totalIssues);
+                      // Done at close and its denominator, in issues like the % (SP go in the tooltip).
+                      const doneAtClose = planned ? s.closedAtSprintEndPlannedIssues : s.closedAtSprintEndIssues;
+                      const scope = planned ? s.plannedIssues : s.totalIssues;
                       const closedRate = planned ? s.closedAtSprintEndPlannedRate : s.closedAtSprintEndRate;
-                      const activeRate = planned ? s.plannedCompletionRate : s.completionRate;
+                      const activeRate = planned ? s.plannedCompletionRate : issuesProgress(s);
                       const rovoHint = t('page.sprints.avgCumulativeHint', { value: pct(s.completionRate) });
                       const firstActive = s.state === "active" && sprints[i - 1]?.state !== "active";
                       return (
@@ -481,7 +478,7 @@ export default function ProjectSprints() {
                               })}\n${rovoHint}`}
                             >
                               <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                                {doneAtClose.toFixed(0)}/{scope.toFixed(0)} {unit}
+                                {doneAtClose}/{scope} issues
                               </span>
                               <span
                                 className={`text-xs font-semibold px-2 py-0.5 rounded ${

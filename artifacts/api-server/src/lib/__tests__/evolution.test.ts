@@ -103,6 +103,10 @@ describe("buildSprintRow", () => {
     expect(r.ct.n).toBe(2);
     expect(r.lt.n).toBe(3);
   });
+  it("rounds Rovo's rate to one decimal, like the real pct (S115: 98.0392… showed as 98.0)", () => {
+    const r = buildSprintRow("OLP", sprint, { ...metric, completionRate: (100 / 102) * 100 } as SprintMetric, []);
+    expect(r.rovoPct).toBe(98);
+  });
   it("has null real pct for an empty scope", () => {
     expect(buildSprintRow("OLP", sprint, { ...metric, totalIssues: 0 } as SprintMetric, []).realClosedPct).toBeNull();
   });

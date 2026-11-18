@@ -130,7 +130,7 @@ export function buildSprintRow(
     closedAtEndIssues,
     closedAtEndSp: metric.closedAtSprintEndStoryPoints ?? 0,
     realClosedPct: metric.totalIssues > 0 ? round1((closedAtEndIssues / metric.totalIssues) * 100) : null,
-    rovoPct: metric.completionRate,
+    rovoPct: round1(metric.completionRate),
     delivered: deliveries.length,
     deliveredSp: deliveries.reduce((a, d) => a + d.storyPoints, 0),
     people: distinctPeople(deliveries),

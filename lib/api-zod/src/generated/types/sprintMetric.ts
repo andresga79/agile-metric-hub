@@ -52,7 +52,7 @@ export interface SprintMetric {
   plannedIssues: number;
   plannedStoryPoints: number;
   /**
-     * Planned issues done now over the plan, on completionBasis. Null with nothing planned.
+     * Planned issues done now over the planned issues, always in issues. Null with nothing planned.
      * @nullable
      */
   plannedCompletionRate: number | null;
@@ -60,7 +60,7 @@ export interface SprintMetric {
   closedAtSprintEndIssues: number | null;
   /** Story points of closedAtSprintEndIssues. Null while the sprint is not closed. */
   closedAtSprintEndStoryPoints: number | null;
-  /** "% real cerrado": closedAtSprintEnd over the sprint's scope, on the same completionBasis as completionRate. Null while the sprint is not closed. */
+  /** "% real cerrado": closedAtSprintEndIssues over the sprint's scope issues, always in issues (completionRate keeps completionBasis). Null while the sprint is not closed or its scope is empty. */
   closedAtSprintEndRate: number | null;
   /**
      * Planned issues already done when the sprint closed. Null while the sprint is not closed.
@@ -70,7 +70,7 @@ export interface SprintMetric {
   /** @nullable */
   closedAtSprintEndPlannedStoryPoints: number | null;
   /**
-     * "% real cerrado sobre planificado": closedAtSprintEndPlanned over the plan, same basis. Null while not closed or with nothing planned.
+     * "% real cerrado sobre planificado": closedAtSprintEndPlannedIssues over plannedIssues, always in issues. Null while not closed or with nothing planned.
      * @nullable
      */
   closedAtSprintEndPlannedRate: number | null;

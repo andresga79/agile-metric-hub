@@ -147,6 +147,42 @@ describe("computeSprintMetrics: planned scope vs added after planning", () => {
   });
 });
 
+// Tablero Sprint 113: Sprints showed 48.3% (42/87 SP) while Evolución showed 54.5% (18/33 issues)
+// under the same "% real cerrado" label. The real rate is always in issues, like Evolución and
+// Composición del sprint; completionRate (Rovo) keeps its SP basis.
+describe("computeSprintMetrics: % real cerrado is measured in issues, even with SP", () => {
+  const withSp = (i: JiraIssue, sp: number): JiraIssue => ({ ...i, fields: { ...i.fields, customfield_10016: sp } });
+  const bigDoneInSprint = withSp(issue("S-1", {
+    status: "Listo", category: "done", assigned: true,
+    transitions: [["To Do", "En progreso", "2026-09-15T00:00:00.000Z"], ["En progreso", "Listo", "2026-09-20T00:00:00.000Z"]],
+  }), 8);
+  const smallDoneLate = withSp(issue("S-2", {
+    status: "Listo", category: "done", assigned: true,
+    transitions: [["To Do", "En progreso", "2026-09-16T00:00:00.000Z"], ["En progreso", "Listo", "2026-09-30T00:00:00.000Z"]],
+  }), 1);
+  const smallOpen = withSp(issue("S-3", {
+    status: "To Do", category: "new",
+    transitions: [],
+  }), 1);
+  const addedDone: JiraIssue = withSp(issue("S-4", {
+    status: "Listo", category: "done", assigned: true,
+    transitions: [["To Do", "En progreso", "2026-09-19T00:00:00.000Z"], ["En progreso", "Listo", "2026-09-22T00:00:00.000Z"]],
+  }), 5);
+  addedDone.fields = { ...addedDone.fields, created: "2026-09-18T00:00:00.000Z" };
+
+  it("rates done-at-close and the plan on issue counts, not SP", async () => {
+    const m = await computeSprintMetrics(sprint, [bigDoneInSprint, smallDoneLate, smallOpen, addedDone], ["Story"], [sprint]);
+    expect(m.completionBasis).toBe("storyPoints");
+    expect(m.completionRate).toBeCloseTo((14 / 15) * 100, 5); // Rovo stays in SP
+    expect(m.closedAtSprintEndIssues).toBe(2);
+    expect(m.closedAtSprintEndStoryPoints).toBe(13);
+    expect(m.closedAtSprintEndRate).toBe(50); // 2 of 4 issues (SP would be 13/15 = 86.7)
+    expect(m.plannedIssues).toBe(3);
+    expect(m.closedAtSprintEndPlannedRate).toBeCloseTo((1 / 3) * 100, 5); // SP would be 8/10
+    expect(m.plannedCompletionRate).toBeCloseTo((2 / 3) * 100, 5); // done now: S-1, S-2 of 3 planned
+  });
+});
+
 // The Sprints page reads the same cadence as Composición del sprint: last 2 / 6 CLOSED sprints,
 // plus the sprint in progress as its own row.
 describe("selectSprintWindow", () => {

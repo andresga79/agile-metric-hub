@@ -91,7 +91,7 @@ router.get(
         return;
       }
       if ((await getProjectBoardType(projectId)) !== "scrum") {
-        res.status(400).json({ error: "Evolution is only available for Scrum projects" });
+        res.status(400).json({ error: "Evolución solo está disponible para proyectos Scrum" });
         return;
       }
 

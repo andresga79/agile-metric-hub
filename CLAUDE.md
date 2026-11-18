@@ -13,7 +13,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - `pnpm run lint` — ESLint (baseline: 0 errores, 112 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
-- `pnpm --filter @workspace/api-server test` — vitest, 321 tests (lógica pura de métricas,
+- `pnpm --filter @workspace/api-server test` — vitest, 323 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
 - Backups: servicio `backup` del compose, `pg_dump` diario con rotación 7 diarios + 4 semanales
@@ -70,7 +70,8 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   Aplica a Sprints. **Excepción: Capacidad** — el ritmo que alimenta
   "Recomendado" usa "done al cierre" en los sprints cerrados (2026-11-12): con "Done hoy" el 117 de
   OLP sumaba ~86 SP contra 53 realmente cerrados y la recomendación pedía comprometer de más. La pestaña Sprints muestra además
-  "% Real cerrado" (`closedAtSprintEndRate`, = `wasIssueDoneAt` al cierre) en columna aparte.
+  "% Real cerrado" (`closedAtSprintEndRate`, = `wasIssueDoneAt` al cierre) en columna aparte. **El % real
+  cerrado va siempre en issues** en toda la app (Sprints, Evolución, Composición); solo Rovo va en SP.
 - **Sync serializado (concurrency=1)**: `warmVisibleProjectsCache` y
   `calculateAndCachePortfolio` corren de a un proyecto por vez, a propósito — fix de un
   crash loop por OOM en el free tier de 512MB (ver `SESSION_LOG.md`, 2026-07-27). Más

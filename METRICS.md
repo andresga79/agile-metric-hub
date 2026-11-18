@@ -231,8 +231,11 @@ además cuenta Epics, que acá no entran.
 
 **% Real cerrado** (`closedAtSprintEndRate`, columna aparte en la pestaña Sprints): para sprints
 cerrados, lo que **ya estaba en Done al momento del cierre** (`wasIssueDoneAt` desde el changelog,
-mismo alcance y misma base SP/conteo). `null` en el sprint activo (la UI muestra ahí el avance
-actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP (53.5%).
+mismo alcance), **siempre en issues** (2026-11-18), igual que Evolución y Composición del sprint; solo
+el acumulado Rovo (`completionRate`) sigue en SP. Antes usaba la base SP/conteo del sprint y el mismo
+"% real cerrado" daba distinto entre pestañas (Tablero Sprint 113: 48.3% = 42/87 SP en Sprints vs
+54.5% = 18/33 issues en Evolución). `null` en el sprint activo (la UI muestra ahí el avance actual en
+issues) o con alcance vacío. Tablero Sprint 117: acumulado Rovo 100% vs real cerrado 22/38 issues (57.9%).
 
 **Tabla "Desglose por Sprint" (2026-11-13):**
 - **Ventana:** la misma de Composición del sprint, con un solo selector para toda la página:
@@ -244,10 +247,10 @@ actual). Tablero Sprint 117: acumulado 86/99 SP (86.9%) vs real cerrado 53/99 SP
   entró después = alcance total. Antes la columna "Comprometido" mostraba el alcance total, como si el
   equipo se hubiera comprometido también a lo que entró a mitad.
 - **% Real cerrado sobre Total | Planificado** (selector de la tabla): Total = `closedAtSprintEndRate`;
-  Planificado = `closedAtSprintEndPlannedRate` = issues planificados en Done al cierre / planificado,
-  misma base SP/conteo (`null` si no hubo nada planificado). La celda muestra "hecho/alcance" en la
-  **misma unidad** que el % (SP cuando el sprint tiene SP, si no issues). En el sprint en curso:
-  avance actual (`completionRate` o `plannedCompletionRate`). El acumulado "Done hoy" (Rovo) pasó de
+  Planificado = `closedAtSprintEndPlannedRate` = issues planificados en Done al cierre / issues
+  planificados (`null` si no hubo nada planificado). La celda muestra "hecho/alcance" en **issues**,
+  la misma unidad que el % (los SP van en el tooltip). En el sprint en curso: avance actual en issues
+  (`completedIssues / totalIssues` o `plannedCompletionRate`). El acumulado "Done hoy" (Rovo) pasó de
   columna a tooltip. Las tarjetas de resumen y el gráfico siguen sobre el total.
 - **Cycle Time P50** con `n` = issues entregados detrás de la mediana (`cycleSampleSize`, desde
   `sprintDeliveryTimes`).
@@ -271,8 +274,8 @@ Rovo (2026-11-13). Diseño: `docs/superpowers/specs/2026-11-13-sprint-compositio
 - **% issues:** issues del tipo / issues de la ventana. **Issues/sprint, SP/sprint:** total / sprints
   cerrados de la ventana (un sprint vacío cuenta como 0).
 - **% real cerrado:** por **issues** (no SP), pooled: issues del tipo en Done al cierre de su sprint
-  (`wasIssueDoneAt`) / issues del tipo. Por eso puede no coincidir con la columna "% Real cerrado"
-  de la tabla, que usa SP cuando hay.
+  (`wasIssueDoneAt`) / issues del tipo. Misma unidad que la columna "% Real cerrado" de la tabla
+  (issues), pero agrupado por tipo y sobre toda la ventana.
 - **Cycle P50 / P85:** issues del tipo **entregados** (`getDeliveryDate`) dentro de `[inicio, cierre)`
   de alguno de los sprints de la ventana (sin los huecos entre sprints, misma población que
   `sprintDeliveryTimes.closedPooled`); un issue cuenta una vez. Menos de 3 → "—".
@@ -384,7 +387,7 @@ Reporte. Cada sub-vista conserva su URL; el modelo está en `TAB_GROUPS` / `Proj
 - **Rechazo QA por semana** (`byWeek` en `/qa-rejected`, `lib/qa-rate.ts`): misma fórmula que el KPI
   y la tabla por sprint (issues distintos rechazados ÷ issues distintos que entraron a QA en la
   semana ISO), tope 100 %. En Kanban reemplaza a la tabla por sprint (todo caía en "Unknown").
-- **Sprints:** "% real cerrado" primero (hecho/alcance y % en la misma unidad, con semáforo, sobre
+- **Sprints:** "% real cerrado" primero (hecho/alcance y % en issues, con semáforo, sobre
   total o planificado); "Rovo (Done hoy)" en el tooltip; "entró después" y "arrastrado" como números
   neutros (sin colores de alarma: en Scrumban entrar trabajo a mitad de sprint es normal).
 - **Equipo y Reporte, por persona:** solo en curso, bloqueados y **atrasados** (en curso con edad >
@@ -428,7 +431,7 @@ No inventa reglas: cada número sale de la misma función que Sprints/Métricas.
 | Número | Regla | Fuente |
 |---|---|---|
 | **% real cerrado (principal)** | issues del alcance done **al cierre** / alcance | `computeSprintMetrics` → `closedAtSprintEnd*` (`wasIssueDoneAt`) |
-| % Rovo (referencia) | done **hoy** / alcance (SP; issues si no hay SP) | `completionRate` |
+| % Rovo (referencia) | done **hoy** / alcance (SP; issues si no hay SP), 1 decimal | `completionRate` |
 | Alcance, planificado, agregado, arrastrado | como la pestaña Sprints (tipos permitidos, sin cancelados/limpiezas cerrados hoy) | `computeSprintMetrics` / `sprintScopeIssues` |
 | Entregados del sprint | tipos permitidos, done, con `getDeliveryDate` (sin cancelados ni limpiezas) en `[inicio, completeDate ?? endDate)` | `fetchDeliveries`, `assignDeliverySprint` |
 | CT / LT P50, P85, promedio | sobre los entregados del sprint | `getCycleTimeDays`, `getLeadTimeDays`, `summarizeTimes` |
@@ -457,7 +460,8 @@ No inventa reglas: cada número sale de la misma función que Sprints/Métricas.
   guardado (solo en proyectos ya reconstruidos).
 
 **Verificación OLP 2026 (2026-11-18)**: 23 sprints (96–118). 113–118: alcance, cerrados al cierre,
-% Rovo, CT P50 y n de CT **idénticos** a `/sprints/6s`. Jira (`sprint = <id>`, 99/106/113/117):
+% Rovo, CT P50 y n de CT **idénticos** a `/sprints/6s`; desde que el % real de Sprints pasó a issues
+(mismo día), también el % real. Jira (`sprint = <id>`, 99/106/113/117):
 total menos excluidos = alcance, Done hoy = completado (excluidos: 1 Enlace en 99 y 113, 1 Epic en
 117, limpieza OLP-3756 en 106). Diferencias con el análisis preliminar a mano del mismo día: no
 filtraba tipos (subtareas, Enlace, Epic, Service Request), no sacaba limpiezas (las ~20 del

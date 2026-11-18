@@ -490,13 +490,13 @@ export const GetProjectSprintMetricsResponse = zod.object({
   "addedAfterPlanningKeys": zod.array(zod.string()).describe('Keys of the addedAfterPlanningCount issues.'),
   "plannedIssues": zod.number().describe('The plan - scope minus addedAfterPlanningCount (in the sprint at the end of day 1).'),
   "plannedStoryPoints": zod.number(),
-  "plannedCompletionRate": zod.number().nullable().describe('Planned issues done now over the plan, on completionBasis. Null with nothing planned.'),
+  "plannedCompletionRate": zod.number().nullable().describe('Planned issues done now over the planned issues, always in issues. Null with nothing planned.'),
   "closedAtSprintEndIssues": zod.number().nullable().describe('Issues already done when the sprint closed (from the changelog). Null while the sprint is not closed. completedIssues is the current status instead (cumulative).'),
   "closedAtSprintEndStoryPoints": zod.number().nullable().describe('Story points of closedAtSprintEndIssues. Null while the sprint is not closed.'),
-  "closedAtSprintEndRate": zod.number().nullable().describe('\"% real cerrado\": closedAtSprintEnd over the sprint\'s scope, on the same completionBasis as completionRate. Null while the sprint is not closed.'),
+  "closedAtSprintEndRate": zod.number().nullable().describe('\"% real cerrado\": closedAtSprintEndIssues over the sprint\'s scope issues, always in issues (completionRate keeps completionBasis). Null while the sprint is not closed or its scope is empty.'),
   "closedAtSprintEndPlannedIssues": zod.number().nullable().describe('Planned issues already done when the sprint closed. Null while the sprint is not closed.'),
   "closedAtSprintEndPlannedStoryPoints": zod.number().nullable(),
-  "closedAtSprintEndPlannedRate": zod.number().nullable().describe('\"% real cerrado sobre planificado\": closedAtSprintEndPlanned over the plan, same basis. Null while not closed or with nothing planned.'),
+  "closedAtSprintEndPlannedRate": zod.number().nullable().describe('\"% real cerrado sobre planificado\": closedAtSprintEndPlannedIssues over plannedIssues, always in issues. Null while not closed or with nothing planned.'),
   "goal": zod.string().nullish().describe('This sprint\'s goal, as set in Jira. Null when the sprint has no goal or it\'s blank.')
 })),
   "summary": zod.object({

@@ -435,7 +435,9 @@ export default function ProjectEvolution() {
   ];
   for (const [k, f, which] of timeCols) columns.push({ header: t(k), cell: (r) => f(r[which]) });
 
-  const display = (v: CsvCell) => (v === null || v === undefined ? "—" : typeof v === "number" && !Number.isInteger(v) ? v.toFixed(1) : String(v));
+  // One decimal at most, no trailing ".0": 98.039 and 98 both read "98", like 61.8 reads "61.8".
+  const display = (v: CsvCell) =>
+    v === null || v === undefined ? "—" : typeof v === "number" ? String(Math.round(v * 10) / 10) : String(v);
 
   const exportCsv = () => {
     const csv = toEvolutionCsv(columns.map((c) => c.header), rows.map((r) => columns.map((c) => c.cell(r))));
@@ -451,7 +453,9 @@ export default function ProjectEvolution() {
   const footer = t("page.evolution.footer", {
     version: meta.formulaVersion,
     rebuilt: meta.reconstructedAt ? dayMonth(meta.reconstructedAt) : t("page.evolution.notYet"),
-    frozen: meta.frozenUntil ? dayMonth(meta.frozenUntil) : t("page.evolution.notFrozen"),
+    frozen: meta.frozenUntil
+      ? t("page.evolution.frozenUntil", { day: dayMonth(meta.frozenUntil) })
+      : t("page.evolution.notFrozen"),
   });
 
   const years = Array.from({ length: Math.max(FIRST_YEAR, new Date().getFullYear()) - FIRST_YEAR + 1 }, (_, i) => FIRST_YEAR + i);

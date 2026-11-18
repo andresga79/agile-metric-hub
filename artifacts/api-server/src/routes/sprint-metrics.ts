@@ -63,15 +63,16 @@ export interface SprintMetric {
   // the team had committed to them.
   plannedIssues: number;
   plannedStoryPoints: number;
-  /** Done now (like completionRate) over the planned issues only. Null with nothing planned. */
+  /** Planned issues done now over the planned issues, in issues. Null with nothing planned. */
   plannedCompletionRate: number | null;
   // "% real cerrado": what was already done at the moment the sprint closed (wasIssueDoneAt), as
   // opposed to completed* above, which is the current status (cumulative, like Rovo). Null for a
-  // sprint that hasn't closed yet. Same scope (filtered issues) and same SP/issue-count basis.
+  // sprint that hasn't closed yet or has an empty scope. Same scope (filtered issues), ALWAYS in
+  // issues (not completionBasis), like Evolución and Composición del sprint.
   closedAtSprintEndIssues: number | null;
   closedAtSprintEndStoryPoints: number | null;
   closedAtSprintEndRate: number | null;
-  /** "% real cerrado sobre planificado": planned issues done at close over the plan, same basis.
+  /** "% real cerrado sobre planificado": planned issues done at close over the planned issues.
    *  Null while the sprint is not closed, or with nothing planned. */
   closedAtSprintEndPlannedIssues: number | null;
   closedAtSprintEndPlannedStoryPoints: number | null;
@@ -171,12 +172,11 @@ export async function computeSprintMetrics(
     ? (doneSp / totalSp) * 100
     : totalIssues > 0 ? (completedIssues / totalIssues) * 100 : 0;
 
-  // Over the plan, on the sprint's basis. Null with nothing planned on that basis (a sprint whose
-  // whole scope entered after planning has no plan to measure).
-  const plannedRate = (issues: number, sp: number): number | null =>
-    completionBasis === "storyPoints"
-      ? plannedSp > 0 ? (sp / plannedSp) * 100 : null
-      : planned.length > 0 ? (issues / planned.length) * 100 : null;
+  // "% real cerrado" and the plan rates are always in ISSUES, like Evolución and Composición del
+  // sprint (Sprint 113 showed 48.3% here in SP vs 54.5% there in issues, same label). Only
+  // completionRate (Rovo) keeps the SP basis. Null with nothing to measure against (a sprint whose
+  // whole scope entered after planning has no plan).
+  const issueRate = (done: number, of: number): number | null => (of > 0 ? (done / of) * 100 : null);
   const plannedDoneNow = planned.filter(doneAtClose);
 
   return {
@@ -204,24 +204,15 @@ export async function computeSprintMetrics(
     addedAfterPlanningKeys: addedAfterPlanning.map((i) => i.key),
     plannedIssues: planned.length,
     plannedStoryPoints: plannedSp,
-    plannedCompletionRate: plannedRate(
-      plannedDoneNow.length,
-      plannedDoneNow.reduce((sum, i) => sum + getStoryPoints(i), 0)
-    ),
+    plannedCompletionRate: issueRate(plannedDoneNow.length, planned.length),
     closedAtSprintEndIssues,
     closedAtSprintEndStoryPoints,
     closedAtSprintEndRate:
-      closedAtSprintEndIssues === null || closedAtSprintEndStoryPoints === null
-        ? null
-        : completionBasis === "storyPoints"
-          ? (closedAtSprintEndStoryPoints / totalSp) * 100
-          : totalIssues > 0 ? (closedAtSprintEndIssues / totalIssues) * 100 : 0,
+      closedAtSprintEndIssues === null ? null : issueRate(closedAtSprintEndIssues, totalIssues),
     closedAtSprintEndPlannedIssues,
     closedAtSprintEndPlannedStoryPoints,
     closedAtSprintEndPlannedRate:
-      closedAtSprintEndPlannedIssues === null || closedAtSprintEndPlannedStoryPoints === null
-        ? null
-        : plannedRate(closedAtSprintEndPlannedIssues, closedAtSprintEndPlannedStoryPoints),
+      closedAtSprintEndPlannedIssues === null ? null : issueRate(closedAtSprintEndPlannedIssues, planned.length),
     goal: sprint.goal?.trim() || null,
   };
 }
