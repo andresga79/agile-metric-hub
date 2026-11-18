@@ -1001,6 +1001,211 @@ export interface KanbanMetricsResponse {
   summary: KanbanMetricsSummary;
 }
 
+export interface EvolutionTimeSummary {
+  n: number;
+  /** @nullable */
+  p50: number | null;
+  /** @nullable */
+  p85: number | null;
+  /** @nullable */
+  avg: number | null;
+}
+
+export interface EvolutionSprintRow {
+  projectId: string;
+  sprintId: number;
+  sprintName: string;
+  startAt: string;
+  closedAt: string;
+  scopeIssues: number;
+  scopeSp: number;
+  plannedIssues: number;
+  addedIssues: number;
+  carryoverIssues: number;
+  closedAtEndIssues: number;
+  closedAtEndSp: number;
+  /** @nullable */
+  realClosedPct: number | null;
+  rovoPct: number;
+  delivered: number;
+  deliveredSp: number;
+  people: number;
+  ct: EvolutionTimeSummary;
+  lt: EvolutionTimeSummary;
+  formulaVersion: number;
+}
+
+export interface EvolutionPeriodRow {
+  period: string;
+  sprints: number;
+  /** @nullable */
+  realClosedPct: number | null;
+  delivered: number;
+  deliveredSp: number;
+  people: number;
+  ct: EvolutionTimeSummary;
+  lt: EvolutionTimeSummary;
+}
+
+export interface EvolutionComparisonSide {
+  sprints: number;
+  /** @nullable */
+  realClosedMean: number | null;
+  /** @nullable */
+  realClosedStdevPp: number | null;
+  /** @nullable */
+  ctP85: number | null;
+  ctN: number;
+  /** @nullable */
+  ltP50: number | null;
+  ltN: number;
+  /** @nullable */
+  deliveredPerPersonPerSprint: number | null;
+}
+
+export interface EvolutionComparison {
+  milestoneId: number;
+  before: EvolutionComparisonSide;
+  after: EvolutionComparisonSide;
+}
+
+export type MilestoneKind = typeof MilestoneKind[keyof typeof MilestoneKind];
+
+
+export const MilestoneKind = {
+  rol: 'rol',
+  practica: 'practica',
+  equipo: 'equipo',
+  otro: 'otro',
+} as const;
+
+export interface Milestone {
+  id: number;
+  projectId: string;
+  /** @nullable */
+  sprintId: number | null;
+  label: string;
+  kind: MilestoneKind;
+  /** @nullable */
+  note: string | null;
+  /** @nullable */
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export type NewMilestoneBodyKind = typeof NewMilestoneBodyKind[keyof typeof NewMilestoneBodyKind];
+
+
+export const NewMilestoneBodyKind = {
+  rol: 'rol',
+  practica: 'practica',
+  equipo: 'equipo',
+  otro: 'otro',
+} as const;
+
+export interface NewMilestoneBody {
+  sprintId: number;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  label: string;
+  kind: NewMilestoneBodyKind;
+  /** @maxLength 1000 */
+  note?: string;
+}
+
+export interface EvolutionMeta {
+  formulaVersion: number;
+  /** @nullable */
+  reconstructedAt: string | null;
+  /** @nullable */
+  frozenUntil: string | null;
+}
+
+export type EvolutionResponseBy = typeof EvolutionResponseBy[keyof typeof EvolutionResponseBy];
+
+
+export const EvolutionResponseBy = {
+  sprint: 'sprint',
+  month: 'month',
+  quarter: 'quarter',
+} as const;
+
+export interface EvolutionResponse {
+  by: EvolutionResponseBy;
+  /** EvolutionSprintRow[] for by=sprint, EvolutionPeriodRow[] for month/quarter */
+  rows: (EvolutionSprintRow | EvolutionPeriodRow)[];
+  milestones: Milestone[];
+  comparison: EvolutionComparison | null;
+  meta: EvolutionMeta;
+}
+
+export interface EvolutionBackfillBody {
+  projectId: string;
+  from: string;
+}
+
+export interface EvolutionBackfillStart {
+  started: boolean;
+  reason?: string;
+}
+
+export type EvolutionBackfillResultFailed = {
+  sprintId: number;
+  sprintName: string;
+  error: string;
+} | null;
+
+export interface EvolutionBackfillResult {
+  projectId: string;
+  written: number;
+  frozen: number;
+  skipped: number;
+  failed: EvolutionBackfillResultFailed;
+}
+
+export interface EvolutionBackfillStatus {
+  running: boolean;
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  finishedAt: string | null;
+  result: EvolutionBackfillResult | null;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface EvolutionFreezeBody {
+  projectId: string;
+  until: string;
+}
+
+export interface EvolutionFreezeResult {
+  sprints: number;
+  deliveries: number;
+}
+
+export type GetProjectEvolutionParams = {
+from?: string;
+to?: string;
+by?: GetProjectEvolutionBy;
+compare?: number;
+};
+
+export type GetProjectEvolutionBy = typeof GetProjectEvolutionBy[keyof typeof GetProjectEvolutionBy];
+
+
+export const GetProjectEvolutionBy = {
+  sprint: 'sprint',
+  month: 'month',
+  quarter: 'quarter',
+} as const;
+
+export type GetEvolutionBackfillStatusParams = {
+projectId: string;
+};
+
 export type GetProjectCapacityParams = {
 sprint?: GetProjectCapacitySprint;
 };

@@ -30,15 +30,25 @@ import type {
   DashboardSummary,
   DataFreshness,
   ErrorResponse,
+  EvolutionBackfillBody,
+  EvolutionBackfillStart,
+  EvolutionBackfillStatus,
+  EvolutionFreezeBody,
+  EvolutionFreezeResult,
+  EvolutionResponse,
   ForecastRequest,
   ForecastResponse,
+  GetEvolutionBackfillStatusParams,
   GetProjectCapacityParams,
+  GetProjectEvolutionParams,
   HealthResponse,
   HealthStatus,
   Issue,
   KanbanMetricsResponse,
   LoginCredentials,
   MemberStats,
+  Milestone,
+  NewMilestoneBody,
   Project,
   ProjectMetrics,
   ProjectVisibilityUpdate,
@@ -1557,6 +1567,543 @@ export function useGetProjectSprintComposition<TData = Awaited<ReturnType<typeof
 
 
 
+
+export const getGetProjectEvolutionUrl = (projectId: string,
+    params?: GetProjectEvolutionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/projects/${projectId}/evolution?${stringifiedParams}` : `/api/projects/${projectId}/evolution`
+}
+
+/**
+ * Persisted per-sprint rows (by=sprint) or month/quarter aggregates (America/Santiago) of closed sprints and delivered work in [from, to], the project's milestones, and, with `compare`, the before/after block around that milestone's sprint (null when the milestone has no stored sprint). Scrum only.
+ *
+ * @summary Evolution of a Scrum project over closed sprints, months or quarters
+ */
+export const getProjectEvolution = async (projectId: string,
+    params?: GetProjectEvolutionParams, options?: RequestInit): Promise<EvolutionResponse> => {
+
+  return customFetch<EvolutionResponse>(getGetProjectEvolutionUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectEvolutionQueryKey = (projectId: string,
+    params?: GetProjectEvolutionParams,) => {
+    return [
+    `/api/projects/${projectId}/evolution`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetProjectEvolutionQueryOptions = <TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(projectId: string,
+    params?: GetProjectEvolutionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectEvolutionQueryKey(projectId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectEvolution>>> = ({ signal }) => getProjectEvolution(projectId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectEvolutionQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectEvolution>>>
+export type GetProjectEvolutionQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Evolution of a Scrum project over closed sprints, months or quarters
+ */
+
+export function useGetProjectEvolution<TData = Awaited<ReturnType<typeof getProjectEvolution>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string,
+    params?: GetProjectEvolutionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectEvolution>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectEvolutionQueryOptions(projectId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListProjectMilestonesUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/milestones`
+}
+
+/**
+ * @summary Milestones of a project
+ */
+export const listProjectMilestones = async (projectId: string, options?: RequestInit): Promise<Milestone[]> => {
+
+  return customFetch<Milestone[]>(getListProjectMilestonesUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectMilestonesQueryKey = (projectId: string,) => {
+    return [
+    `/api/projects/${projectId}/milestones`
+    ] as const;
+    }
+
+
+export const getListProjectMilestonesQueryOptions = <TData = Awaited<ReturnType<typeof listProjectMilestones>>, TError = ErrorType<unknown>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMilestones>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectMilestonesQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectMilestones>>> = ({ signal }) => listProjectMilestones(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectMilestones>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectMilestonesQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectMilestones>>>
+export type ListProjectMilestonesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Milestones of a project
+ */
+
+export function useListProjectMilestones<TData = Awaited<ReturnType<typeof listProjectMilestones>>, TError = ErrorType<unknown>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMilestones>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectMilestonesQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateProjectMilestoneUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/milestones`
+}
+
+/**
+ * @summary Create a milestone (admin)
+ */
+export const createProjectMilestone = async (projectId: string,
+    newMilestoneBody: NewMilestoneBody, options?: RequestInit): Promise<Milestone> => {
+
+  return customFetch<Milestone>(getCreateProjectMilestoneUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(newMilestoneBody)
+  }
+);}
+
+
+
+
+export const getCreateProjectMilestoneMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectMilestone>>, TError,{projectId: string;data: BodyType<NewMilestoneBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProjectMilestone>>, TError,{projectId: string;data: BodyType<NewMilestoneBody>}, TContext> => {
+
+const mutationKey = ['createProjectMilestone'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProjectMilestone>>, {projectId: string;data: BodyType<NewMilestoneBody>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  createProjectMilestone(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProjectMilestoneMutationResult = NonNullable<Awaited<ReturnType<typeof createProjectMilestone>>>
+    export type CreateProjectMilestoneMutationBody = BodyType<NewMilestoneBody>
+    export type CreateProjectMilestoneMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a milestone (admin)
+ */
+export const useCreateProjectMilestone = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectMilestone>>, TError,{projectId: string;data: BodyType<NewMilestoneBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProjectMilestone>>,
+        TError,
+        {projectId: string;data: BodyType<NewMilestoneBody>},
+        TContext
+      > => {
+      return useMutation(getCreateProjectMilestoneMutationOptions(options));
+    }
+
+export const getDeleteProjectMilestoneUrl = (projectId: string,
+    milestoneId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/milestones/${milestoneId}`
+}
+
+/**
+ * @summary Delete a milestone (admin)
+ */
+export const deleteProjectMilestone = async (projectId: string,
+    milestoneId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectMilestoneUrl(projectId,milestoneId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteProjectMilestoneMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMilestone>>, TError,{projectId: string;milestoneId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMilestone>>, TError,{projectId: string;milestoneId: number}, TContext> => {
+
+const mutationKey = ['deleteProjectMilestone'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectMilestone>>, {projectId: string;milestoneId: number}> = (props) => {
+          const {projectId,milestoneId} = props ?? {};
+
+          return  deleteProjectMilestone(projectId,milestoneId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectMilestoneMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectMilestone>>>
+
+    export type DeleteProjectMilestoneMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a milestone (admin)
+ */
+export const useDeleteProjectMilestone = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMilestone>>, TError,{projectId: string;milestoneId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectMilestone>>,
+        TError,
+        {projectId: string;milestoneId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectMilestoneMutationOptions(options));
+    }
+
+export const getRunEvolutionBackfillUrl = () => {
+
+
+
+
+  return `/api/admin/evolution/backfill`
+}
+
+/**
+ * Recomputes every own closed sprint closed on or after `from`, one sprint at a time. Returns 202 at once; 409 when another backfill is already running. Progress and result via the status route.
+ *
+ * @summary Start the evolution backfill of a project in the background (admin)
+ */
+export const runEvolutionBackfill = async (evolutionBackfillBody: EvolutionBackfillBody, options?: RequestInit): Promise<EvolutionBackfillStart> => {
+
+  return customFetch<EvolutionBackfillStart>(getRunEvolutionBackfillUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(evolutionBackfillBody)
+  }
+);}
+
+
+
+
+export const getRunEvolutionBackfillMutationOptions = <TError = ErrorType<ErrorResponse | EvolutionBackfillStart>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runEvolutionBackfill>>, TError,{data: BodyType<EvolutionBackfillBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runEvolutionBackfill>>, TError,{data: BodyType<EvolutionBackfillBody>}, TContext> => {
+
+const mutationKey = ['runEvolutionBackfill'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runEvolutionBackfill>>, {data: BodyType<EvolutionBackfillBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runEvolutionBackfill(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunEvolutionBackfillMutationResult = NonNullable<Awaited<ReturnType<typeof runEvolutionBackfill>>>
+    export type RunEvolutionBackfillMutationBody = BodyType<EvolutionBackfillBody>
+    export type RunEvolutionBackfillMutationError = ErrorType<ErrorResponse | EvolutionBackfillStart>
+
+    /**
+ * @summary Start the evolution backfill of a project in the background (admin)
+ */
+export const useRunEvolutionBackfill = <TError = ErrorType<ErrorResponse | EvolutionBackfillStart>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runEvolutionBackfill>>, TError,{data: BodyType<EvolutionBackfillBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runEvolutionBackfill>>,
+        TError,
+        {data: BodyType<EvolutionBackfillBody>},
+        TContext
+      > => {
+      return useMutation(getRunEvolutionBackfillMutationOptions(options));
+    }
+
+export const getGetEvolutionBackfillStatusUrl = (params: GetEvolutionBackfillStatusParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/evolution/backfill/status?${stringifiedParams}` : `/api/admin/evolution/backfill/status`
+}
+
+/**
+ * @summary Last backfill run of a project (admin)
+ */
+export const getEvolutionBackfillStatus = async (params: GetEvolutionBackfillStatusParams, options?: RequestInit): Promise<EvolutionBackfillStatus> => {
+
+  return customFetch<EvolutionBackfillStatus>(getGetEvolutionBackfillStatusUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEvolutionBackfillStatusQueryKey = (params?: GetEvolutionBackfillStatusParams,) => {
+    return [
+    `/api/admin/evolution/backfill/status`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEvolutionBackfillStatusQueryOptions = <TData = Awaited<ReturnType<typeof getEvolutionBackfillStatus>>, TError = ErrorType<unknown>>(params: GetEvolutionBackfillStatusParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvolutionBackfillStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEvolutionBackfillStatusQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEvolutionBackfillStatus>>> = ({ signal }) => getEvolutionBackfillStatus(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEvolutionBackfillStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEvolutionBackfillStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getEvolutionBackfillStatus>>>
+export type GetEvolutionBackfillStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Last backfill run of a project (admin)
+ */
+
+export function useGetEvolutionBackfillStatus<TData = Awaited<ReturnType<typeof getEvolutionBackfillStatus>>, TError = ErrorType<unknown>>(
+ params: GetEvolutionBackfillStatusParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvolutionBackfillStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEvolutionBackfillStatusQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getFreezeEvolutionUrl = () => {
+
+
+
+
+  return `/api/admin/evolution/freeze`
+}
+
+/**
+ * @summary Freeze stored sprints and deliveries up to a day (admin)
+ */
+export const freezeEvolution = async (evolutionFreezeBody: EvolutionFreezeBody, options?: RequestInit): Promise<EvolutionFreezeResult> => {
+
+  return customFetch<EvolutionFreezeResult>(getFreezeEvolutionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(evolutionFreezeBody)
+  }
+);}
+
+
+
+
+export const getFreezeEvolutionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof freezeEvolution>>, TError,{data: BodyType<EvolutionFreezeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof freezeEvolution>>, TError,{data: BodyType<EvolutionFreezeBody>}, TContext> => {
+
+const mutationKey = ['freezeEvolution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof freezeEvolution>>, {data: BodyType<EvolutionFreezeBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  freezeEvolution(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FreezeEvolutionMutationResult = NonNullable<Awaited<ReturnType<typeof freezeEvolution>>>
+    export type FreezeEvolutionMutationBody = BodyType<EvolutionFreezeBody>
+    export type FreezeEvolutionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Freeze stored sprints and deliveries up to a day (admin)
+ */
+export const useFreezeEvolution = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof freezeEvolution>>, TError,{data: BodyType<EvolutionFreezeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof freezeEvolution>>,
+        TError,
+        {data: BodyType<EvolutionFreezeBody>},
+        TContext
+      > => {
+      return useMutation(getFreezeEvolutionMutationOptions(options));
+    }
 
 export const getGetProjectCapacityUrl = (projectId: string,
     params?: GetProjectCapacityParams,) => {

@@ -516,6 +516,217 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/evolution:
+    get:
+      operationId: getProjectEvolution
+      tags: [metrics]
+      summary: Evolution of a Scrum project over closed sprints, months or quarters
+      description: >
+        Persisted per-sprint rows (by=sprint) or month/quarter aggregates (America/Santiago) of closed
+        sprints and delivered work in [from, to], the project's milestones, and, with `compare`, the
+        before/after block around that milestone's sprint (null when the milestone has no stored
+        sprint). Scrum only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [sprint, month, quarter]
+        - name: compare
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Evolution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionResponse"
+        "400":
+          description: Invalid query, or project is not a Scrum project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or milestone not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/milestones:
+    get:
+      operationId: listProjectMilestones
+      tags: [metrics]
+      summary: Milestones of a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Milestones, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Milestone"
+    post:
+      operationId: createProjectMilestone
+      tags: [admin]
+      summary: Create a milestone (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewMilestoneBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/milestones/{milestoneId}:
+    delete:
+      operationId: deleteProjectMilestone
+      tags: [admin]
+      summary: Delete a milestone (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Milestone not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/evolution/backfill:
+    post:
+      operationId: runEvolutionBackfill
+      tags: [admin]
+      summary: Start the evolution backfill of a project in the background (admin)
+      description: >
+        Recomputes every own closed sprint closed on or after `from`, one sprint at a time. Returns 202
+        at once; 409 when another backfill is already running. Progress and result via the status route.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvolutionBackfillBody"
+      responses:
+        "202":
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionBackfillStart"
+        "409":
+          description: A backfill is already running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionBackfillStart"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/evolution/backfill/status:
+    get:
+      operationId: getEvolutionBackfillStatus
+      tags: [admin]
+      summary: Last backfill run of a project (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status (in memory; resets on restart)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionBackfillStatus"
+
+  /admin/evolution/freeze:
+    post:
+      operationId: freezeEvolution
+      tags: [admin]
+      summary: Freeze stored sprints and deliveries up to a day (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvolutionFreezeBody"
+      responses:
+        "200":
+          description: Rows frozen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvolutionFreezeResult"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/capacity:
     get:
       operationId: getProjectCapacity
@@ -2068,3 +2279,274 @@ components:
           type: integer
         totalCompletedStoryPoints:
           type: number
+
+    EvolutionTimeSummary:
+      type: object
+      properties:
+        n:
+          type: integer
+        p50:
+          type: ["number", "null"]
+        p85:
+          type: ["number", "null"]
+        avg:
+          type: ["number", "null"]
+      required: [n, p50, p85, avg]
+
+    EvolutionSprintRow:
+      type: object
+      properties:
+        projectId:
+          type: string
+        sprintId:
+          type: integer
+        sprintName:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        scopeIssues:
+          type: integer
+        scopeSp:
+          type: number
+        plannedIssues:
+          type: integer
+        addedIssues:
+          type: integer
+        carryoverIssues:
+          type: integer
+        closedAtEndIssues:
+          type: integer
+        closedAtEndSp:
+          type: number
+        realClosedPct:
+          type: ["number", "null"]
+        rovoPct:
+          type: number
+        delivered:
+          type: integer
+        deliveredSp:
+          type: number
+        people:
+          type: integer
+        ct:
+          $ref: "#/components/schemas/EvolutionTimeSummary"
+        lt:
+          $ref: "#/components/schemas/EvolutionTimeSummary"
+        formulaVersion:
+          type: integer
+      required: [projectId, sprintId, sprintName, startAt, closedAt, scopeIssues, scopeSp, plannedIssues, addedIssues, carryoverIssues, closedAtEndIssues, closedAtEndSp, realClosedPct, rovoPct, delivered, deliveredSp, people, ct, lt, formulaVersion]
+
+    EvolutionPeriodRow:
+      type: object
+      properties:
+        period:
+          type: string
+        sprints:
+          type: integer
+        realClosedPct:
+          type: ["number", "null"]
+        delivered:
+          type: integer
+        deliveredSp:
+          type: number
+        people:
+          type: integer
+        ct:
+          $ref: "#/components/schemas/EvolutionTimeSummary"
+        lt:
+          $ref: "#/components/schemas/EvolutionTimeSummary"
+      required: [period, sprints, realClosedPct, delivered, deliveredSp, people, ct, lt]
+
+    EvolutionComparisonSide:
+      type: object
+      properties:
+        sprints:
+          type: integer
+        realClosedMean:
+          type: ["number", "null"]
+        realClosedStdevPp:
+          type: ["number", "null"]
+        ctP85:
+          type: ["number", "null"]
+        ctN:
+          type: integer
+        ltP50:
+          type: ["number", "null"]
+        ltN:
+          type: integer
+        deliveredPerPersonPerSprint:
+          type: ["number", "null"]
+      required: [sprints, realClosedMean, realClosedStdevPp, ctP85, ctN, ltP50, ltN, deliveredPerPersonPerSprint]
+
+    EvolutionComparison:
+      type: object
+      properties:
+        milestoneId:
+          type: integer
+        before:
+          $ref: "#/components/schemas/EvolutionComparisonSide"
+        after:
+          $ref: "#/components/schemas/EvolutionComparisonSide"
+      required: [milestoneId, before, after]
+
+    Milestone:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+        sprintId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [rol, practica, equipo, otro]
+        note:
+          type: ["string", "null"]
+        createdBy:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, sprintId, label, kind, note, createdBy, createdAt]
+
+    NewMilestoneBody:
+      type: object
+      properties:
+        sprintId:
+          type: integer
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        kind:
+          type: string
+          enum: [rol, practica, equipo, otro]
+        note:
+          type: string
+          maxLength: 1000
+      required: [sprintId, label, kind]
+
+    EvolutionMeta:
+      type: object
+      properties:
+        formulaVersion:
+          type: integer
+        reconstructedAt:
+          type: ["string", "null"]
+          format: date-time
+        frozenUntil:
+          type: ["string", "null"]
+          format: date-time
+      required: [formulaVersion, reconstructedAt, frozenUntil]
+
+    EvolutionResponse:
+      type: object
+      properties:
+        by:
+          type: string
+          enum: [sprint, month, quarter]
+        rows:
+          type: array
+          description: EvolutionSprintRow[] for by=sprint, EvolutionPeriodRow[] for month/quarter
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/EvolutionSprintRow"
+              - $ref: "#/components/schemas/EvolutionPeriodRow"
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        comparison:
+          oneOf:
+            - $ref: "#/components/schemas/EvolutionComparison"
+            - type: "null"
+        meta:
+          $ref: "#/components/schemas/EvolutionMeta"
+      required: [by, rows, milestones, comparison, meta]
+
+    EvolutionBackfillBody:
+      type: object
+      properties:
+        projectId:
+          type: string
+        from:
+          type: string
+          format: date
+      required: [projectId, from]
+
+    EvolutionBackfillStart:
+      type: object
+      properties:
+        started:
+          type: boolean
+        reason:
+          type: string
+      required: [started]
+
+    EvolutionBackfillResult:
+      type: object
+      properties:
+        projectId:
+          type: string
+        written:
+          type: integer
+        frozen:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          oneOf:
+            - type: object
+              properties:
+                sprintId:
+                  type: integer
+                sprintName:
+                  type: string
+                error:
+                  type: string
+              required: [sprintId, sprintName, error]
+            - type: "null"
+      required: [projectId, written, frozen, skipped, failed]
+
+    EvolutionBackfillStatus:
+      type: object
+      properties:
+        running:
+          type: boolean
+        startedAt:
+          type: ["string", "null"]
+        finishedAt:
+          type: ["string", "null"]
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/EvolutionBackfillResult"
+            - type: "null"
+        error:
+          type: ["string", "null"]
+      required: [running, startedAt, finishedAt, result, error]
+
+    EvolutionFreezeBody:
+      type: object
+      properties:
+        projectId:
+          type: string
+        until:
+          type: string
+          format: date
+      required: [projectId, until]
+
+    EvolutionFreezeResult:
+      type: object
+      properties:
+        sprints:
+          type: integer
+        deliveries:
+          type: integer
+      required: [sprints, deliveries]

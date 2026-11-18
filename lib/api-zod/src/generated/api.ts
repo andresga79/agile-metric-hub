@@ -545,6 +545,217 @@ export const GetProjectSprintCompositionResponse = zod.object({
 
 
 /**
+ * Persisted per-sprint rows (by=sprint) or month/quarter aggregates (America/Santiago) of closed sprints and delivered work in [from, to], the project's milestones, and, with `compare`, the before/after block around that milestone's sprint (null when the milestone has no stored sprint). Scrum only.
+ *
+ * @summary Evolution of a Scrum project over closed sprints, months or quarters
+ */
+export const GetProjectEvolutionParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetProjectEvolutionQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "by": zod.enum(['sprint', 'month', 'quarter']).optional(),
+  "compare": zod.coerce.number().optional()
+})
+
+export const GetProjectEvolutionResponse = zod.object({
+  "by": zod.enum(['sprint', 'month', 'quarter']),
+  "rows": zod.array(zod.union([zod.object({
+  "projectId": zod.string(),
+  "sprintId": zod.number(),
+  "sprintName": zod.string(),
+  "startAt": zod.coerce.date(),
+  "closedAt": zod.coerce.date(),
+  "scopeIssues": zod.number(),
+  "scopeSp": zod.number(),
+  "plannedIssues": zod.number(),
+  "addedIssues": zod.number(),
+  "carryoverIssues": zod.number(),
+  "closedAtEndIssues": zod.number(),
+  "closedAtEndSp": zod.number(),
+  "realClosedPct": zod.number().nullable(),
+  "rovoPct": zod.number(),
+  "delivered": zod.number(),
+  "deliveredSp": zod.number(),
+  "people": zod.number(),
+  "ct": zod.object({
+  "n": zod.number(),
+  "p50": zod.number().nullable(),
+  "p85": zod.number().nullable(),
+  "avg": zod.number().nullable()
+}),
+  "lt": zod.object({
+  "n": zod.number(),
+  "p50": zod.number().nullable(),
+  "p85": zod.number().nullable(),
+  "avg": zod.number().nullable()
+}),
+  "formulaVersion": zod.number()
+}),zod.object({
+  "period": zod.string(),
+  "sprints": zod.number(),
+  "realClosedPct": zod.number().nullable(),
+  "delivered": zod.number(),
+  "deliveredSp": zod.number(),
+  "people": zod.number(),
+  "ct": zod.object({
+  "n": zod.number(),
+  "p50": zod.number().nullable(),
+  "p85": zod.number().nullable(),
+  "avg": zod.number().nullable()
+}),
+  "lt": zod.object({
+  "n": zod.number(),
+  "p50": zod.number().nullable(),
+  "p85": zod.number().nullable(),
+  "avg": zod.number().nullable()
+})
+})])).describe('EvolutionSprintRow[] for by=sprint, EvolutionPeriodRow[] for month\/quarter'),
+  "milestones": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "sprintId": zod.number().nullable(),
+  "label": zod.string(),
+  "kind": zod.enum(['rol', 'practica', 'equipo', 'otro']),
+  "note": zod.string().nullable(),
+  "createdBy": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})),
+  "comparison": zod.union([zod.object({
+  "milestoneId": zod.number(),
+  "before": zod.object({
+  "sprints": zod.number(),
+  "realClosedMean": zod.number().nullable(),
+  "realClosedStdevPp": zod.number().nullable(),
+  "ctP85": zod.number().nullable(),
+  "ctN": zod.number(),
+  "ltP50": zod.number().nullable(),
+  "ltN": zod.number(),
+  "deliveredPerPersonPerSprint": zod.number().nullable()
+}),
+  "after": zod.object({
+  "sprints": zod.number(),
+  "realClosedMean": zod.number().nullable(),
+  "realClosedStdevPp": zod.number().nullable(),
+  "ctP85": zod.number().nullable(),
+  "ctN": zod.number(),
+  "ltP50": zod.number().nullable(),
+  "ltN": zod.number(),
+  "deliveredPerPersonPerSprint": zod.number().nullable()
+})
+}),zod.null()]),
+  "meta": zod.object({
+  "formulaVersion": zod.number(),
+  "reconstructedAt": zod.coerce.date().nullable(),
+  "frozenUntil": zod.coerce.date().nullable()
+})
+})
+
+
+/**
+ * @summary Milestones of a project
+ */
+export const ListProjectMilestonesParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const ListProjectMilestonesResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "sprintId": zod.number().nullable(),
+  "label": zod.string(),
+  "kind": zod.enum(['rol', 'practica', 'equipo', 'otro']),
+  "note": zod.string().nullable(),
+  "createdBy": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListProjectMilestonesResponse = zod.array(ListProjectMilestonesResponseItem)
+
+
+/**
+ * @summary Create a milestone (admin)
+ */
+export const CreateProjectMilestoneParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const createProjectMilestoneBodyLabelMax = 120;
+
+export const createProjectMilestoneBodyNoteMax = 1000;
+
+
+
+export const CreateProjectMilestoneBody = zod.object({
+  "sprintId": zod.number(),
+  "label": zod.string().min(1).max(createProjectMilestoneBodyLabelMax),
+  "kind": zod.enum(['rol', 'practica', 'equipo', 'otro']),
+  "note": zod.string().max(createProjectMilestoneBodyNoteMax).optional()
+})
+
+
+/**
+ * @summary Delete a milestone (admin)
+ */
+export const DeleteProjectMilestoneParams = zod.object({
+  "projectId": zod.coerce.string(),
+  "milestoneId": zod.coerce.number()
+})
+
+
+/**
+ * Recomputes every own closed sprint closed on or after `from`, one sprint at a time. Returns 202 at once; 409 when another backfill is already running. Progress and result via the status route.
+ *
+ * @summary Start the evolution backfill of a project in the background (admin)
+ */
+export const RunEvolutionBackfillBody = zod.object({
+  "projectId": zod.string(),
+  "from": zod.coerce.date()
+})
+
+
+/**
+ * @summary Last backfill run of a project (admin)
+ */
+export const GetEvolutionBackfillStatusQueryParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const GetEvolutionBackfillStatusResponse = zod.object({
+  "running": zod.boolean(),
+  "startedAt": zod.string().nullable(),
+  "finishedAt": zod.string().nullable(),
+  "result": zod.union([zod.object({
+  "projectId": zod.string(),
+  "written": zod.number(),
+  "frozen": zod.number(),
+  "skipped": zod.number(),
+  "failed": zod.union([zod.object({
+  "sprintId": zod.number(),
+  "sprintName": zod.string(),
+  "error": zod.string()
+}),zod.null()])
+}),zod.null()]),
+  "error": zod.string().nullable()
+})
+
+
+/**
+ * @summary Freeze stored sprints and deliveries up to a day (admin)
+ */
+export const FreezeEvolutionBody = zod.object({
+  "projectId": zod.string(),
+  "until": zod.coerce.date()
+})
+
+export const FreezeEvolutionResponse = zod.object({
+  "sprints": zod.number(),
+  "deliveries": zod.number()
+})
+
+
+/**
  * Recommended commitment for a sprint in story points and issues, from the team's delivery rate per available person-day over the last closed sprints, plus each person's capacity vs. assigned work. `sprint=next` is the next future sprint, `sprint=active` the one in progress (real working days, progress so far and load on what is still open); absent = next future sprint, else the active one. Scrum projects only.
  *
  * @summary Capacity planning for the next or the active sprint of a Scrum project

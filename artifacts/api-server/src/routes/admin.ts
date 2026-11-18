@@ -4,6 +4,7 @@ import usersAdminRouter from "./admin/users";
 import rolesAdminRouter from "./admin/roles";
 import healthAdminRouter from "./admin/health";
 import portfolioAdminRouter from "./admin/portfolio";
+import evolutionAdminRouter from "./admin/evolution";
 import projectVisibilityAdminRouter from "./admin/project-visibility";
 
 const router: IRouter = Router();
@@ -18,6 +19,7 @@ router.use("/admin", usersAdminRouter);
 router.use("/admin", rolesAdminRouter);
 router.use("/admin", healthAdminRouter);
 router.use("/admin", portfolioAdminRouter);
+router.use("/admin", evolutionAdminRouter);
 router.use("/admin", projectVisibilityAdminRouter);
 
 export default router;
