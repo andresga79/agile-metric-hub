@@ -87,9 +87,11 @@ Un issue **asignado** que se cierra directo desde TO DO (bugs rápidos) sí cuen
 hay evidencia de limpieza y cuenta (por eso toda consulta que alimenta estas métricas pide el
 changelog, incluidos SLA y Forecast). El CFD sigue usando `getResolutionDate`: ahí el cierre es una
 transición real.
-**Sprints y Capacity**: un cierre sin entrega que **ya estaba cerrado al
-terminar el sprint** queda fuera del sprint (ni alcance ni completado). Si se limpió después, sigue
-contando como alcance no completado en los sprints donde estuvo. Caso real: el board de OLI no toma
+**Sprints y Capacity**: un cierre sin entrega (cancelado o limpieza) **cerrado hoy** queda fuera
+del sprint (ni alcance ni completado), **también si se limpió después del cierre del sprint**: el
+filtro mira el estado actual (`isNonDeliveryClosure && isIssueDone`), no el estado al cierre. Por eso
+el alcance de un sprint viejo puede bajar cuando se limpia el backlog meses después (OLP-3756,
+sprint 106 cerrado en mayo, limpiado el 2026-10-14: Jira `sprint = 4124` da 50, la app 49). Caso real: el board de OLI no toma
 "Cancelado" como terminado, así que Jira arrastraba cada cancelado al sprint siguiente y la app lo
 contaba como completado en todos (OLI-3629: sprints 46-49; 7 completados de más por sprint).
 (`computeSprintMetrics`, `computeSprintSnapshot`, `loadSprintIssues` en `routes/capacity.ts`)
@@ -414,6 +416,54 @@ Reporte. Cada sub-vista conserva su URL; el modelo está en `TAB_GROUPS` / `Proj
 - **WIP sostenible** (Ley de Little): throughput diario de las 11 semanas completas × cycle time
   **promedio** de lo entregado en ellas (Little usa promedios, no medianas). Referencia para acordar
   límites de WIP, que en esta etapa los equipos manejan de palabra (no se leen de Jira).
+
+## Evolución anual (pestaña Evolución, 2026-11-18)
+
+Una fila **inmutable** por sprint cerrado (tabla `evolution_sprints`) más una por issue entregado
+(`evolution_deliveries`), para el informe anual y el "antes/después" de un hito (`project_milestones`).
+No inventa reglas: cada número sale de la misma función que Sprints/Métricas.
+(`lib/evolution.ts` cálculo puro, `lib/evolution-service.ts` Jira, `lib/evolution-store.ts` DB,
+`routes/evolution.ts` lectura, `routes/admin/evolution.ts` backfill/congelado.)
+
+| Número | Regla | Fuente |
+|---|---|---|
+| **% real cerrado (principal)** | issues del alcance done **al cierre** / alcance | `computeSprintMetrics` → `closedAtSprintEnd*` (`wasIssueDoneAt`) |
+| % Rovo (referencia) | done **hoy** / alcance (SP; issues si no hay SP) | `completionRate` |
+| Alcance, planificado, agregado, arrastrado | como la pestaña Sprints (tipos permitidos, sin cancelados/limpiezas cerrados hoy) | `computeSprintMetrics` / `sprintScopeIssues` |
+| Entregados del sprint | tipos permitidos, done, con `getDeliveryDate` (sin cancelados ni limpiezas) en `[inicio, completeDate ?? endDate)` | `fetchDeliveries`, `assignDeliverySprint` |
+| CT / LT P50, P85, promedio | sobre los entregados del sprint | `getCycleTimeDays`, `getLeadTimeDays`, `summarizeTimes` |
+| Personas | asignados distintos entre los entregados | `buildSprintRow` |
+
+- **Unidad principal: issues**; SP secundario. `ctN` (entregados con cycle time) se muestra siempre
+  aparte de `delivered`: un entregado que nunca pasó por "en curso" no tiene cycle time.
+- **n mínimos**: P50 `null` ("—") con n < 3, P85 con n < 5, promedio con n = 0
+  (`percentileRounded`, 1 decimal).
+- **Sprints propios**: `originBoardId === boardId` (sin `originBoardId` cuentan); solo `closed`;
+  orden por cierre, nunca por nombre. Solo proyectos Scrum (400 si no).
+- **Mes / trimestre** en zona `America/Santiago`: los sprints cuentan en el período en que
+  **cerraron** (% real = promedio de esos sprints) y las entregas en el que se **entregaron**
+  (incluye las entregas entre sprints, `sprint_id` null). Percentiles agrupados reales, nunca
+  promedio de percentiles.
+- **Antes/después de un hito**: "antes" = sprints que **empezaron** antes del sprint del hito,
+  "después" = desde él, dentro del rango pedido. % real = media ± desviación muestral (pp); CT P85 y
+  LT P50 sobre las entregas agrupadas de esos sprints; entregados por persona = media por sprint de
+  `delivered / people`. La UI dice "desde el hito", nunca causal.
+- **Inmutabilidad**: `formula_version` (`FORMULA_VERSION = 1`) en cada fila; si cambia una regla se
+  sube y se recalculan las filas no congeladas. `POST /api/admin/evolution/freeze` marca `frozen_at`
+  hasta un día (inclusive, Santiago); una fila congelada no se reescribe nunca (ni backfill ni sync).
+- **Cómo se llena**: backfill admin asíncrono (`POST /api/admin/evolution/backfill`, botón
+  "Reconstruir") de a un sprint por vez; un sprint que falla detiene el backfill y se informa, nunca
+  se escribe una fila vacía. El sync diario agrega los sprints que cierran después del último
+  guardado (solo en proyectos ya reconstruidos).
+
+**Verificación OLP 2026 (2026-11-18)**: 23 sprints (96–118). 113–118: alcance, cerrados al cierre,
+% Rovo, CT P50 y n de CT **idénticos** a `/sprints/6s`. Jira (`sprint = <id>`, 99/106/113/117):
+total menos excluidos = alcance, Done hoy = completado (excluidos: 1 Enlace en 99 y 113, 1 Epic en
+117, limpieza OLP-3756 en 106). Diferencias con el análisis preliminar a mano del mismo día: no
+filtraba tipos (subtareas, Enlace, Epic, Service Request), no sacaba limpiezas (las ~20 del
+2026-10-14 en S116), leía las horas de Jira sin zona (corridas 3–4 h) y su cycle time reiniciaba el
+inicio en cualquier estado "por hacer" (QA/bloqueado incluidos), no solo en backlog, por eso daba
+cycle times más cortos.
 
 ## Evolution (retirada 2026-11-12)
 

@@ -13,7 +13,7 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
 - `pnpm run lint` — ESLint (baseline: 0 errores, 112 warnings a propósito, no fuerza
   limpiar los `any` existentes de golpe; no dejar que suba). No hay CI: correr typecheck,
   tests y lint a mano antes de commitear.
-- `pnpm --filter @workspace/api-server test` — vitest, 276 tests (lógica pura de métricas,
+- `pnpm --filter @workspace/api-server test` — vitest, 321 tests (lógica pura de métricas,
   paginación/cache/throttling de Jira con `fetch` stubeado)
 - Healthcheck: `curl localhost:8000/api/healthz` → `{"status":"ok"}`
 - Backups: servicio `backup` del compose, `pg_dump` diario con rotación 7 diarios + 4 semanales
@@ -49,6 +49,11 @@ esos datos. Monorepo pnpm con backend Express + frontend Vite/React.
   throughput + cycle time + CFR sobre datos de Jira. **No son métricas DORA reales** (no
   hay fuente de deploys/CI). Ver `METRICS.md` para la fórmula exacta y el resto de métricas.
 - **v2 convive con la app actual** (`/v2`). Titular por sprint = Rovo (Done hoy) con "% real cerrado" al lado; tendencias, predictibilidad, planning y atención usan solo el real cerrado. Portafolio y Equipo salen del mismo cálculo por equipo (la fila se copia de la vista). Las ventanas 3/6/12 de Equipo son solo sprints cerrados; el sprint en curso tiene su pestaña "Sprint actual" (`/v2/projects/:id/current-sprint`). Fórmulas en `METRICS.md` §v2.
+- **Evolución anual inmutable** (pestaña Evolución, 2026-11-18): una fila por sprint cerrado en
+  `evolution_sprints` + entregas en `evolution_deliveries`, con `formula_version` y congelado
+  (`frozen_at`) que nada reescribe. **% real cerrado (done al cierre) es el número principal**; Rovo
+  solo como referencia. Mismas reglas que Sprints/Métricas, sin reglas nuevas. Ver `METRICS.md`
+  §Evolución anual (incluye la verificación de OLP contra Sprints y Jira).
 - **Modelo de acceso**: 2 roles activos — `admin` (control total) y `member` (solo
   lectura, ve todas las secciones). `viewer` existe en el enum pero está dormido (sin
   cuentas asignadas). Cuenta `member` compartida entre varias personas a la vez es válido
